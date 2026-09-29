@@ -1,2 +1,14 @@
 {% extends "base.html" %}
-{% block content %}<div class="card"><p class="muted">준비 중입니다.</p></div>{% endblock %}
+{% block title %}좌석 지도{% endblock %}
+{% block content %}
+<div class="mybar" id="mybar"><div class="txt muted">불러오는 중…</div></div>
+<div class="seatmap" id="seatmap" aria-label="열람실 좌석 지도"></div>
+<div class="legend">
+  <span><i style="background:var(--v-available)"></i>빈자리</span>
+  <span><i style="background:var(--v-taken)"></i>예약·사용 중</span>
+  <span><i style="background:var(--v-unavailable)"></i>사용 불가</span>
+  <span><i style="background:var(--v-taken);outline:3px solid #0d2a66;outline-offset:-3px"></i>★ 내 자리</span>
+</div>
+<p class="muted small" style="margin-top:14px">좌석에 붙은 QR을 스캔하면 바로 예약·체크인할 수 있어요.</p>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/map.js') }}"></script>{% endblock %}

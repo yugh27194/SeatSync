@@ -1,2 +1,20 @@
 {% extends "base.html" %}
-{% block content %}<div class="card"><p class="muted">준비 중입니다.</p></div>{% endblock %}
+{% block title %}{{ seat.label if seat else '좌석' }}{% endblock %}
+{% block container_class %}narrow{% endblock %}
+{% block content %}
+{% if not seat %}
+  <div class="card"><h1>좌석을 찾을 수 없습니다</h1><p class="muted">좌석 QR을 다시 스캔해 주세요.</p>
+  <a class="btn secondary" href="{{ url_for('pages.map_page') }}">좌석 지도로</a></div>
+{% else %}
+<div id="seat-root" data-no="{{ seat.no }}" data-token="{{ token }}">
+  <div id="notices"></div>
+  <div class="card seat-hero">
+    <div class="label">{{ seat.label }}</div>
+    <div class="zone">{{ seat.zone or '' }}</div>
+  </div>
+  <div class="card" id="panel"><p class="muted">불러오는 중…</p></div>
+  <p class="small" style="text-align:center"><a href="{{ url_for('pages.map_page') }}">좌석 지도 보기</a></p>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}{% if seat %}<script src="{{ url_for('static', filename='js/seat.js') }}"></script>{% endif %}{% endblock %}

@@ -36,7 +36,7 @@ def app(tmp_path, clock):
                       "SECRET_KEY": "test"})
     conn = dbmod.connect(path)
     dbmod.init_db(conn)
-    dbmod.seed(conn, app.config["SEATS_FILE"], now=T0)
+    dbmod.seed(conn, app.config["SEATS_FILE"], now=T0, pw_method="pbkdf2:sha256:1000")  # 테스트 속도용
     conn.close()
     return app
 

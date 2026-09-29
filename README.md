@@ -17,6 +17,7 @@ python app.py                    # 0.0.0.0:5000
 
 - M1: 골격, 스키마, init-db/seed, 로그인·회원가입·역할 분기
 - M2: 판정 로직(`status.py`) + 테스트, `POST /api/detections`, `service.refresh`, 관리자 판정 API, `tools/simulate.py`
+- M3: `/map` 실시간 좌석 지도, 예약/반납, `/seat/<no>` QR 페이지(체크인·바로 예약·관리자 호출), `tools/make_qr.py`
 
 ## 개발 도구
 
@@ -24,4 +25,10 @@ python app.py                    # 0.0.0.0:5000
 python tools/simulate.py --url http://localhost:5000 --key dev-key   # 대화형 가짜 감지
 python tools/simulate.py --scenario demo                             # 시나리오 자동 재생
 python -m pytest -q
+```
+
+## 좌석 QR 만들기
+
+```
+python tools/make_qr.py --base-url http://<노트북IP>:5000   # qr/seat_<no>.png, qr/print.html
 ```

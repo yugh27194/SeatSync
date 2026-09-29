@@ -72,7 +72,7 @@ def init_db(conn):
         conn.executescript(f.read())
 
 
-def seed(conn, seats_file, now=None):
+def seed(conn, seats_file, now=None, pw_method=None):
     now = int(now if now is not None else time.time())
     layout = load_layout(seats_file)
     with tx(conn):
@@ -108,7 +108,7 @@ def seed(conn, seats_file, now=None):
         for student_no, name, pw, role in accounts:
             conn.execute(
                 "INSERT OR IGNORE INTO users(student_no, name, pw_hash, role, created_at) VALUES (?,?,?,?,?)",
-                (student_no, name, generate_password_hash(pw), role, now),
+                (student_no, name, generate_password_hash(pw, **({'method': pw_method} if pw_method else {})), role, now),
             )
 
 

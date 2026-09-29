@@ -108,7 +108,7 @@ input:focus, textarea:focus { outline: 2px solid #b8d0ff; border-color: var(--pr
 .mybar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 14px; margin-bottom: 14px; }
 .mybar .txt { flex: 1 1 200px; font-size: 15px; }
 .mybar strong { font-size: 16px; }
-.mybar .deadline { color: var(--danger); font-weight: 700; }
+.deadline { color: var(--danger); font-weight: 700; }
 
 /* ---------- 좌석 지도 ---------- */
 .seatmap {
@@ -233,6 +233,9 @@ table.recon tr.mismatch td:first-child { box-shadow: inset 4px 0 0 var(--danger)
 
 @media (max-width: 400px) {
   .container { padding: 12px; }
+  .topbar { padding: 10px 12px; }
+  .topbar nav { gap: 10px; font-size: 13px; }
+  .topbar nav .who { display: none; }
   .seatmap { gap: 6px; padding: 8px; }
   .seat { font-size: 13px; }
 }
