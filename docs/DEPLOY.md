@@ -49,47 +49,52 @@ cloudflared tunnel --url http://localhost:5000
 
 ## B. 상시 배포 — PythonAnywhere (무료)
 
-### 1) 가입
-https://www.pythonanywhere.com → **Pricing & signup → Create a Beginner account** (무료).
-가입한 아이디가 주소가 된다: `https://아이디.pythonanywhere.com`
+가입과 API 토큰 발급만 직접 하고, 나머지(가상환경·설치·DB·웹 앱 생성·WSGI·정적 파일·HTTPS·재시작)는 스크립트가 한다.
 
-### 2) 코드 받기 · 설치 (Bash 콘솔)
+### 1) 가입과 API 토큰 (브라우저, 약 3분)
+1. https://www.pythonanywhere.com → **Pricing & signup → Create a Beginner account** (무료).
+   가입한 아이디가 주소가 된다: `https://아이디.pythonanywhere.com`
+2. 오른쪽 위 **Account → API token → Create a new API token** → 토큰 문자열 복사.
+
+### 2) 설치·배포 (PythonAnywhere의 Bash 콘솔에서 명령 3줄)
 대시보드 **Consoles → Bash** 를 열고:
 ```bash
 git clone https://github.com/yugh27194/SeatSync.git
 cd SeatSync
-mkvirtualenv seatsync --python=python3.11
-pip install -r requirements.txt
-python manage.py init_db
-python manage.py demo_history   # (선택) 혼잡도·내 기록 시연용 샘플 이력
+bash deploy/pythonanywhere_setup.sh --admin-code admin
 ```
+- API 토큰을 물으면 붙여 넣는다(화면에 표시되지 않음).
+- `python3.11`이 없다는 오류가 나면 있는 버전으로: `PY=python3.10 bash deploy/pythonanywhere_setup.sh` (3.10 이상).
+- 끝나면 사이트 주소, **관리자 코드**, 라즈베리파이용 **디바이스 키**, Pi 전송 주소가 출력된다.
+- 비밀 값(SECRET_KEY, 디바이스 키, 관리자 코드)은 `~/.seatsync.env`에 저장된다(저장소에 올라가지 않음).
+- (선택) 시연용 샘플 이력: `~/.virtualenvs/seatsync/bin/python manage.py demo_history`
 
-### 3) 웹 앱 만들기 (Web 탭)
-1. **Add a new web app → Next → Manual configuration → Python 3.11 → Next**
-2. 설정 화면에서:
-   - **Source code**: `/home/아이디/SeatSync`
-   - **Virtualenv**: `/home/아이디/.virtualenvs/seatsync`
-   - **WSGI configuration file** 링크를 눌러 내용을 전부 지우고,
-     이 저장소의 [`deploy/pythonanywhere_wsgi.py`](../deploy/pythonanywhere_wsgi.py) 내용을 붙여 넣는다.
-     `USERNAME`을 내 아이디로, `SEATSYNC_SECRET_KEY`를 긴 무작위 문자열로, 필요하면 `SEATSYNC_ADMIN_CODE`를 바꾼 뒤 저장.
-     (무작위 문자열 만들기: Bash 콘솔에서 `python -c "import secrets;print(secrets.token_urlsafe(50))"`)
-   - **Static files**: URL `/static/` → Directory `/home/아이디/SeatSync/static`
-   - **Security → Force HTTPS**: 켜기
-3. 맨 위 초록색 **Reload** 버튼 → `https://아이디.pythonanywhere.com` 접속.
-
-### 4) 업데이트할 때
+### 3) 업데이트
 ```bash
-cd ~/SeatSync && git pull && workon seatsync && pip install -r requirements.txt && python manage.py migrate
+cd ~/SeatSync && bash deploy/pythonanywhere_update.sh
 ```
-그리고 Web 탭에서 **Reload**.
+`git pull` → 패키지 설치 → DB 마이그레이션 → 웹 앱 재시작.
+
+### 4) 설정 바꾸기
+- 관리자 코드: `~/.virtualenvs/seatsync/bin/python deploy/pythonanywhere_deploy.py --admin-code 새코드`
+- 그 밖의 값: `~/.seatsync.env`를 고친 뒤 `python deploy/pythonanywhere_deploy.py --reload-only`
 
 ### 5) 알아 둘 점 (무료 계정)
 - 3개월마다 Web 탭의 **"Run until 3 months from today"** 버튼을 눌러 연장해야 한다(메일로 알려 줌).
-- 사용량(CPU) 제한이 있지만 이 사이트 규모(좌석 20석, 3초 polling)에서는 충분하다. 동시 접속이 아주 많으면 느려질 수 있다.
+- 사용량(CPU) 제한이 있지만 이 사이트 규모(좌석 20석, 3초 polling)에서는 충분하다.
 - 오류가 나면 Web 탭의 **Error log**를 확인한다.
 - 좌석 QR은 고정 주소로 한 번만 만들면 된다:
-  `python tools/make_qr.py --base-url https://아이디.pythonanywhere.com` → `qr/print.html`을 **Files** 탭에서 내려받아 인쇄.
-- 라즈베리파이는 `https://아이디.pythonanywhere.com/api/detections` 로 감지 결과를 보내면 된다(헤더 `X-Device-Key`).
+  `~/.virtualenvs/seatsync/bin/python tools/make_qr.py --base-url https://아이디.pythonanywhere.com`
+  → **Files** 탭에서 `SeatSync/qr/print.html`과 PNG를 내려받아 인쇄.
+- 라즈베리파이 연동: `pi_bridge.py --url https://아이디.pythonanywhere.com --key <디바이스 키> --camera-id cam1`
+  ([DATA_FLOW.md](DATA_FLOW.md#7-pi-설치실행)).
+
+### 수동으로 설정하려면 (스크립트 대신)
+Web 탭 → **Add a new web app → Manual configuration → Python 3.11** →
+Source code `~/SeatSync`, Virtualenv `~/.virtualenvs/seatsync`,
+WSGI 파일 내용을 [`deploy/pythonanywhere_wsgi.py`](../deploy/pythonanywhere_wsgi.py)로 교체,
+Static files `/static/` → `~/SeatSync/static`, Force HTTPS 켜기 → Reload.
+비밀 값은 `~/.seatsync.env`에 `SEATSYNC_SECRET_KEY=…` 형식으로 적는다.
 
 ---
 
