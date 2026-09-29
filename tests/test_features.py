@@ -120,7 +120,7 @@ def test_waitlist_offer_hold_and_fulfill(user_a, user_b, admin, clock):
     assert user_b.jpost("/api/waitlist", {}).json()["waitlist"]["position"] == 2
     assert err(user_a.jpost("/api/waitlist", {})) == "ALREADY_WAITING"
     # 빈자리 발생
-    from seats.models import Reservation
+    from seats.models import ACTIVE, Reservation
     res = Reservation.objects.get(seat_id=free[0], status="in_use")
     res.status, res.ended_at = "returned", clock()
     res.save()
@@ -141,7 +141,7 @@ def test_waitlist_expiry_passes_to_next(user_a, user_b, clock):
     user_a.jpost("/api/waitlist", {})
     clock.advance(1)
     user_b.jpost("/api/waitlist", {})
-    from seats.models import Reservation
+    from seats.models import ACTIVE, Reservation
     Reservation.objects.filter(seat_id=free[0]).update(status="returned", ended_at=clock())
     user_a.get("/api/seats")
     clock.advance(5 * 60)  # 안내 유지 5분 경과
@@ -285,3 +285,12 @@ def test_sample_history_generator(admin, clock):
     c = admin.jget("/api/congestion")
     assert c["peak"] is not None and c["peak"]["rate"] > 0
     assert admin.jpost("/api/admin/demo-history", {"weeks": 20}).status_code == 400
+
+
+def test_sample_history_with_active_reservations(admin, clock):
+    # 지금 예약 중인 좌석·사용자가 있어도 샘플 이력 생성이 실패하지 않아야 한다
+    from seats.models import ACTIVE, Reservation
+    assert admin.jpost("/api/admin/demo", {}).status_code == 200
+    assert Reservation.objects.filter(status__in=ACTIVE).exists()
+    r = admin.jpost("/api/admin/demo-history", {"weeks": 4})
+    assert r.status_code == 200 and r.json()["reservations"] > 50

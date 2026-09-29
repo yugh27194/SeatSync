@@ -89,8 +89,10 @@ def _pick_user(rnd, real_today, pool, busy, t):
 def _session(rnd, s, seat, user, start, end, logs, events):
     """한 번의 예약·이용을 만들고 끝난 시각을 돌려준다."""
     use_min = s.default_use_min * 60
-    r = Reservation.objects.create(user=user, seat=seat, status="reserved", start_at=start, end_at=start + use_min,
-                                   source=rnd.choice(["map", "map", "seat_page"]))
+    # 끝난 상태로 한 번만 저장한다. 'reserved'로 먼저 저장하면 지금 예약 중인 좌석·사용자와 겹쳐
+    # "좌석/사용자당 진행 중 예약 1건" 제약(ux_res_active_*)에 걸린다.
+    r = Reservation(user=user, seat=seat, status="reserved", start_at=start, end_at=start + use_min,
+                    source=rnd.choice(["map", "map", "seat_page"]))
     ev = [("reserve", start, None)]
     log = [(start, "in_use", "waiting")]
 
