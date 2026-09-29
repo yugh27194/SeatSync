@@ -14,11 +14,12 @@ from config import BASE_DIR
 from status import DEFAULT_SETTINGS, Settings
 
 SCHEMA_FILE = os.path.join(BASE_DIR, "schema.sql")
+SCHEMA_VERSION = 3  # schema.sql의 PRAGMA user_version과 같아야 한다
+RESET_HINT = "DB 구조가 바뀌었습니다. `python -m flask --app app init-db --reset` 으로 DB를 다시 만드세요."
 
-# (학번/아이디, 이름, 비밀번호, 역할)
+# (학번/아이디, 이름, 비밀번호, 역할). 관리자 계정은 두지 않는다 — 관리자 권한은 관리자 코드로 해금.
 SEED_ACCOUNTS = (
-    [("admin", "관리자", "admin1234", "admin")]
-    + [(f"user{c}", f"사용자{c}", "1234", "user") for c in "ABC"]
+    [(f"user{c}", f"사용자{c}", "1234", "user") for c in "ABC"]
     + [(f"2026000{i}", f"테스트{i}", "1234", "user") for i in range(1, 6)]
 )
 
@@ -99,8 +100,8 @@ def seed(conn, seats_file, now=None, pw_method=None):
                 )
             else:
                 state = st.get("state", "empty")
-                if state not in ("empty", "occupied", "unavailable"):
-                    raise ValueError(f"seats.json 좌석 {st['no']}: state는 empty|occupied|unavailable")
+                if state not in ("empty", "occupied", "item", "unavailable"):
+                    raise ValueError(f"seats.json 좌석 {st['no']}: state는 empty|occupied|item|unavailable")
                 conn.execute(
                     "INSERT INTO seats(no, label, x, y, zone, camera_id, qr_token, active, state, state_since, "
                     "state_source, state_note) VALUES (?,?,?,?,?,?,?,1,?,?,'seed',?)",
@@ -120,6 +121,17 @@ def seed(conn, seats_file, now=None, pw_method=None):
                 "INSERT OR IGNORE INTO users(student_no, name, pw_hash, role, created_at) VALUES (?,?,?,?,?)",
                 (student_no, name, generate_password_hash(pw, **({"method": pw_method} if pw_method else {})), role, now),
             )
+
+
+def schema_version(conn):
+    """(스키마가 있는지, user_version)"""
+    has = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='seats'").fetchone() is not None
+    return has, conn.execute("PRAGMA user_version").fetchone()[0]
+
+
+def schema_ok(conn):
+    has, ver = schema_version(conn)
+    return has and ver == SCHEMA_VERSION
 
 
 def get_settings(conn):
@@ -142,12 +154,10 @@ def init_db_command(reset):
         click.echo(f"삭제: {path}")
     conn = connect(path)
     try:
+        has, ver = schema_version(conn)
+        if has and ver != SCHEMA_VERSION:
+            raise click.ClickException(RESET_HINT)
         init_db(conn)
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(seats)")}
-        ucols = {r["name"] for r in conn.execute("PRAGMA table_info(users)")}
-        if "state" not in cols or "warnings" not in ucols:
-            raise click.ClickException(
-                "기존 DB가 이전 버전 구조입니다. `flask --app app init-db --reset` 으로 다시 만드세요.")
         seed(conn, current_app.config["SEATS_FILE"])
     finally:
         conn.close()

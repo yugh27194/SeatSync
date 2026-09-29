@@ -21,7 +21,8 @@ ACTION_LABELS = {
     "resolve": "처리 완료", "seat_state": "현장 상태 변경", "assign": "대리 예약", "checkin": "대리 체크인",
     "move": "좌석 이동", "extend": "관리자 연장", "force_return": "강제 반납", "warn": "경고 부여",
     "unwarn": "경고 취소", "suspend": "이용 정지", "unsuspend": "정지 해제", "demo": "시연 상황 배치",
-    "settings": "설정 변경",
+    "settings": "설정 변경", "admin_on": "관리자 모드 시작", "admin_off": "관리자 모드 종료",
+    "admin_locked": "관리자 코드 잠금",
 }
 RES_STATUS = {"reserved": "예약(입실 전)", "in_use": "이용 중"}
 
@@ -201,7 +202,7 @@ def change_seat_state(no):
     body = json_body()
     state = body.get("state")
     if state not in ACTUAL_STATES:
-        raise ApiError(400, "BAD_REQUEST", "state는 empty|occupied|unavailable 중 하나여야 합니다.")
+        raise ApiError(400, "BAD_REQUEST", "state는 empty|occupied|item|unavailable 중 하나여야 합니다.")
     note = _memo(body, "note")
     db = get_db()
     now = now_ts()
@@ -544,10 +545,8 @@ def stats():
 
 
 def _bucket(seat_state, situation):
-    if situation == "away":
-        return "away"
-    if situation == "unauthorized":
-        return "unauthorized"
+    if situation in ("away", "hoarding", "unauthorized"):
+        return situation
     if seat_state == "in_use" and situation == OK:
         return "in_use"
     return None
@@ -555,7 +554,7 @@ def _bucket(seat_state, situation):
 
 def compute_hourly_stats(conn, day_start, day_end, now):
     """status_log 전이 이력을 구간으로 펼쳐 시간대별 좌석·분 누적을 계산한다."""
-    secs = [{"in_use": 0, "away": 0, "unauthorized": 0} for _ in range(24)]
+    secs = [{"in_use": 0, "away": 0, "hoarding": 0, "unauthorized": 0} for _ in range(24)]
     end_cap = min(day_end, now)
     for (seat_no,) in conn.execute("SELECT DISTINCT seat_no FROM status_log").fetchall():
         before = conn.execute(
@@ -578,13 +577,15 @@ def compute_hourly_stats(conn, day_start, day_end, now):
                 t += seg
     hours = []
     for h in range(24):
-        base = secs[h]["in_use"] + secs[h]["away"]
+        x = secs[h]
+        base = x["in_use"] + x["away"] + x["hoarding"]
         hours.append({
             "hour": h,
-            "in_use_min": round(secs[h]["in_use"] / 60, 1),
-            "away_min": round(secs[h]["away"] / 60, 1),
-            "unauthorized_min": round(secs[h]["unauthorized"] / 60, 1),
-            # 자리 비움 비율 = 장시간 자리 비움 / (정상 이용 + 장시간 자리 비움)
-            "away_rate": round(secs[h]["away"] / base, 3) if base else 0.0,
+            "in_use_min": round(x["in_use"] / 60, 1),
+            "away_min": round(x["away"] / 60, 1),
+            "hoarding_min": round(x["hoarding"] / 60, 1),
+            "unauthorized_min": round(x["unauthorized"] / 60, 1),
+            # 이탈·사석화 비율 = (이탈 + 사석화) / (정상 이용 + 이탈 + 사석화)
+            "issue_rate": round((x["away"] + x["hoarding"]) / base, 3) if base else 0.0,
         })
     return hours

@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
   student_no      TEXT UNIQUE NOT NULL,           -- 학번(로그인 아이디)
   name            TEXT NOT NULL,
   pw_hash         TEXT NOT NULL,
-  role            TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user','admin')),
+  role            TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user','admin')),  -- 미사용: 관리자 권한은 관리자 코드로 해금
   warnings        INTEGER NOT NULL DEFAULT 0,      -- 누적 경고 수
   suspended_until INTEGER,                         -- 이용 정지 종료 시각 (NULL = 정지 아님)
   created_at      INTEGER NOT NULL
@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS seats (
   qr_token      TEXT NOT NULL,              -- 좌석 QR에 들어가는 난수 (원격 체크인 방지)
   active        INTEGER NOT NULL DEFAULT 1,
   -- 현장 상태: 카메라 연동 전까지 관리자가 임시로 배분한다
-  state         TEXT NOT NULL DEFAULT 'empty' CHECK (state IN ('empty','occupied','unavailable')),
+  state         TEXT NOT NULL DEFAULT 'empty' CHECK (state IN ('empty','occupied','item','unavailable')),
   state_since   INTEGER NOT NULL DEFAULT 0,
   state_source  TEXT NOT NULL DEFAULT 'manual',  -- manual | camera | checkin | return | seed
   state_note    TEXT                              -- 사용불가 사유 등
@@ -65,7 +65,7 @@ CREATE INDEX IF NOT EXISTS ix_log_seat_at ON status_log(seat_no, at);
 CREATE TABLE IF NOT EXISTS alerts (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   seat_no         INTEGER NOT NULL,
-  type            TEXT NOT NULL CHECK (type IN ('unauthorized','no_checkin','away','seat_unavailable','no_show','call')),
+  type            TEXT NOT NULL CHECK (type IN ('unauthorized','no_checkin','away','hoarding','seat_unavailable','no_show','call')),
   reservation_id  INTEGER,
   memo            TEXT,
   created_at      INTEGER NOT NULL,
@@ -79,7 +79,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_alert_open ON alerts(seat_no, type) WHERE r
 
 CREATE TABLE IF NOT EXISTS admin_log (          -- 관리자 처리 이력 (경고·정지 포함)
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
-  admin_id        INTEGER REFERENCES users(id),
+  admin_id        INTEGER REFERENCES users(id),   -- 관리자 코드로 권한을 해금한 로그인 사용자
   action          TEXT NOT NULL,
   seat_no         INTEGER,
   reservation_id  INTEGER,
@@ -94,3 +94,6 @@ CREATE TABLE IF NOT EXISTS settings (
   key    TEXT PRIMARY KEY,
   value  TEXT NOT NULL
 );
+
+-- 스키마 버전 (구조가 바뀌면 올린다. db.SCHEMA_VERSION과 같아야 함)
+PRAGMA user_version = 3;

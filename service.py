@@ -187,12 +187,12 @@ def log_admin(conn, admin_id, action, now, seat_no=None, reservation_id=None, ta
 # (좌석 번호, 예약자 아이디 또는 None, 예약 상태, 예약 시작(분 전), 현장 상태, 현장 상태 시작(분 전), 메모)
 DEMO_LAYOUT = [
     (1, "userA",    "in_use",   30, "occupied",    30, "정상 이용"),
-    (2, "userB",    "in_use",   50, "empty",       40, "장시간 자리 비움"),
-    (3, None,       None,        0, "occupied",    10, "미예약 사용"),
+    (2, "userB",    "in_use",   50, "empty",       40, "이탈"),
+    (3, None,       None,        0, "occupied",    10, "무단 점유"),
     (4, "userC",    "reserved",  5, "occupied",     3, "체크인 누락"),
     (5, None,       None,        0, "unavailable", 60, "사용불가(의자 파손)"),
     (6, "20260001", "reserved",  3, "unavailable",  1, "예약 좌석 사용불가"),
-    (7, "20260002", "in_use",   20, "empty",        5, "잠시 자리 비움(정상)"),
+    (7, "20260002", "in_use",   60, "item",        40, "사석화"),
     (8, "20260003", "reserved", None, "empty",      30, "미입실 → 자동 취소"),
 ]
 

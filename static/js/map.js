@@ -1,7 +1,7 @@
 /* /map — 실시간 좌석 지도 (3초 polling) */
 (function () {
   "use strict";
-  const { api, poll, fmtRemain, syncClock, serverNow, parseTs, toast, modal, esc } = window.SS;
+  const { api, requireAdmin, poll, fmtRemain, syncClock, serverNow, parseTs, toast, modal, esc } = window.SS;
   const mapEl = document.getElementById("seatmap");
   const barEl = document.getElementById("mybar");
   let data = null;
@@ -25,8 +25,9 @@
     for (const s of data.seats) {
       const sub = SUB[s.view];
       html.push(
-        `<button type="button" class="seat v-${s.view}" data-no="${s.no}"
-          style="grid-column:${s.x};grid-row:${s.y}" aria-label="${esc(s.label)} ${sub}">
+        `<button type="button" class="seat v-${s.view}${s.attention ? " attn" : ""}" data-no="${s.no}"
+          style="grid-column:${s.x};grid-row:${s.y}" aria-label="${esc(s.label)} ${sub}${s.attention ? " · 관리자 처리 필요" : ""}">
+          ${s.attention ? '<span class="bang" aria-hidden="true">!</span>' : ""}
           ${esc(s.label)}<span class="sub">${sub}</span></button>`
       );
     }
@@ -56,11 +57,34 @@
     barEl.innerHTML = `<div class="txt">${txt}</div><a class="btn small" href="/my">내 자리 관리</a>`;
   }
 
+  function renderAttention() {
+    const list = data.seats.filter((s) => s.attention);
+    $attnBar.classList.toggle("hidden", !list.length);
+    if (list.length) {
+      document.getElementById("attn-text").textContent =
+        `관리자 처리가 필요한 좌석 ${list.length}개 (${list.map((s) => s.label).join(", ")})`;
+    }
+  }
+
   async function load() {
     data = await api("GET", "/api/seats", null, { quiet: true });
     syncClock(data.server_time);
     renderMap();
     renderBar();
+    renderAttention();
+  }
+
+  const $attnBar = document.getElementById("attn-bar");
+  async function goAdmin(seatNo) {
+    if (await requireAdmin()) location.href = "/admin" + (seatNo ? "?seat=" + seatNo : "");
+  }
+  document.getElementById("attn-btn").onclick = () => goAdmin();
+
+  async function attentionSeat(seat) {
+    const ok = await modal({ title: `⚠ ${seat.label} — 관리자 처리가 필요합니다`,
+      body: "이 좌석은 예약 기록과 실제 사용 상태가 맞지 않아 관리자 확인이 필요합니다.\n관리자라면 [관리자 처리]를 눌러 권한을 해금하세요.",
+      ok: "관리자 처리", cancel: "닫기", danger: true });
+    if (ok) goAdmin(seat.no);
   }
 
   async function reserve(seat) {
@@ -82,6 +106,7 @@
     const seat = data.seats.find((s) => s.no === Number(btn.dataset.no));
     if (!seat) return;
     if (seat.view === "mine") { location.href = "/my"; return; }
+    if (seat.attention) { attentionSeat(seat); return; }
     if (seat.view === "available") {
       if (data.my_reservation) { toast("이미 예약한 좌석이 있어요. 반납 후 다시 예약해 주세요.", "error"); return; }
       reserve(seat);

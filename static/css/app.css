@@ -268,3 +268,55 @@ table.recon tr.mismatch td:first-child { box-shadow: inset 4px 0 0 var(--danger)
 .warnings { font-weight: 700; }
 .warnings.hot { color: var(--danger); }
 table.recon td .btn-row { flex-wrap: nowrap; }
+
+/* ---------- 관리자 모드 ---------- */
+.inline-form { display: inline; margin: 0; }
+.linklike { background: none; border: 0; padding: 0; color: #d6e4ff; font: inherit; cursor: pointer; }
+.linklike:hover { text-decoration: underline; }
+.topbar nav a.admin-on { color: #ffd84a; font-weight: 700; }
+.lock-icon { font-size: 40px; text-align: center; margin-bottom: 4px; }
+
+/* ---------- 문제 좌석 표시 (!) ---------- */
+:root {
+  --i-unauthorized: #d93a3f;     /* 무단 점유 */
+  --i-away: #ef8a1f;             /* 이탈 */
+  --i-hoarding: #8e3fd6;         /* 사석화 */
+  --i-no_checkin: #e0a800;       /* 체크인 누락 */
+  --i-seat_unavailable: #334155; /* 예약 좌석 사용불가 */
+  --i-generic: #d93a3f;
+}
+.seat .bang {
+  position: absolute; top: -8px; left: -8px; z-index: 2;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--ic, var(--i-generic)); color: #fff; border: 2px solid #fff;
+  font-size: 15px; font-weight: 900; line-height: 20px; text-align: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,.25);
+  animation: bang 1.4s ease-in-out infinite;
+}
+@keyframes bang { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.18); } }
+@media (prefers-reduced-motion: reduce) { .seat .bang { animation: none; } }
+.seat.attn { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--ic, var(--i-generic)); }
+.admin-map .seat.issue { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--ic, var(--i-generic)); }
+.admin-map .seat .warn-tag { color: var(--ic, #b3141b); }
+.i-unauthorized { --ic: var(--i-unauthorized); }
+.i-away { --ic: var(--i-away); }
+.i-hoarding { --ic: var(--i-hoarding); }
+.i-no_checkin { --ic: var(--i-no_checkin); }
+.i-seat_unavailable { --ic: var(--i-seat_unavailable); }
+.badge.t-unauthorized { background: var(--i-unauthorized); color: #fff; }
+.badge.t-away { background: var(--i-away); color: #fff; }
+.badge.t-hoarding { background: var(--i-hoarding); color: #fff; }
+.badge.t-no_checkin { background: var(--i-no_checkin); color: #fff; }
+.badge.t-seat_unavailable { background: var(--i-seat_unavailable); color: #fff; }
+.badge.t-suspended { background: #b3141b; color: #fff; }
+.situation-box.i-unauthorized, .situation-box.i-away, .situation-box.i-hoarding,
+.situation-box.i-no_checkin, .situation-box.i-seat_unavailable { border-left: 5px solid var(--ic); }
+
+.attn-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #fff4f4; border: 1px solid #f3c2c4;
+  color: #8a1c21; border-radius: var(--radius); padding: 10px 14px; margin-bottom: 14px; font-weight: 600; }
+.attn-bar .txt { flex: 1 1 200px; }
+.attn-bar .dot { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--i-generic); color: #fff; font-weight: 900; margin-right: 6px; }
+.seat.st-item-actual { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.16) 0 6px, transparent 6px 12px); }
+.seg button.on.s-item { background: var(--i-hoarding); color: #fff; }
+table.recon tr.mismatch[class*="i-"] td:first-child { box-shadow: inset 4px 0 0 var(--ic); }

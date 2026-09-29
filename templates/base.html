@@ -7,14 +7,21 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6fdf'/%3E%3Crect x='8' y='9' width='16' height='10' rx='3' fill='white'/%3E%3Crect x='8' y='21' width='16' height='3' rx='1.5' fill='white'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
-<body>
+<body{% if admin_mode %} data-admin="1"{% endif %}>
   <header class="topbar">
     <a class="logo" href="{{ url_for('pages.index') }}">Seat<span>Sync</span></a>
     <nav>
       {% if current_user %}
         <a href="{{ url_for('pages.map_page') }}">좌석 지도</a>
         <a href="{{ url_for('pages.my') }}">내 자리</a>
-        {% if current_user.role == 'admin' %}<a href="{{ url_for('pages.admin') }}">관리자 화면</a>{% endif %}
+        {% if admin_mode %}
+          <a href="{{ url_for('pages.admin') }}" class="admin-on" title="관리자 모드">🔓 관리자</a>
+          <form method="post" action="{{ url_for('auth.lock_page') }}" class="inline-form">
+            <button type="submit" class="linklike">관리자 모드 종료</button>
+          </form>
+        {% else %}
+          <a href="{{ url_for('pages.admin') }}" title="관리자 코드 필요">🔒 관리자</a>
+        {% endif %}
         <span class="who">{{ current_user.name }}</span>
         <a href="{{ url_for('auth.logout') }}">로그아웃</a>
       {% else %}

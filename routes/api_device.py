@@ -1,7 +1,7 @@
 """디바이스(Pi) → 웹: POST /api/detections.
 
 카메라 연동 전에는 관리자가 현장 상태를 임시로 배분한다. 카메라가 붙으면 이 API가 현장 상태를 갱신한다
-(person·item → 사용중, empty → 빈자리). 관리자가 '사용불가'로 지정한 좌석은 카메라가 덮어쓰지 않는다.
+(person → 사용중, item → 짐만 있음, empty → 빈자리). 관리자가 '사용불가'로 지정한 좌석은 카메라가 덮어쓰지 않는다.
 """
 import hmac
 
@@ -14,7 +14,7 @@ from timeutil import parse_iso, to_iso
 
 bp = Blueprint("api_device", __name__, url_prefix="/api")
 
-OCCUPANCY_TO_STATE = {"person": "occupied", "item": "occupied", "empty": "empty"}
+OCCUPANCY_TO_STATE = {"person": "occupied", "item": "item", "empty": "empty"}
 # 합의된 계약: 서버-Pi 시계 차이가 이 값(초)을 넘으면 since를 보정한다.
 CLOCK_SKEW_TOLERANCE_SEC = 5
 

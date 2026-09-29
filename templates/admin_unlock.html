@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}관리자 권한 확인{% endblock %}
+{% block container_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="lock-icon" aria-hidden="true">🔒</div>
+  <h1 style="text-align:center">관리자 권한이 필요합니다.</h1>
+  <p class="muted" style="text-align:center;margin-top:-4px">관리자 코드를 입력하면 이 기기에서 관리자 기능이 해금됩니다.</p>
+  {% if error %}<div class="form-error">{{ error }}</div>{% endif %}
+  {% if locked_sec %}
+    <div class="notice danger">시도 횟수를 초과했습니다. {{ (locked_sec + 59) // 60 }}분 후 다시 시도하세요.</div>
+  {% endif %}
+  <form method="post" action="{{ url_for('auth.unlock_page') }}">
+    <input type="hidden" name="next" value="{{ next_url }}">
+    <label for="code">관리자 코드</label>
+    <input id="code" name="code" type="password" inputmode="numeric" autocomplete="off" required autofocus {% if locked_sec %}disabled{% endif %}>
+    <div style="margin-top:16px"><button class="btn block" type="submit" {% if locked_sec %}disabled{% endif %}>권한 해금</button></div>
+  </form>
+  <p class="muted small" style="margin-top:14px;text-align:center">
+    관리자 모드는 마지막 사용 후 {{ config.ADMIN_MODE_MIN }}분이 지나거나 로그아웃하면 자동으로 해제됩니다.<br>
+    <a href="{{ url_for('pages.map_page') }}">좌석 지도로 돌아가기</a>
+  </p>
+</div>
+{% endblock %}

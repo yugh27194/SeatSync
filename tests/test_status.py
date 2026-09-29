@@ -19,6 +19,8 @@ def res(status, start_ago=0, checked_in_ago=None):
 @pytest.mark.parametrize("r, a, seat_state, situation", [
     (None, "empty", AVAILABLE, OK),
     (None, "occupied", IN_USE, "unauthorized"),
+    (None, "item", IN_USE, "unauthorized"),
+    ("reserved", "item", IN_USE, "no_checkin"),
     (None, "unavailable", UNAVAILABLE, OK),
     ("reserved", "empty", IN_USE, OK),
     ("reserved", "occupied", IN_USE, "no_checkin"),
@@ -68,3 +70,17 @@ def test_future_since_clamped():
 
 def test_user_view_three_states():
     assert {user_view(x) for x in (AVAILABLE, IN_USE, UNAVAILABLE)} == {"available", "taken", "unavailable"}
+
+
+def test_hoarding_boundary():
+    limit = S.hoarding_min * 60
+    r = res("in_use", checked_in_ago=99999)
+    j = judge(r, act("item", limit - 1), NOW, S)
+    assert j.situation == OK and j.note == "짐만 두고 자리 비움"
+    assert judge(r, act("item", limit), NOW, S).situation == "hoarding"
+
+
+def test_item_counts_from_checkin():
+    limit = S.hoarding_min * 60
+    j = judge(res("in_use", checked_in_ago=60), act("item", limit * 3), NOW, S)
+    assert j.situation == OK and j.deadline == NOW - 60 + limit

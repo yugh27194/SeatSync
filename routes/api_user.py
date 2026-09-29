@@ -9,7 +9,7 @@ from db import get_db, get_settings, load_layout, tx
 from routes import ApiError, int_field, json_body, now_ts
 from service import (extend_check, refresh, reservation_json, set_seat_state, suspension,
                      user_active_reservation)
-from status import user_view
+from status import OK, user_view
 from timeutil import to_iso
 
 bp = Blueprint("api_user", __name__, url_prefix="/api")
@@ -68,6 +68,8 @@ def seats():
     out = [{
         "no": it["seat"]["no"], "label": it["seat"]["label"], "x": it["seat"]["x"], "y": it["seat"]["y"],
         "zone": it["seat"]["zone"], "view": _seat_view(it, my),
+        # 관리자 처리가 필요한 좌석 표시(!). 구체적인 사유는 관리자 모드에서만 보인다.
+        "attention": it["j"].situation != OK,
     } for it in results]
     return jsonify({
         "server_time": to_iso(now), "grid": layout["grid"], "fixtures": layout["fixtures"],
@@ -102,7 +104,8 @@ def seat_detail(no):
         "page_mode": mode,
         "unavailable": seat["state"] == "unavailable",
         "unavailable_note": seat["state_note"] if seat["state"] == "unavailable" else None,
-        "occupied": res is None and seat["state"] == "occupied",  # 누군가 앉아 있음(대개 QR을 찍은 본인)
+        "occupied": res is None and seat["state"] in ("occupied", "item"),  # 누군가 앉아 있거나 짐이 있음
+        "attention": it["j"].situation != OK,
         "qr_ok": None if not token else _token_ok(token, seat),
         "my_reservation": reservation_json(my, now, s),
         "policy": _policy(s),
@@ -134,8 +137,8 @@ def create_reservation():
         if seat["state"] == "unavailable":
             raise ApiError(409, "SEAT_UNAVAILABLE", "사용할 수 없는 좌석입니다.")
         token_ok = _token_ok(qr_token, seat)
-        if seat["state"] == "occupied" and not token_ok:
-            raise ApiError(409, "SEAT_OCCUPIED", "현재 다른 이용자가 앉아 있는 좌석입니다.")
+        if seat["state"] in ("occupied", "item") and not token_ok:
+            raise ApiError(409, "SEAT_OCCUPIED", "현재 다른 이용자가 사용 중인(또는 짐이 있는) 좌석입니다.")
         if qr_token and not token_ok:
             raise ApiError(403, "BAD_QR_TOKEN", "좌석 QR을 다시 스캔해 주세요.")
 

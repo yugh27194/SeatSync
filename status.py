@@ -10,6 +10,7 @@ from dataclasses import dataclass, fields
 DEFAULT_SETTINGS = {
     "checkin_limit_min": 15,
     "away_limit_min": 30,
+    "hoarding_min": 30,
     "default_use_min": 120,
     "extend_min": 60,
     "extend_window_min": 30,
@@ -21,7 +22,8 @@ DEFAULT_SETTINGS = {
 # key: (라벨, 단위, 설명, 최소, 최대)
 SETTINGS_META = {
     "checkin_limit_min": ("체크인 제한", "분", "예약 후 이 시간 안에 체크인하지 않으면 미입실로 자동 취소", 1, 120),
-    "away_limit_min": ("자리 비움 허용", "분", "이용 중 좌석이 이 시간 넘게 비어 있으면 '장시간 자리 비움'으로 표시", 1, 240),
+    "away_limit_min": ("이탈 기준", "분", "이용 중 좌석이 이 시간 넘게 완전히 비어 있으면 '이탈'로 표시", 1, 240),
+    "hoarding_min": ("사석화 기준", "분", "이용 중 좌석에 짐만 두고 이 시간 넘게 자리를 비우면 '사석화'로 표시", 1, 240),
     "default_use_min": ("기본 이용 시간", "분", "예약 1회 이용 시간", 10, 720),
     "extend_min": ("연장 시간", "분", "연장 1회당 늘어나는 시간", 10, 360),
     "extend_window_min": ("연장 가능 시점", "분", "남은 시간이 이 값 이하일 때만 연장 가능", 1, 240),
@@ -35,6 +37,7 @@ SETTINGS_META = {
 class Settings:
     checkin_limit_min: int
     away_limit_min: int
+    hoarding_min: int
     default_use_min: int
     extend_min: int
     extend_window_min: int
@@ -56,17 +59,18 @@ class Settings:
 AVAILABLE, IN_USE, UNAVAILABLE = "available", "in_use", "unavailable"
 SEAT_STATES = {AVAILABLE: "빈자리", IN_USE: "예약(사용중)", UNAVAILABLE: "사용불가"}
 
-# 현장 상태 (관리자가 임시 배분하거나 카메라가 보고)
-ACTUAL_STATES = {"empty": "빈자리", "occupied": "사용중", "unavailable": "사용불가"}
+# 현장 상태 (관리자가 임시 배분하거나 카메라가 보고). '짐만 있음'은 사석화·짐으로 자리 맡기 판단용.
+ACTUAL_STATES = {"empty": "빈자리", "occupied": "사용중", "item": "짐만 있음", "unavailable": "사용불가"}
 
 # ---------------------------------------------------------------- 대조 결과(상황)
 
 OK = "ok"
 SITUATIONS = {
     OK:                 {"label": "정상",             "desc": ""},
-    "unauthorized":     {"label": "미예약 사용",      "desc": "예약 없이 좌석을 사용하고 있습니다."},
-    "no_checkin":       {"label": "체크인 누락",      "desc": "예약 좌석에 착석했지만 체크인하지 않았습니다."},
-    "away":             {"label": "장시간 자리 비움", "desc": "이용 중인 좌석이 허용 시간보다 오래 비어 있습니다."},
+    "unauthorized":     {"label": "무단 점유",        "desc": "예약 없이 좌석을 사용하거나 짐으로 자리를 맡아 두었습니다."},
+    "away":             {"label": "이탈",             "desc": "이용 중인 좌석이 기준 시간보다 오래 비어 있습니다."},
+    "hoarding":         {"label": "사석화",           "desc": "이용 중인 좌석에 짐만 두고 기준 시간보다 오래 자리를 비웠습니다."},
+    "no_checkin":       {"label": "체크인 누락",      "desc": "예약 좌석에 착석(또는 짐)이 있지만 체크인하지 않았습니다."},
     "seat_unavailable": {"label": "예약 좌석 사용불가", "desc": "예약된 좌석이 사용불가 상태입니다. 다른 좌석으로 옮겨 주세요."},
 }
 ISSUES = [k for k in SITUATIONS if k != OK]
@@ -86,14 +90,14 @@ class Reservation:
 
 @dataclass(frozen=True)
 class Actual:
-    state: str          # empty | occupied | unavailable
+    state: str          # empty | occupied | item | unavailable
     since: int
 
 
 @dataclass(frozen=True)
 class Judgement:
     seat_state: str     # available | in_use | unavailable
-    situation: str      # ok | unauthorized | no_checkin | away | seat_unavailable
+    situation: str      # ok | unauthorized | away | hoarding | no_checkin | seat_unavailable
     since: int          # 현재 상황이 시작된 시각
     deadline: int | None = None  # 다음 변화 예정 시각 (체크인 마감, 자리 비움 허용 종료)
     note: str | None = None      # 정상일 때의 보조 설명 (입실 대기, 잠시 자리 비움)
@@ -110,14 +114,14 @@ def judge(res: Reservation | None, actual: Actual, now: int, s: Settings) -> Jud
         return Judgement(UNAVAILABLE, OK, since)
 
     if res is None:
-        if a == "occupied":
+        if a in ("occupied", "item"):
             return Judgement(IN_USE, "unauthorized", since)
         return Judgement(AVAILABLE, OK, since)
 
     if res.status == "reserved":
         checkin_deadline = res.start_at + s.checkin_limit_min * 60
         start = max(since, res.start_at)
-        if a == "occupied":
+        if a in ("occupied", "item"):
             return Judgement(IN_USE, "no_checkin", start, checkin_deadline)
         return Judgement(IN_USE, OK, res.start_at, checkin_deadline, "입실 대기")
 
@@ -125,10 +129,13 @@ def judge(res: Reservation | None, actual: Actual, now: int, s: Settings) -> Jud
     start = max(since, res.checked_in_at or res.start_at)
     if a == "occupied":
         return Judgement(IN_USE, OK, start)
-    limit = s.away_limit_min * 60
+    if a == "item":
+        limit, note, issue = s.hoarding_min * 60, "짐만 두고 자리 비움", "hoarding"
+    else:
+        limit, note, issue = s.away_limit_min * 60, "잠시 자리 비움", "away"
     if now - start < limit:
-        return Judgement(IN_USE, OK, start, start + limit, "잠시 자리 비움")
-    return Judgement(IN_USE, "away", start + limit)
+        return Judgement(IN_USE, OK, start, start + limit, note)
+    return Judgement(IN_USE, issue, start + limit)
 
 
 def user_view(seat_state):

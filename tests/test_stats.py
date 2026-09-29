@@ -17,11 +17,14 @@ def test_hourly_split_and_rate(conn):
     _log(conn, 1, "in_use", "ok", _ts(14, 0))
     _log(conn, 1, "in_use", "away", _ts(14, 30))
     _log(conn, 1, "available", "ok", _ts(15, 15))
+    _log(conn, 3, "in_use", "hoarding", _ts(16, 0))
+    _log(conn, 3, "available", "ok", _ts(16, 30))
     _log(conn, 2, "in_use", "unauthorized", _ts(23, 0, day=29))  # 전날부터 이어짐
     _log(conn, 2, "available", "ok", _ts(1, 0))
     h = {x["hour"]: x for x in compute_hourly_stats(conn, _ts(0), _ts(0) + 86400, _ts(0) + 86400)}
-    assert h[14]["in_use_min"] == 30 and h[14]["away_min"] == 30 and h[14]["away_rate"] == 0.5
-    assert h[15]["away_min"] == 15 and h[15]["away_rate"] == 1.0
+    assert h[14]["in_use_min"] == 30 and h[14]["away_min"] == 30 and h[14]["issue_rate"] == 0.5
+    assert h[15]["away_min"] == 15 and h[15]["issue_rate"] == 1.0
+    assert h[16]["hoarding_min"] == 30 and h[16]["issue_rate"] == 1.0
     assert h[0]["unauthorized_min"] == 60 and h[1]["unauthorized_min"] == 0
 
 

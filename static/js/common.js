@@ -19,6 +19,47 @@
   /** JSON API 호출. 에러 JSON이면 토스트를 띄우고 ApiError를 던진다. opts.quiet=true면 토스트 생략. */
   async function api(method, url, body, opts) {
     opts = opts || {};
+    try {
+      return await apiOnce(method, url, body, opts);
+    } catch (e) {
+      // 관리자 권한이 필요한 요청이면 코드 입력을 받아 해금한 뒤 한 번 다시 시도한다
+      if (e.code === "ADMIN_REQUIRED" && !opts._retried && (await requireAdmin())) {
+        return apiOnce(method, url, body, { ...opts, _retried: true });
+      }
+      throw e;
+    }
+  }
+
+  let adminPrompt = null;
+  /** "관리자 권한이 필요합니다." → 관리자 코드 입력 → 해금. 성공하면 true. 동시에 여러 번 불려도 창은 하나. */
+  function requireAdmin(reason) {
+    if (document.body.dataset.admin === "1") return Promise.resolve(true);
+    if (adminPrompt) return adminPrompt;
+    adminPrompt = (async () => {
+      let msg = reason || "관리자 코드를 입력하면 이 기기에서 관리자 기능이 해금됩니다.";
+      for (;;) {
+        const v = await modal({ title: "🔒 관리자 권한이 필요합니다.", body: msg, ok: "권한 해금",
+          fields: [{ name: "code", label: "관리자 코드", type: "password", inputmode: "numeric" }] });
+        if (!v) {
+          if (location.pathname.startsWith("/admin")) location.href = "/map";
+          return false;
+        }
+        try {
+          await apiOnce("POST", "/api/admin-mode/unlock", { code: v.code }, { quiet: true });
+          document.body.dataset.admin = "1";
+          toast("관리자 권한이 해금되었습니다.", "ok");
+          return true;
+        } catch (e) {
+          if (e.code === "ADMIN_LOCKED") { toast(e.message, "error", 5000); return false; }
+          msg = e.message;
+        }
+      }
+    })();
+    adminPrompt.finally(() => { adminPrompt = null; });
+    return adminPrompt;
+  }
+
+  async function apiOnce(method, url, body, opts) {
     const init = { method: method, headers: { "Accept": "application/json" }, credentials: "same-origin" };
     if (body !== undefined && body !== null) {
       init.headers["Content-Type"] = "application/json";
@@ -38,7 +79,7 @@
         location.href = "/login?next=" + encodeURIComponent(location.pathname + location.search);
       }
       const err = (data && data.error) || { code: "HTTP_" + res.status, message: "요청을 처리하지 못했습니다." };
-      if (!opts.quiet) toast(err.message, "error");
+      if (!opts.quiet && err.code !== "ADMIN_REQUIRED") toast(err.message, "error");
       throw new ApiError(res.status, err.code, err.message);
     }
     return data;
@@ -112,6 +153,7 @@
       if (opts.body) { const b = document.createElement("div"); b.className = "body"; b.textContent = opts.body; m.append(b); }
       const fields = opts.fields || (opts.input ? [{ name: "_", type: "textarea", ...opts.input }] : []);
       const els = {};
+      const ok = document.createElement("button");
       for (const f of fields) {
         if (f.label) { const l = document.createElement("label"); l.textContent = f.label; m.append(l); }
         let el;
@@ -123,6 +165,10 @@
             el.append(op);
           }
           if (f.value != null) el.value = f.value;
+        } else if (f.type === "password") {
+          el = document.createElement("input"); el.type = "password"; el.autocomplete = "off";
+          if (f.inputmode) el.inputMode = f.inputmode;
+          el.addEventListener("keydown", (e) => { if (e.key === "Enter") ok.click(); });
         } else if (f.type === "number") {
           el = document.createElement("input"); el.type = "number"; el.inputMode = "numeric";
           if (f.min != null) el.min = f.min; if (f.max != null) el.max = f.max;
@@ -137,7 +183,7 @@
       }
       const row = document.createElement("div"); row.className = "btn-row"; row.style.marginTop = "6px";
       const no = document.createElement("button"); no.className = "btn secondary"; no.textContent = opts.cancel || "취소";
-      const ok = document.createElement("button"); ok.className = "btn" + (opts.danger ? " danger" : ""); ok.textContent = opts.ok || "확인";
+      ok.className = "btn" + (opts.danger ? " danger" : ""); ok.textContent = opts.ok || "확인";
       if (opts.okDisabled) ok.disabled = true;
       row.append(no, ok); m.append(row); back.append(m);
       document.body.append(back);
@@ -160,6 +206,6 @@
     return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
 
-  window.SS = { api, poll, fmtRemain, fmtClock, fmtTime, parseTs, syncClock, serverNow, toast, modal, esc, ApiError };
+  window.SS = { api, requireAdmin, poll, fmtRemain, fmtClock, fmtTime, parseTs, syncClock, serverNow, toast, modal, esc, ApiError };
   window.api = api; window.poll = poll; window.fmtRemain = fmtRemain;
 })();

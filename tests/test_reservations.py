@@ -29,12 +29,14 @@ def test_user_sees_only_three_states(user, user2):
     reserve(user2, 2)
     data = user.get("/api/seats").get_json()
     views = {s["no"]: s["view"] for s in data["seats"]}
+    attention = {s["no"] for s in data["seats"] if s["attention"]}
+    assert attention == {3}  # 문제 좌석에는 '!' 표시만(사유는 숨김)
     assert views[1] == "available"
     assert views[2] == "taken"          # 예약
     assert views[3] == "taken"          # 예약 없이 사용중 → 사용자에겐 '예약(사용중)'
     assert views[5] == "unavailable"
     text = str(data)
-    for word in ("unauthorized", "situation", "미예약", "자리 비움"):
+    for word in ("unauthorized", "situation", "무단", "이탈", "사석화"):
         assert word not in text
 
 

@@ -11,8 +11,6 @@ bp = Blueprint("pages", __name__)
 def index():
     if g.user is None:
         return redirect(url_for("auth.login"))
-    if g.user["role"] == "admin":
-        return redirect(url_for("pages.admin"))
     return redirect(url_for("pages.map_page"))
 
 

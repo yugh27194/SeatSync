@@ -11,6 +11,7 @@ from timeutil import to_iso  # noqa: E402
 
 T0 = 1_790_000_000  # 2026-09-21 경
 DEVICE_KEY = "test-key"
+ADMIN_CODE = "test-code"
 
 
 class Clock:
@@ -32,8 +33,10 @@ def clock():
 @pytest.fixture
 def app(tmp_path, clock):
     path = str(tmp_path / "test.db")
+    import auth
+    auth._fails.clear()
     app = create_app({"TESTING": True, "DATABASE": path, "CLOCK": clock, "DEVICE_KEY": DEVICE_KEY,
-                      "SECRET_KEY": "test"})
+                      "SECRET_KEY": "test", "ADMIN_CODE": ADMIN_CODE})
     conn = dbmod.connect(path)
     dbmod.init_db(conn)
     dbmod.seed(conn, app.config["SEATS_FILE"], now=T0, pw_method="pbkdf2:sha256:1000")  # 테스트 속도용
@@ -76,7 +79,11 @@ def user_b(app):
 
 @pytest.fixture
 def admin(app):
-    return login(app.test_client(), "admin", "admin1234")
+    """관리자 계정은 없다: 일반 사용자(테스트5)로 로그인한 뒤 관리자 코드로 권한을 해금한다."""
+    c = login(app.test_client(), "20260005")
+    r = c.post("/api/admin-mode/unlock", json={"code": ADMIN_CODE})
+    assert r.status_code == 200, r.get_json()
+    return c
 
 
 @pytest.fixture

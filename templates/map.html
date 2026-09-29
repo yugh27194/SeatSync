@@ -2,12 +2,17 @@
 {% block title %}좌석 지도{% endblock %}
 {% block content %}
 <div class="mybar" id="mybar"><div class="txt muted">불러오는 중…</div></div>
+<div class="attn-bar hidden" id="attn-bar">
+  <div class="txt"><span class="dot">!</span><span id="attn-text"></span></div>
+  <button type="button" class="btn small danger" id="attn-btn">관리자 처리</button>
+</div>
 <div class="seatmap" id="seatmap" aria-label="열람실 좌석 지도"></div>
 <div class="legend">
   <span><i style="background:var(--v-available)"></i>빈자리</span>
   <span><i style="background:var(--v-taken)"></i>예약(사용중)</span>
   <span><i style="background:var(--v-unavailable)"></i>사용불가</span>
   <span><i style="background:var(--v-taken);outline:3px solid #0d2a66;outline-offset:-3px"></i>★ 내 자리</span>
+  <span><i style="background:var(--i-generic);border-radius:50%;color:#fff;font-size:10px;text-align:center;line-height:14px;font-weight:900;font-style:normal">!</i>관리자 처리 필요</span>
 </div>
 <p class="muted small" style="margin-top:14px">좌석에 붙은 QR을 스캔하면 바로 예약·체크인할 수 있어요.</p>
 {% endblock %}

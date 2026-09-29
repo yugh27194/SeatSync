@@ -12,6 +12,9 @@ class Config:
     DEVICE_KEY = os.environ.get("SEATSYNC_DEVICE_KEY", "dev-key")
     DATABASE = os.environ.get("SEATSYNC_DB", os.path.join(BASE_DIR, "seatsync.db"))
     TZ_NAME = os.environ.get("SEATSYNC_TZ", "Asia/Seoul")
+    # 관리자 계정 대신, 관리자 기능이 필요할 때 이 코드를 입력해 권한을 해금한다.
+    ADMIN_CODE = os.environ.get("SEATSYNC_ADMIN_CODE", "0000")
+    ADMIN_MODE_MIN = int(os.environ.get("SEATSYNC_ADMIN_MODE_MIN", "60"))  # 관리자 모드 유지 시간(마지막 사용 기준)
     SEATS_FILE = os.path.join(BASE_DIR, "config", "seats.json")
     JSON_AS_ASCII = False
 

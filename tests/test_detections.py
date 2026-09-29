@@ -24,14 +24,14 @@ def test_bad_occupancy_400(device, clock):
 def test_maps_to_three_states(device, clock, conn):
     send(device, clock, {1: ("person", clock() - 10), 2: ("item", clock() - 20), 3: ("empty", clock())})
     assert _state(conn, 1)["state"] == "occupied" and _state(conn, 1)["state_since"] == clock() - 10
-    assert _state(conn, 2)["state"] == "occupied" and _state(conn, 2)["state_source"] == "camera"
+    assert _state(conn, 2)["state"] == "item" and _state(conn, 2)["state_source"] == "camera"
     assert _state(conn, 3)["state"] == "empty"
 
 
 def test_same_state_keeps_since(device, clock, conn):
     send(device, clock, {1: ("person", clock() - 10)})
     clock.advance(5)
-    send(device, clock, {1: ("item", clock())})  # person → item 둘 다 사용중
+    send(device, clock, {1: ("person", clock())})  # 같은 상태면 시작 시각 유지
     assert _state(conn, 1)["state_since"] == clock() - 15
 
 
