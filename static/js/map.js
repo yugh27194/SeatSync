@@ -13,8 +13,9 @@
     offered: "내게 안내됨", held: "대기자 안내 중" };
 
   function fmtMinutes(min) {
-    const h = Math.floor(min / 60), m = min % 60;
-    return (h ? h + "시간" : "") + (h && m ? " " : "") + (m ? m + "분" : "");
+    if (min < 60) return SS.fmtMin(min);
+    const h = Math.floor(min / 60), m = Math.round(min % 60);
+    return h + "시간" + (m ? " " + m + "분" : "");
   }
 
   function renderMap() {
@@ -67,7 +68,7 @@
     }
     if (w) {
       barEl.innerHTML = `<div class="txt">🔔 빈자리 알림 대기 중 · <strong>${w.position}번째</strong>${w.zone ? ` · ${esc(w.zone)}` : " · 아무 자리"}<br>
-        <span class="muted small">빈자리가 나면 ${data.policy.hold_min}분 동안 먼저 예약할 수 있게 알려 드려요.</span></div>
+        <span class="muted small">빈자리가 나면 ${SS.fmtMin(data.policy.hold_min)} 동안 먼저 예약할 수 있게 알려 드려요.</span></div>
         <button class="btn small secondary" data-wl="cancel">대기 취소</button>`;
       return;
     }
@@ -109,7 +110,7 @@
     if (kind === "join") {
       const zones = Object.keys(data.zones || {});
       const v = await modal({ title: "🔔 빈자리 알림 받기",
-        body: `빈자리가 나면 대기 순서대로 알려 드리고, ${data.policy.hold_min}분 동안 먼저 예약할 수 있게 자리를 잡아 둡니다.\n(이 화면을 열어 두면 알림을 바로 받을 수 있어요)`,
+        body: `빈자리가 나면 대기 순서대로 알려 드리고, ${SS.fmtMin(data.policy.hold_min)} 동안 먼저 예약할 수 있게 자리를 잡아 둡니다.\n(이 화면을 열어 두면 알림을 바로 받을 수 있어요)`,
         fields: [{ name: "zone", label: "원하는 구역", type: "select", value: "",
           options: [{ value: "", label: "아무 자리" }].concat(zones.map((z) => ({ value: z, label: `${z} · ${data.zones[z]}` }))) }],
         ok: "알림 신청" });
@@ -134,7 +135,7 @@
   async function reserve(seat) {
     const p = data.policy;
     const ok = await modal({ title: `${seat.label} 좌석을 예약할까요?`,
-      body: `${seat.zone ? seat.zone + " · " : ""}이용 시간 ${fmtMinutes(p.default_use_min)}, ${p.checkin_limit_min}분 안에 체크인 필요`,
+      body: `${seat.zone ? seat.zone + " · " : ""}이용 시간 ${fmtMinutes(p.default_use_min)}, ${SS.fmtMin(p.checkin_limit_min)} 안에 체크인 필요`,
       ok: "예약하기" });
     if (!ok) return;
     busy = true;
@@ -159,7 +160,8 @@
       reserve(seat);
       return;
     }
-    toast(seat.view === "taken" ? "사용중인 좌석입니다" : "현재 사용할 수 없는 좌석입니다");
+    // 사용중·사용불가 좌석: 관리자 화면과 같은 상태 이름으로 안내 (색은 주황/회색 그대로)
+    modal({ title: `${seat.label} · ${seat.state_label}`, body: seat.state_msg || "", ok: "닫기", noCancel: true });
   });
 
   const ticker = poll(load, 3000);

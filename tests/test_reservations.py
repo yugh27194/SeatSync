@@ -28,10 +28,13 @@ def test_user_sees_three_states_without_marks(user, user2):
     data = user.jget("/api/seats")
     views = {s["no"]: s["view"] for s in data["seats"]}
     assert views[1] == "available" and views[2] == "taken" and views[3] == "taken" and views[20] == "unavailable"
-    # 일반 사용자에게는 '!'(처리 필요)와 세부 상태가 없다
+    # 일반 사용자: 색은 3가지(무단 점유도 'taken'), 붉은 강조·'!'는 없고, 좌석을 누르면 상태 이름·안내가 보인다
     assert all("attention" not in s and "detail_label" not in s for s in data["seats"])
     assert data["me"]["admin"] is False
-    for word in ("unauthorized", "무단", "처리 필요", "detail"):
+    seats = {s["no"]: s for s in data["seats"]}
+    assert seats[3]["state_label"] == "무단 점유" and "예약 없이" in seats[3]["state_msg"]
+    assert seats[1]["state_label"] == "빈자리" and seats[20]["state_label"] == "고장"
+    for word in ("unauthorized", "처리 필요", "확인 필요"):
         assert word not in str(data)
 
 

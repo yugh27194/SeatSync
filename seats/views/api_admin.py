@@ -12,7 +12,7 @@ from ..models import AdminLog, Alert, Camera, JudgmentFeedback, Reservation, Sea
 from ..services import (clear_marks, compute_hourly_stats, get_settings, log_admin, notify, record_event, refresh,
                         set_seat_state, setup_demo)
 from ..status import (ACTUAL_STATES, ALERT_TYPE_LABELS, ASSIGN_GROUPS, ASSIGNABLE, DEFAULT_SETTINGS, DETAILS,
-                      SEAT_STATES, SETTINGS_META)
+                      SEAT_STATES, SETTINGS_META, TIME_KEYS, TIME_STEP, fmt_min)
 from ..timeutil import to_iso, tz
 from .api_user import layout_json
 
@@ -22,7 +22,7 @@ ACTION_LABELS = {
     "move": "좌석 이동", "extend": "관리자 연장", "force_return": "강제 반납", "warn": "경고 부여",
     "unwarn": "경고 취소", "suspend": "이용 정지", "unsuspend": "정지 해제", "demo": "시연 상황 배치",
     "settings": "설정 변경", "admin_on": "관리자 모드 켬", "admin_off": "관리자 모드 끔", "admin_locked": "관리자 코드 잠금",
-    "notice": "사전 경고 발송", "feedback": "판정 피드백", "demo_history": "샘플 이력 생성",
+    "notice": "사전 경고 발송", "feedback": "판정 피드백", "demo_history": "샘플 이력 생성", "auto_return": "자동 강제 반납",
 }
 RES_STATUS = {"reserved": "예약(입실 전)", "in_use": "이용 중"}
 
@@ -227,7 +227,7 @@ def assign(request):
         try:
             with transaction.atomic():
                 r = Reservation.objects.create(user=u, seat=seat, status="in_use" if checkin else "reserved",
-                                               start_at=now, end_at=now + s.default_use_min * 60,
+                                               start_at=now, end_at=now + s.sec("default_use_min"),
                                                checked_in_at=now if checkin else None, source="admin")
         except IntegrityError:
             raise ApiError(409, "SEAT_TAKEN", "방금 다른 예약이 생겼습니다.")
@@ -311,11 +311,11 @@ def admin_extend(request, res_id):
         s = get_settings()
         # 관리자 연장은 연장 가능 시점·횟수 제한을 적용하지 않고, 이용자 연장 횟수에도 포함하지 않는다.
         old_end = r.end_at
-        r.end_at += s.extend_min * 60
+        r.end_at += s.sec("extend_min")
         r.save(update_fields=["end_at"])
         record_event(r, "admin_extend", now, memo=f"종료 {to_iso(old_end)[11:16]} → {to_iso(r.end_at)[11:16]}")
         log_admin(request.user.id, "extend", now, seat_no=r.seat_id, reservation_id=r.id, target_user_id=r.user_id,
-                  memo=f"+{s.extend_min}분")
+                  memo=f"+{fmt_min(s.extend_min)}")
         refresh(now)
     return _ok()
 
@@ -496,19 +496,27 @@ def settings_api(request):
             raise ApiError(400, "BAD_REQUEST", f"알 수 없는 설정 키: {k}")
         label, unit, _desc, lo, hi = SETTINGS_META[k]
         try:
-            if isinstance(v, bool) or (isinstance(v, float) and not v.is_integer()):
+            if isinstance(v, bool):
                 raise ValueError
-            iv = int(v)
+            fv = float(v)
         except (TypeError, ValueError):
+            raise ApiError(400, "BAD_REQUEST", f"'{label}' 값은 숫자여야 합니다.")
+        if k in TIME_KEYS:  # 분 단위 값은 15초 단위까지
+            if abs(fv / TIME_STEP - round(fv / TIME_STEP)) > 1e-9:
+                raise ApiError(400, "BAD_REQUEST", f"'{label}' 값은 15초 단위로 정해 주세요.")
+            fv = round(fv / TIME_STEP) * TIME_STEP
+        elif not fv.is_integer():
             raise ApiError(400, "BAD_REQUEST", f"'{label}' 값은 정수여야 합니다.")
-        if not lo <= iv <= hi:
-            raise ApiError(400, "BAD_REQUEST", f"'{label}' 값은 {lo}~{hi} {unit} 범위여야 합니다.")
-        clean[k] = iv
+        if not lo <= fv <= hi:
+            rng = f"{fmt_min(lo)}~{fmt_min(hi)}" if k in TIME_KEYS else f"{lo}~{hi} {unit}"
+            raise ApiError(400, "BAD_REQUEST", f"'{label}' 값은 {rng} 범위여야 합니다.")
+        clean[k] = int(fv) if fv.is_integer() else fv
     now = clock.now()
     with transaction.atomic():
         for k, v in clean.items():
             Setting.objects.update_or_create(key=k, defaults={"value": str(v)})
-        log_admin(request.user.id, "settings", now, memo=", ".join(f"{SETTINGS_META[k][0]}={v}" for k, v in clean.items()))
+        log_admin(request.user.id, "settings", now, memo=", ".join(
+            f"{SETTINGS_META[k][0]}={fmt_min(v) if k in TIME_KEYS else v}" for k, v in clean.items()))
     return jres(_settings_json(get_settings()))
 
 

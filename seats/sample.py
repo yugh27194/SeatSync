@@ -88,7 +88,7 @@ def _pick_user(rnd, real_today, pool, busy, t):
 
 def _session(rnd, s, seat, user, start, end, logs, events):
     """한 번의 예약·이용을 만들고 끝난 시각을 돌려준다."""
-    use_min = s.default_use_min * 60
+    use_min = s.sec("default_use_min")
     # 끝난 상태로 한 번만 저장한다. 'reserved'로 먼저 저장하면 지금 예약 중인 좌석·사용자와 겹쳐
     # "좌석/사용자당 진행 중 예약 1건" 제약(ux_res_active_*)에 걸린다.
     r = Reservation(user=user, seat=seat, status="reserved", start_at=start, end_at=start + use_min,
@@ -97,7 +97,7 @@ def _session(rnd, s, seat, user, start, end, logs, events):
     log = [(start, "in_use", "waiting")]
 
     if rnd.random() < 0.07:  # 미입실
-        t_end = start + s.checkin_limit_min * 60 + 60
+        t_end = start + s.sec("checkin_limit_min") + 60
         r.status, r.ended_at = "no_show", t_end
         ev.append(("no_show", t_end, None))
         log.append((t_end, "available", "empty"))
@@ -115,9 +115,9 @@ def _session(rnd, s, seat, user, start, end, logs, events):
         if t >= end - 20 * 60 or rnd.random() < 0.45:
             break
         if rnd.random() < 0.55:
-            detail, issue_detail, limit = "away_short", "away", s.away_limit_min * 60
+            detail, issue_detail, limit = "away_short", "away", s.sec("away_limit_min")
         else:
-            detail, issue_detail, limit = "item", "hoarding", s.hoarding_min * 60
+            detail, issue_detail, limit = "item", "hoarding", s.sec("hoarding_min")
         brk = rnd.randint(5, 25) * 60 if rnd.random() < 0.8 else limit + rnd.randint(10, 40) * 60
         log.append((t, "in_use", detail))
         if brk > limit:
@@ -132,7 +132,7 @@ def _session(rnd, s, seat, user, start, end, logs, events):
     if status != "force_returned":
         if end - start > use_min and rnd.random() < 0.6:  # 연장
             ext_at = r.end_at - rnd.randint(5, 25) * 60
-            r.end_at += s.extend_min * 60
+            r.end_at += s.sec("extend_min")
             r.extend_count = 1
             ev.append(("extend", ext_at, None))
         t = max(t, min(end, r.end_at))

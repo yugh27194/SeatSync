@@ -528,3 +528,14 @@ table.recon td .cam-seat { margin-right: 4px; white-space: nowrap; }
 table.recon tr.mismatch td:first-child { box-shadow: inset 4px 0 0 var(--bang); }
 .admin-map .seat { font-size: 16px; }
 .assign-btn.on:disabled { opacity: 1; cursor: default; }
+
+/* ---------- 좌석 QR (임시) ---------- */
+.qr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.qr-card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px; text-align: center; }
+.qr-label { font-size: 22px; font-weight: 800; margin-bottom: 6px; }
+.qr-img svg { width: 100%; height: auto; max-width: 200px; }
+@media print {
+  .topbar, .tabs, .admin-strip, .no-print, #notice-stack { display: none !important; }
+  .qr-grid { grid-template-columns: repeat(4, 1fr); }
+  .qr-card { break-inside: avoid; }
+}

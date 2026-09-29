@@ -1,11 +1,10 @@
 """판정 갱신 파이프라인과 예약·좌석·관리자 공통 로직."""
 from django.db import transaction
 
-import math
 
 from .models import (AdminLog, Alert, Notification, Reservation, ReservationEvent, Seat, SeatState, Setting,
                      StatusLog, User, WaitEntry)
-from .status import (AVAILABLE, DEFAULT_SETTINGS, DETAILS, ISSUES, OK, Actual, Settings, judge)
+from .status import (AVAILABLE, DEFAULT_SETTINGS, DETAILS, ISSUES, OK, Actual, Settings, fmt_min, fmt_sec, judge)
 from .status import Reservation as ResView
 from .timeutil import to_iso
 
@@ -100,6 +99,38 @@ def _record(item, now):
     Alert.objects.filter(seat=seat, resolved_at__isnull=True, type__in=stale).update(resolved_at=now, resolution="auto")
 
 
+AUTO_RETURN = ("away", "hoarding", "no_show")
+
+
+def _auto_return(results, now, s):
+    """미입실·이탈·사석화가 auto_return_min 넘게 이어지면 예약을 자동으로 강제 반납(미입실은 취소)한다.
+    카메라 감지가 끊긴 좌석은 자리 비움을 확신할 수 없으므로 자동 반납하지 않는다."""
+    limit = s.sec("auto_return_min")
+    if limit <= 0:
+        return
+    for it in results:
+        r, j, seat = it["res"], it["j"], it["seat"]
+        if r is None or j.detail not in AUTO_RETURN or j.stale or now - j.since < limit:
+            continue
+        no_show = r.status == "reserved"
+        label = DETAILS[j.detail][1]
+        r.status, r.ended_at = ("no_show" if no_show else "force_returned"), now
+        r.save(update_fields=["status", "ended_at"])
+        memo = f"자동 반납 ({label} {fmt_min(s.auto_return_min)} 경과)"
+        record_event(r, "no_show" if no_show else "force_return", now, memo=memo)
+        Alert.objects.filter(seat=seat, resolved_at__isnull=True).exclude(type="call").update(
+            resolved_at=now, resolution="auto_return")
+        clear_marks([seat.no])
+        seat.refresh_from_db(fields=["mark"])
+        notify(r.user_id, "issue", "danger",
+               f"{seat.label} 예약이 자동으로 {'취소' if no_show else '반납'}됐어요",
+               f"'{label}' 상태가 {fmt_min(s.auto_return_min)} 동안 이어져 자동으로 "
+               f"{'취소' if no_show else '강제 반납'}됐습니다.", now, seat=seat, reservation=r, key=f"auto:{r.id}")
+        log_admin(None, "auto_return", now, seat_no=seat.no, reservation_id=r.id, target_user_id=r.user_id, memo=memo)
+        it["res"] = None
+        it["j"] = judge(None, to_actual(seat, now), now, s)
+
+
 def refresh(now):
     """sweep → 전 좌석 판정·대조 → 전이 기록 → 처리 필요 알림 → 본인 사전 경고 → 빈자리 안내.
     좌석별 결과 목록을 돌려준다(item["offer"]: 그 좌석을 안내받은 대기 항목)."""
@@ -107,6 +138,7 @@ def refresh(now):
         s = get_settings()
         _sweep(now, s)
         results = _judge_seats(now, s)
+        _auto_return(results, now, s)
         for item in results:
             _record(item, now)
         _prewarn(results, now, s)
@@ -130,14 +162,10 @@ def notify(user_id, kind, level, title, body, now, seat=None, reservation=None, 
                                        seat=seat, reservation=reservation, dedup_key=key, created_at=now)
 
 
-def _mins(sec):
-    return max(1, math.ceil(sec / 60))
-
-
 def _prewarn(results, now, s):
     """이석·짐만 두고 비움·체크인 마감이 기준 시간 prewarn_min 전이면 본인에게 사전 경고,
     처리 필요로 넘어가면 다시 알림. 같은 사안(예약·상태 시작 시각)마다 한 번씩만 보낸다."""
-    pw = s.prewarn_min * 60
+    pw = s.sec("prewarn_min")
     for it in results:
         r, j, seat = it["res"], it["j"], it["seat"]
         if r is None:
@@ -148,7 +176,7 @@ def _prewarn(results, now, s):
             target = "이탈" if d == "away_short" else "사석화"
             what = "자리를 비운" if d == "away_short" else "짐만 두고 자리를 비운"
             notify(uid, "prewarn", "warn", f"{seat.label} 좌석 사전 경고",
-                   f"{what} 지 {_mins(now - j.since)}분이 지났어요. {_mins(left)}분 안에 돌아오지 않으면 "
+                   f"{what} 지 {fmt_sec(now - j.since)}가 지났어요. {fmt_sec(left)} 안에 돌아오지 않으면 "
                    f"'{target}'(으)로 처리되어 관리자가 반납 처리할 수 있어요.",
                    now, seat=seat, reservation=r, key=f"pre:{d}:{r.id}:{j.since}")
         elif d in ("away", "hoarding"):
@@ -169,8 +197,8 @@ def _prewarn(results, now, s):
                    "예약 좌석에 착석(또는 짐)이 확인됐지만 아직 체크인 전이에요. 좌석 QR을 스캔해 체크인하세요.",
                    now, seat=seat, reservation=r, key=f"iss:nocheckin:{r.id}:{j.since}")
         if r.status == "reserved" and left is not None and 0 < left <= pw:
-            notify(uid, "prewarn", "warn", f"{seat.label} 체크인 마감 {_mins(left)}분 전",
-                   f"{_mins(left)}분 안에 좌석 QR로 체크인하지 않으면 '미입실'로 표시되고 관리자가 예약을 취소할 수 있어요.",
+            notify(uid, "prewarn", "warn", f"{seat.label} 체크인 마감 {fmt_sec(left)} 전",
+                   f"{fmt_sec(left)} 안에 좌석 QR로 체크인하지 않으면 '미입실'로 표시되고 자동으로 취소될 수 있어요.",
                    now, seat=seat, reservation=r, key=f"pre:checkin:{r.id}")
         if d == "no_show":
             notify(uid, "issue", "danger", f"{seat.label} 체크인 시간이 지났어요",
@@ -208,11 +236,11 @@ def _waitlist(results, now, s):
         if not cand:
             continue
         seat = free[cand[0]]
-        e.status, e.offered_seat, e.offered_at, e.expires_at = "offered", seat, now, now + s.waitlist_hold_min * 60
+        e.status, e.offered_seat, e.offered_at, e.expires_at = "offered", seat, now, now + s.sec("waitlist_hold_min")
         e.save(update_fields=["status", "offered_seat", "offered_at", "expires_at"])
         offers[seat.no] = e
         notify(e.user_id, "offer", "ok", f"{seat.label} 빈자리가 생겼어요",
-               f"{s.waitlist_hold_min}분 동안 먼저 예약할 수 있어요. 좌석 지도에서 [바로 예약]을 눌러 주세요.",
+               f"{fmt_min(s.waitlist_hold_min)} 동안 먼저 예약할 수 있어요. 좌석 지도에서 [바로 예약]을 눌러 주세요.",
                now, seat=seat, key=f"offer:{e.id}:{now}")
     return offers
 
@@ -244,8 +272,8 @@ def extend_check(res, now, s):
         return False, "체크인한 뒤 이용 중일 때만 연장할 수 있어요."
     if res.extend_count >= s.max_extends:
         return False, f"연장은 최대 {s.max_extends}회까지 가능해요."
-    if res.end_at - now > s.extend_window_min * 60:
-        return False, f"종료 {s.extend_window_min}분 전부터 연장할 수 있어요."
+    if res.end_at - now > s.sec("extend_window_min"):
+        return False, f"종료 {fmt_min(s.extend_window_min)} 전부터 연장할 수 있어요."
     return True, None
 
 
@@ -261,7 +289,7 @@ def reservation_json(res, now, s):
         "start_at": to_iso(res.start_at),
         "end_at": to_iso(res.end_at),
         "checked_in_at": to_iso(res.checked_in_at),
-        "checkin_deadline": to_iso(res.start_at + s.checkin_limit_min * 60) if res.status == "reserved" else None,
+        "checkin_deadline": to_iso(res.start_at + s.sec("checkin_limit_min")) if res.status == "reserved" else None,
         "can_extend": ok,
         "extend_reason": reason,
         "extend_count": res.extend_count,
@@ -359,10 +387,10 @@ def setup_demo(now):
                 if user is None:
                     continue
                 if start_ago is None:  # 체크인 제한을 넘긴 예약 → 다음 refresh에서 미입실 처리
-                    start_ago = s.checkin_limit_min + 5
-                start = now - start_ago * 60
+                    start_ago = s.checkin_limit_min + 5  # 분
+                start = now - int(round(start_ago * 60))
                 res = Reservation.objects.create(user=user, seat=seat, status=status, start_at=start,
-                                                 end_at=start + s.default_use_min * 60,
+                                                 end_at=start + s.sec("default_use_min"),
                                                  checked_in_at=start if status == "in_use" else None)
                 record_event(res, "reserve", start)
                 if status == "in_use":

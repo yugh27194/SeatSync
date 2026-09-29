@@ -44,6 +44,22 @@ def admin_settings_page(request):
 
 
 @ensure_csrf_cookie
+@admin_required
+def admin_qr_page(request):
+    """좌석 QR 체크인 (임시): 인쇄 전에도 화면에 띄운 QR을 폰으로 찍어 체크인·바로 예약을 시험할 수 있게 한다.
+    QR 주소 = 지금 접속한 주소 기준 /seat/{no}?t={좌석 토큰}."""
+    import qrcode
+    import qrcode.image.svg
+
+    cards = []
+    for seat in Seat.objects.filter(active=True).order_by("no"):
+        url = request.build_absolute_uri(f"/seat/{seat.no}?t={seat.qr_token}")
+        svg = qrcode.make(url, image_factory=qrcode.image.svg.SvgPathImage, box_size=10, border=2).to_string(encoding="unicode")
+        cards.append({"seat": seat, "url": url, "svg": svg})
+    return render(request, "admin_qr.html", {"cards": cards})
+
+
+@ensure_csrf_cookie
 @login_required
 def history_page(request):
     return render(request, "history.html")

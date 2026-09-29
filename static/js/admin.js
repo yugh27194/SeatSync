@@ -160,7 +160,7 @@
         <div class="btn-row" style="margin-top:10px">
           ${r.status === "reserved" ? btn("checkin", "대리 체크인", { res: r.id, label: s.label }) : ""}
           ${btn("move", "좌석 이동", { res: r.id, label: s.label })}
-          ${btn("extend", `연장 +${data.settings.extend_min}분`, { res: r.id, label: s.label })}
+          ${btn("extend", `연장 +${SS.fmtMin(data.settings.extend_min)}`, { res: r.id, label: s.label })}
           ${btn("notice", "사전 경고", { user: r.user.id, name: r.user.name, seat: s.no, detail: s.detail })}
           ${btn("warn", "경고(누적)", { user: r.user.id, name: r.user.name })}
           ${btn("force", r.status === "reserved" ? "예약 취소" : "강제 반납", { res: r.id, label: s.label }, "danger")}
@@ -238,7 +238,7 @@
     $("log").innerHTML = d.log.length ? d.log.map((l) => `<tr>
       <td class="small">${l.at.slice(5, 10)} ${fmtTime(l.at)}</td>
       <td><b>${esc(l.action_label)}</b></td>
-      <td>${esc(l.admin_name || "")}</td>
+      <td>${esc(l.admin_name || (l.action === "auto_return" ? "자동" : ""))}</td>
       <td>${esc(l.seat_label || "")}</td>
       <td>${l.user_name ? userLine({ name: l.user_name, student_no: l.user_student_no }) : ""}</td>
       <td class="small">${esc(l.memo || "")}</td></tr>`).join("")
@@ -326,7 +326,7 @@
       const first = opts.find((o) => !o.disabled);
       const v = await modal({
         title: `${s.label} 예약`,
-        body: `이용자를 고르면 이 좌석을 예약합니다. 체크인 제한 시간(${data.settings.checkin_limit_min}분) 안에 아무도 오지 않으면 '! 확인 필요(미입실)'로 표시됩니다.`,
+        body: `이용자를 고르면 이 좌석을 예약합니다. 체크인 제한 시간(${SS.fmtMin(data.settings.checkin_limit_min)}) 안에 아무도 오지 않으면 '! 확인 필요(미입실)'로 표시됩니다.`,
         fields: [
           { name: "user_id", label: "이용자", type: "select", options: opts, value: first ? first.value : "" },
           { name: "memo", label: "메모 (선택)", type: "textarea", placeholder: "예: 전화 예약" },
@@ -356,7 +356,7 @@
     },
 
     async extend(d) {
-      const ok = await modal({ title: "관리자 연장", body: `${d.label} 예약의 종료 시각을 ${data.settings.extend_min}분 늘립니다.\n(이용자 연장 횟수에는 포함되지 않습니다)`, ok: "연장" });
+      const ok = await modal({ title: "관리자 연장", body: `${d.label} 예약의 종료 시각을 ${SS.fmtMin(data.settings.extend_min)} 늘립니다.\n(이용자 연장 횟수에는 포함되지 않습니다)`, ok: "연장" });
       if (ok) run(() => api("POST", `/api/admin/reservations/${d.res}/extend`), "연장했습니다.");
     },
 

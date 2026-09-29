@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}좌석 QR{% endblock %}
+{% block content %}
+<div class="toolbar no-print">
+  <h1 style="margin:0">좌석 QR 체크인 <span class="muted small">(임시)</span></h1>
+  <span class="spacer"></span>
+  <button type="button" class="btn small secondary" onclick="window.print()">인쇄</button>
+</div>
+<div class="notice no-print">
+  좌석 QR을 인쇄하기 전에 시험할 때 쓰는 화면입니다. <b>이 화면(노트북·태블릿)에 띄운 QR을 이용자 폰 카메라로 찍으면</b>
+  그 좌석 페이지가 열리고 <b>[체크인]</b>(내 예약 좌석) 또는 <b>[바로 예약하기]</b>(빈자리)를 누를 수 있습니다.
+  QR 주소는 지금 접속한 주소(<code>{{ request.get_host }}</code>) 기준이라, 폰도 같은 주소로 접속할 수 있어야 합니다.
+  좌석마다 비밀 토큰이 들어 있으니 관리자만 보세요.
+</div>
+<div class="qr-grid">
+  {% for c in cards %}
+  <div class="qr-card">
+    <div class="qr-label">{{ c.seat.label }}</div>
+    <div class="qr-img">{{ c.svg|safe }}</div>
+    <a class="small no-print" href="{{ c.url }}" target="_blank" rel="noopener">이 기기에서 열기 →</a>
+  </div>
+  {% empty %}
+  <p class="muted">좌석이 없습니다.</p>
+  {% endfor %}
+</div>
+{% endblock %}

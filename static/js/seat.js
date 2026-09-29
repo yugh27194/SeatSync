@@ -58,7 +58,7 @@
       } else {
         const how = tokenOk()
           ? "예약과 동시에 체크인됩니다."
-          : `좌석 QR 없이 예약하면 ${p.checkin_limit_min}분 안에 QR로 체크인해야 해요.`;
+          : `좌석 QR 없이 예약하면 ${SS.fmtMin(p.checkin_limit_min)} 안에 QR로 체크인해야 해요.`;
         h = `<h2>이 좌석을 배정받아 주세요</h2>
           <p class="muted">앉아 계신다면 지금 바로 예약해 주세요. ${how}</p>
           ${data.occupied && !tokenOk() ? notice("현재 다른 이용자가 앉아 있는 좌석입니다. 본인이라면 좌석 QR을 스캔해 주세요.", "warn") : ""}

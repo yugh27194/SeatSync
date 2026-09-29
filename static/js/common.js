@@ -199,7 +199,8 @@
       const no = document.createElement("button"); no.className = "btn secondary"; no.textContent = opts.cancel || "취소";
       ok.className = "btn" + (opts.danger ? " danger" : ""); ok.textContent = opts.ok || "확인";
       if (opts.okDisabled) ok.disabled = true;
-      row.append(no, ok); m.append(row); back.append(m);
+      if (opts.noCancel) row.append(ok); else row.append(no, ok);
+      m.append(row); back.append(m);
       document.body.append(back);
       (Object.values(els)[0] || ok).focus();
       function close(v) { back.remove(); document.removeEventListener("keydown", onKey); resolve(v); }
@@ -317,6 +318,12 @@
   });
   document.addEventListener("DOMContentLoaded", () => { if (document.getElementById("bell")) poll(pollNotices, 10000); });
 
-  window.SS = { api, requireAdmin, layoutGrid, poll, refreshNotices: pollNotices, fmtRemain, fmtClock, fmtTime, parseTs, syncClock, serverNow, toast, modal, esc, ApiError };
+  /** 분(15초 단위 소수) → "15분", "1분 30초", "45초" */
+  function fmtMin(v) {
+    const total = Math.round(Number(v) * 60), m = Math.floor(total / 60), s = total % 60;
+    return m && s ? `${m}분 ${s}초` : m ? `${m}분` : `${s}초`;
+  }
+
+  window.SS = { fmtMin, api, requireAdmin, layoutGrid, poll, refreshNotices: pollNotices, fmtRemain, fmtClock, fmtTime, parseTs, syncClock, serverNow, toast, modal, esc, ApiError };
   window.api = api; window.poll = poll; window.fmtRemain = fmtRemain;
 })();

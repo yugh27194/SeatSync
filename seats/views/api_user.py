@@ -12,7 +12,7 @@ from ..models import Alert, Notification, Reservation, Seat, WaitEntry
 from ..seed import load_layout
 from ..services import (clear_marks, extend_check, get_settings, record_event, refresh, reservation_json,
                         set_seat_state, user_active_reservation, wait_position)
-from ..status import DETAILS, user_view
+from ..status import DETAILS, USER_MESSAGES, fmt_sec, user_view
 from ..timeutil import to_iso
 
 # 본인 좌석 상태 안내(사전 경고용). 내 예약 좌석에 한해서만 세부 상태를 알려 준다.
@@ -22,10 +22,10 @@ OWN_STATUS = {
     "no_checkin": ("warn", "착석(또는 짐)이 확인됐지만 체크인 전이에요. 좌석 QR로 체크인해 주세요."),
     "away_short": ("warn", "자리를 비운 상태예요. {left} 뒤 '이탈'로 처리됩니다."),
     "item": ("warn", "짐만 두고 자리를 비운 상태예요. {left} 뒤 '사석화'로 처리됩니다."),
-    "away": ("danger", "'이탈'로 표시됐어요. 바로 돌아가거나 반납해 주세요. 관리자가 반납 처리할 수 있어요."),
-    "hoarding": ("danger", "'사석화'로 표시됐어요. 바로 돌아가거나 반납해 주세요. 관리자가 반납 처리할 수 있어요."),
+    "away": ("danger", "'이탈'로 표시됐어요. {auto}"),
+    "hoarding": ("danger", "'사석화'로 표시됐어요. {auto}"),
     "unauthorized": ("warn", "내 예약 좌석에 다른 이용이 확인되어 관리자가 확인 중이에요."),
-    "no_show": ("danger", "체크인 시간이 지나 '미입실'로 표시됐어요. 도착했다면 바로 QR로 체크인해 주세요. 관리자가 예약을 취소할 수 있어요."),
+    "no_show": ("danger", "체크인 시간이 지나 '미입실'로 표시됐어요. 도착했다면 바로 QR로 체크인해 주세요. {auto}"),
     "seat_unavailable": ("danger", "예약 좌석이 사용불가 상태예요. 관리자가 좌석을 옮겨 드리거나, 반납 후 다시 예약해 주세요."),
 }
 
@@ -52,8 +52,7 @@ def _seat_view(item, my, uid=None):
 
 
 def _fmt_left(sec):
-    m = max(1, (sec + 59) // 60)
-    return f"{m // 60}시간 {m % 60}분" if m >= 60 else f"{m}분"
+    return fmt_sec(sec)
 
 
 def own_status(results, my, now):
@@ -66,8 +65,17 @@ def own_status(results, my, now):
     j = it["j"]
     level, msg = OWN_STATUS[j.detail]
     left = (j.deadline - now) if j.deadline else None
+    auto_sec = get_settings().sec("auto_return_min")
+    if auto_sec > 0:
+        auto_left = j.since + auto_sec - now
+        auto = (f"{_fmt_left(auto_left)} 뒤 예약이 자동으로 {'취소' if my.status == 'reserved' else '반납'}돼요."
+                if auto_left > 0 else "곧 자동으로 반납돼요.")
+        if j.detail != "no_show":
+            auto = "바로 돌아가거나 반납해 주세요. " + auto
+    else:
+        auto = "바로 돌아가거나 반납해 주세요. 관리자가 반납 처리할 수 있어요." if j.detail != "no_show" else "관리자가 예약을 취소할 수 있어요."
     return {"detail": j.detail, "label": DETAILS[j.detail][1], "level": level,
-            "message": msg.format(left=_fmt_left(left) if left is not None else ""),
+            "message": msg.format(left=_fmt_left(left) if left is not None else "", auto=auto),
             "deadline": to_iso(j.deadline)}
 
 
@@ -125,8 +133,10 @@ def seats(request):
     for it in results:
         seat, j = it["seat"], it["j"]
         row = {"no": seat.no, "label": seat.label, "x": seat.x, "y": seat.y, "zone": seat.zone,
-               "booth": seat.no in booths, "view": _seat_view(it, my, request.user.id)}
-        if request.admin:  # 관리자 모드에서만 '!'(확인 필요) 표시
+               "booth": seat.no in booths, "view": _seat_view(it, my, request.user.id),
+               # 좌석을 누르면 보이는 상태 이름·안내 (관리자 화면과 같은 이름). 색은 3가지로만 칠한다.
+               "state_label": DETAILS[j.detail][1], "state_msg": USER_MESSAGES.get(j.detail, "")}
+        if request.admin:  # 관리자 모드에서만 붉은 강조·'!'(확인 필요)
             row["attention"] = j.check
             row["detail_label"] = DETAILS[j.detail][1]
         out.append(row)
@@ -212,7 +222,7 @@ def create_reservation(request):
             with transaction.atomic():
                 res = Reservation.objects.create(
                     user=request.user, seat=seat, status="in_use" if ok else "reserved", start_at=now,
-                    end_at=now + s.default_use_min * 60, checked_in_at=now if ok else None,
+                    end_at=now + s.sec("default_use_min"), checked_in_at=now if ok else None,
                     source="seat_page" if ok else "map")
         except IntegrityError:
             raise ApiError(409, "SEAT_TAKEN", "방금 다른 이용자가 예약했습니다.")
@@ -261,7 +271,7 @@ def extend(request, res_id):
         if not ok:
             raise ApiError(409, "EXTEND_NOT_ALLOWED", reason)
         old_end = r.end_at
-        r.end_at += s.extend_min * 60
+        r.end_at += s.sec("extend_min")
         r.extend_count += 1
         r.save(update_fields=["end_at", "extend_count"])
         record_event(r, "extend", now, memo=f"종료 {to_iso(old_end)[11:16]} → {to_iso(r.end_at)[11:16]}")

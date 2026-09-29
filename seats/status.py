@@ -11,6 +11,7 @@ DEFAULT_SETTINGS = {
     "checkin_limit_min": 15,
     "away_limit_min": 30,
     "hoarding_min": 30,
+    "auto_return_min": 15,
     "default_use_min": 120,
     "extend_min": 60,
     "extend_window_min": 30,
@@ -23,47 +24,78 @@ DEFAULT_SETTINGS = {
     "close_hour": 24,
 }
 
-# key: (라벨, 단위, 설명, 최소, 최대)
+# key: (라벨, 단위, 설명, 최소, 최대). 단위가 "분"인 값은 15초(0.25분) 단위로 정할 수 있다 — 시연(3분)에서 짧게 쓰려고.
 SETTINGS_META = {
-    "checkin_limit_min": ("체크인 제한", "분", "예약 후 이 시간 안에 체크인하지 않으면 미입실로 자동 취소", 1, 120),
-    "away_limit_min": ("이탈 기준", "분", "이용 중 좌석이 이 시간 넘게 완전히 비어 있으면 '이탈'", 1, 240),
-    "hoarding_min": ("사석화 기준", "분", "이용 중 좌석에 짐만 두고 이 시간 넘게 자리를 비우면 '사석화'", 1, 240),
-    "default_use_min": ("기본 이용 시간", "분", "예약 1회 이용 시간", 10, 720),
-    "extend_min": ("연장 시간", "분", "연장 1회당 늘어나는 시간", 10, 360),
-    "extend_window_min": ("연장 가능 시점", "분", "남은 시간이 이 값 이하일 때만 연장 가능", 1, 240),
+    "checkin_limit_min": ("체크인 제한", "분", "예약 후 이 시간 안에 체크인하지 않으면 '! 미입실'(확인 필요)", 0.25, 120),
+    "away_limit_min": ("이탈 기준", "분", "이용 중 좌석이 이 시간 넘게 완전히 비어 있으면 '! 이탈'", 0.25, 240),
+    "hoarding_min": ("사석화 기준", "분", "이용 중 좌석에 짐만 두고 이 시간 넘게 자리를 비우면 '! 사석화'", 0.25, 240),
+    "auto_return_min": ("자동 강제 반납", "분",
+                        "미입실·이탈·사석화로 표시된 뒤 이 시간이 지나면 예약을 자동으로 강제 반납(취소). 0이면 자동 반납 안 함", 0, 240),
+    "default_use_min": ("기본 이용 시간", "분", "예약 1회 이용 시간", 1, 720),
+    "extend_min": ("연장 시간", "분", "연장 1회당 늘어나는 시간", 1, 360),
+    "extend_window_min": ("연장 가능 시점", "분", "남은 시간이 이 값 이하일 때만 연장 가능", 0.25, 240),
     "max_extends": ("최대 연장 횟수", "회", "예약 1건당 이용자가 직접 연장할 수 있는 횟수", 0, 10),
     "warning_limit": ("정지 권장 경고 수", "회", "경고가 이 횟수 이상 쌓이면 이용 정지를 권장", 1, 20),
     "suspend_days": ("기본 정지 기간", "일", "이용 정지 시 기본으로 제안하는 기간", 1, 90),
-    "prewarn_min": ("사전 경고 시점", "분", "이탈·사석화·체크인 마감 기준 시간 이 분 전에 본인에게 사전 경고", 1, 60),
-    "waitlist_hold_min": ("빈자리 안내 유지", "분", "빈자리 알림 대기자에게 먼저 예약할 기회를 주는 시간", 1, 30),
+    "prewarn_min": ("사전 경고 시점", "분", "미입실·이탈·사석화 기준 시간 이만큼 전에 본인에게 사전 경고", 0.25, 60),
+    "waitlist_hold_min": ("빈자리 안내 유지", "분", "빈자리 알림 대기자에게 먼저 예약할 기회를 주는 시간", 0.25, 30),
     "open_hour": ("운영 시작", "시", "혼잡도 통계에 쓰는 운영 시작 시각", 0, 23),
     "close_hour": ("운영 종료", "시", "혼잡도 통계에 쓰는 운영 종료 시각 (24 = 자정)", 1, 24),
 }
+TIME_KEYS = frozenset(k for k, m in SETTINGS_META.items() if m[1] == "분")
+TIME_STEP = 0.25  # 15초
+
+
+def fmt_min(v):
+    """분(15초 단위 소수) → '15분', '1분 30초', '45초'."""
+    total = int(round(float(v) * 60))
+    m, sec = divmod(total, 60)
+    if m and sec:
+        return f"{m}분 {sec}초"
+    return f"{m}분" if m else f"{sec}초"
+
+
+def fmt_sec(sec):
+    """남은/지난 시간(초) → '45초', '3분', '1시간 5분' (1분 이상은 분 단위 올림)."""
+    sec = max(0, int(sec))
+    if sec < 60:
+        return f"{max(1, sec)}초"
+    m = (sec + 59) // 60
+    return f"{m // 60}시간 {m % 60}분" if m >= 60 else f"{m}분"
 
 
 @dataclass(frozen=True)
 class Settings:
-    checkin_limit_min: int
-    away_limit_min: int
-    hoarding_min: int
-    default_use_min: int
-    extend_min: int
-    extend_window_min: int
+    checkin_limit_min: float
+    away_limit_min: float
+    hoarding_min: float
+    auto_return_min: float
+    default_use_min: float
+    extend_min: float
+    extend_window_min: float
     max_extends: int
     warning_limit: int
     suspend_days: int
-    prewarn_min: int
-    waitlist_hold_min: int
+    prewarn_min: float
+    waitlist_hold_min: float
     open_hour: int
     close_hour: int
 
     @classmethod
     def from_dict(cls, d):
         merged = {**DEFAULT_SETTINGS, **{k: v for k, v in (d or {}).items() if k in DEFAULT_SETTINGS}}
-        return cls(**{f.name: int(merged[f.name]) for f in fields(cls)})
+        out = {}
+        for f in fields(cls):
+            v = float(merged[f.name])
+            out[f.name] = (int(v) if v.is_integer() else v) if f.name in TIME_KEYS else int(v)
+        return cls(**out)
 
     def as_dict(self):
         return {f.name: getattr(self, f.name) for f in fields(self)}
+
+    def sec(self, key):
+        """분 단위 설정값을 초(정수)로."""
+        return int(round(getattr(self, key) * 60))
 
 
 # ---------------------------------------------------------------- 좌석 상태 3가지 + 세부 상태
@@ -192,7 +224,7 @@ def _judge(res, actual, now, s):
         return _j("empty", since)
 
     if res.status == "reserved":
-        checkin_deadline = res.start_at + s.checkin_limit_min * 60
+        checkin_deadline = res.start_at + s.sec("checkin_limit_min")
         start = max(since, res.start_at)
         if a in ("occupied", "item"):
             if mark == "ok":
@@ -207,9 +239,9 @@ def _judge(res, actual, now, s):
     if a == "occupied":
         return _j("unauthorized" if mark == "issue" else "using", start)
     if a == "item":
-        limit, short, issue = s.hoarding_min * 60, "item", "hoarding"
+        limit, short, issue = s.sec("hoarding_min"), "item", "hoarding"
     else:
-        limit, short, issue = s.away_limit_min * 60, "away_short", "away"
+        limit, short, issue = s.sec("away_limit_min"), "away_short", "away"
     if mark == "issue":
         return _j(issue, start)
     # 카메라 감지를 믿을 수 없는 동안에는 이탈·사석화로 넘기지 않는다(감지 끊김을 자리 비움으로 오해하지 않게).
@@ -219,6 +251,27 @@ def _judge(res, actual, now, s):
     if now - start < limit:
         return _j(short, start, start + limit)
     return _j(issue, start + limit)
+
+
+# 사용자 화면에서 좌석을 눌렀을 때 보이는 안내 (관리자 화면과 같은 상태 이름을 쓰되, 이용자에게 맞는 문장).
+# 좌석 지도 색은 사용중(주황)으로 통일하고, 붉은 강조·!는 관리자 모드에서만 보인다.
+USER_MESSAGES = {
+    "empty":            "비어 있는 좌석이에요. 눌러서 예약할 수 있어요.",
+    "using":            "다른 이용자가 이용 중인 좌석이에요.",
+    "waiting":          "예약된 좌석이에요. 예약자가 입실하기를 기다리고 있어요.",
+    "seated_unchecked": "예약자가 착석했고 체크인을 기다리고 있어요.",
+    "no_checkin":       "예약된 좌석에 착석(또는 짐)이 있지만 아직 체크인하지 않았어요.",
+    "no_show":          "예약자가 체크인 시간 안에 오지 않았어요. 시간이 더 지나면 자동으로 반납돼요.",
+    "away_short":       "이용자가 잠시 자리를 비웠어요.",
+    "item":             "이용자가 짐만 두고 자리를 비웠어요.",
+    "unauthorized":     "예약 없이 사용 중인 좌석이에요. 관리자가 확인하고 있어요.",
+    "away":             "이용자가 기준 시간보다 오래 자리를 비웠어요. 시간이 더 지나면 자동으로 반납돼요.",
+    "hoarding":         "짐만 두고 기준 시간보다 오래 자리를 비웠어요. 시간이 더 지나면 자동으로 반납돼요.",
+    "broken":           "고장으로 사용할 수 없는 좌석이에요.",
+    "maintenance":      "점검·청소 중이라 잠시 사용할 수 없어요.",
+    "blocked":          "지금은 사용할 수 없는 좌석이에요.",
+    "seat_unavailable": "사용할 수 없는 좌석이에요.",
+}
 
 
 def user_view(seat_state):

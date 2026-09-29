@@ -130,6 +130,7 @@ def test_item_approval_ends_with_reservation(admin, user, clock):
 
 
 def test_mark_cleared_on_expiry(admin, clock):
+    admin.jput("/api/admin/settings", {"auto_return_min": 0})  # 자동 반납 없이 시간 만료까지 보기
     r = _in_use(8, clock())
     set_state(admin, 8, "item")
     for _ in range(2):  # 관리자 모드는 60분 무사용 시 꺼지므로 중간에 한 번씩 사용
@@ -138,3 +139,56 @@ def test_mark_cleared_on_expiry(admin, clock):
     clock.advance(2400)
     assert admin_seat(admin, 8)["detail"] == "unauthorized"
     assert Reservation.objects.get(id=r.id).status == "expired"
+
+
+# ---------------------------------------------------------------- 자동 강제 반납
+
+def test_auto_return_after_away(admin, clock):
+    """이탈로 표시된 뒤 auto_return_min(기본 15분)이 지나면 자동 강제 반납."""
+    r = _in_use(1, clock())
+    set_state(admin, 1, "empty")                 # 자리 비움
+    clock.advance(30 * 60)                       # 이탈 기준 30분
+    assert admin_seat(admin, 1)["detail"] == "away"
+    clock.advance(15 * 60 - 1)
+    assert Reservation.objects.get(id=r.id).status == "in_use"
+    clock.advance(1)
+    s = admin_seat(admin, 1)
+    assert Reservation.objects.get(id=r.id).status == "force_returned" and s["detail"] == "empty"
+    assert _open(1) == []
+    log = admin.jget("/api/admin/log?limit=5")["log"]
+    assert log[0]["action"] == "auto_return" and "이탈" in log[0]["memo"]
+
+
+def test_auto_return_no_show(user, clock):
+    rid = user.jpost("/api/reservations", {"seat_no": 1}).json()["id"]
+    clock.advance(15 * 60)                       # 체크인 제한 → 미입실
+    user.get("/api/seats")
+    assert Reservation.objects.get(id=rid).status == "reserved"
+    clock.advance(15 * 60)                       # + 자동 반납 15분
+    d = user.jget("/api/seats")
+    assert Reservation.objects.get(id=rid).status == "no_show" and d["my_reservation"] is None
+
+
+def test_auto_return_off_and_seconds(admin, clock):
+    # 15초 단위 설정: 체크인 제한 30초, 자동 반납 45초
+    r = admin.jput("/api/admin/settings", {"checkin_limit_min": 0.5, "auto_return_min": 0.75})
+    assert r.status_code == 200 and r.json()["settings"]["checkin_limit_min"] == 0.5
+    assert admin.jput("/api/admin/settings", {"checkin_limit_min": 0.3}).status_code == 400   # 15초 단위 아님
+    res = Reservation.objects.create(user=User.objects.get(student_no="userC"), seat_id=2, status="reserved",
+                                     start_at=clock(), end_at=clock() + 7200)
+    clock.advance(30)
+    assert admin_seat(admin, 2)["detail"] == "no_show"
+    clock.advance(44)
+    assert Reservation.objects.get(id=res.id).status == "reserved"
+    clock.advance(1)
+    admin.get("/api/admin/seats")
+    assert Reservation.objects.get(id=res.id).status == "no_show"
+
+
+def test_no_auto_return_while_camera_stale(admin, device, clock):
+    from test_camera import post, snapshot
+    r = _in_use(1, clock())
+    post(device, snapshot(clock, {"A01": ("EMPTY", 0.0, 1)}))      # 비움 감지 후 카메라 끊김
+    clock.advance(30 * 60 + 15 * 60 + 60)
+    s = admin_seat(admin, 1)
+    assert s["stale"] and Reservation.objects.get(id=r.id).status == "in_use"

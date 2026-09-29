@@ -136,3 +136,11 @@ def test_extra_trusted_origin(settings):
     settings.CSRF_TRUSTED_ORIGINS = settings.CSRF_TRUSTED_ORIGINS + ["https://seat.example.com"]
     _c, r = _csrf_client_login("https://seat.example.com", "seat.example.com")
     assert r.status_code == 302
+
+
+def test_admin_qr_page(admin, user):
+    from conftest import qr_token
+    html = admin.get("/admin/qr").content.decode()
+    assert html.count("<svg") == 20 and f"/seat/1?t={qr_token(1)}" in html
+    r = user.get("/admin/qr")
+    assert r.status_code != 200 or "<svg" not in r.content.decode()   # 관리자 모드가 아니면 QR(토큰)을 보여 주지 않는다
