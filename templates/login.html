@@ -4,17 +4,18 @@
 {% block content %}
 <div class="card">
   <h1>로그인</h1>
-  {% if next_url.startswith('/seat/') %}<div class="notice">좌석 QR을 이용하려면 먼저 로그인해 주세요.</div>{% endif %}
-  {% if next_url.startswith('/admin') %}<div class="notice">관리자 기능은 로그인 후 관리자 코드를 입력하면 사용할 수 있습니다.</div>{% endif %}
+  {% if next_url|slice:":6" == "/seat/" %}<div class="notice">좌석 QR을 이용하려면 먼저 로그인해 주세요.</div>{% endif %}
+  {% if next_url|slice:":6" == "/admin" %}<div class="notice">관리자 기능은 로그인 후 관리자 모드를 켜면(관리자 코드 입력) 사용할 수 있습니다.</div>{% endif %}
   {% if error %}<div class="form-error">{{ error }}</div>{% endif %}
-  <form method="post" action="{{ url_for('auth.login') }}">
+  <form method="post" action="/login">
+    {% csrf_token %}
     <input type="hidden" name="next" value="{{ next_url }}">
-    <label for="student_no">학번</label>
-    <input id="student_no" name="student_no" type="text" inputmode="numeric" autocomplete="username" required autofocus>
+    <label for="student_no">학번(아이디)</label>
+    <input id="student_no" name="student_no" type="text" autocomplete="username" autocapitalize="off" required autofocus>
     <label for="password">비밀번호</label>
     <input id="password" name="password" type="password" autocomplete="current-password" required>
     <div style="margin-top:16px"><button class="btn block" type="submit">로그인</button></div>
   </form>
-  <p class="muted small" style="margin-top:14px">계정이 없나요? <a href="{{ url_for('auth.signup', next=next_url or None) }}">회원가입</a></p>
+  <p class="muted small" style="margin-top:14px">계정이 없나요? <a href="/signup{% if next_url %}?next={{ next_url|urlencode }}{% endif %}">회원가입</a></p>
 </div>
 {% endblock %}

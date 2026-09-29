@@ -65,8 +65,9 @@
           <button class="btn big" id="btn-reserve" ${data.occupied && !tokenOk() ? "disabled" : ""}>바로 예약하기</button>`;
       }
     } else if (mode === "unavailable") {
+      const why = [data.unavailable_label, data.unavailable_note].filter(Boolean).map(esc).join(" · ");
       h = `<h2><span class="pill">사용불가</span></h2>
-        <p>지금은 사용할 수 없는 좌석입니다.${data.unavailable_note ? ` (사유: ${esc(data.unavailable_note)})` : ""}</p>
+        <p>지금은 사용할 수 없는 좌석입니다.${why ? ` (${why})` : ""}</p>
         <p class="muted small">다른 빈자리를 이용해 주세요.</p>
         <a class="btn block" href="/map">좌석 지도 보기</a>`;
     } else if (mode === "reserved_by_other") {

@@ -4,7 +4,7 @@
     python tools/make_qr.py --base-url http://192.168.0.10:5000
 
 qr/seat_<no>.png (URL = {base}/seat/{no}?t={qr_token}) 와 A4 인쇄용 qr/print.html 을 만든다.
-qr_token은 DB에 있으므로 먼저 `flask --app app init-db` 를 실행해야 한다.
+qr_token은 DB에 있으므로 먼저 `python manage.py init_db` 를 실행해야 한다.
 """
 import argparse
 import html
@@ -25,11 +25,11 @@ def main():
     args = ap.parse_args()
 
     if not os.path.exists(args.db):
-        print(f"DB 파일이 없습니다: {args.db}\n먼저 `flask --app app init-db`를 실행하세요.", file=sys.stderr)
+        print(f"DB 파일이 없습니다: {args.db}\n먼저 `python manage.py init_db` 를 실행하세요.", file=sys.stderr)
         return 1
     conn = sqlite3.connect(args.db)
     conn.row_factory = sqlite3.Row
-    seats = conn.execute("SELECT no, label, zone, qr_token FROM seats WHERE active = 1 ORDER BY no").fetchall()
+    seats = conn.execute("SELECT no, label, zone, qr_token FROM seats_seat WHERE active = 1 ORDER BY no").fetchall()
     conn.close()
 
     base = args.base_url.rstrip("/")

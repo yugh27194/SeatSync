@@ -1,39 +1,36 @@
-<!doctype html>
+{% load static %}<!doctype html>
 <html lang="ko">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <title>{% block title %}SeatSync{% endblock %} · SeatSync</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6fdf'/%3E%3Crect x='8' y='9' width='16' height='10' rx='3' fill='white'/%3E%3Crect x='8' y='21' width='16' height='3' rx='1.5' fill='white'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
 </head>
 <body{% if admin_mode %} data-admin="1"{% endif %}>
-  <header class="topbar">
-    <a class="logo" href="{{ url_for('pages.index') }}">Seat<span>Sync</span></a>
+  <header class="topbar{% if admin_mode %} is-admin{% endif %}">
+    <a class="logo" href="/">Seat<span>Sync</span></a>
     <nav>
       {% if current_user %}
-        <a href="{{ url_for('pages.map_page') }}">좌석 지도</a>
-        <a href="{{ url_for('pages.my') }}">내 자리</a>
-        {% if admin_mode %}
-          <a href="{{ url_for('pages.admin') }}" class="admin-on" title="관리자 모드">🔓 관리자</a>
-          <form method="post" action="{{ url_for('auth.lock_page') }}" class="inline-form">
-            <button type="submit" class="linklike">관리자 모드 종료</button>
-          </form>
-        {% else %}
-          <a href="{{ url_for('pages.admin') }}" title="관리자 코드 필요">🔒 관리자</a>
-        {% endif %}
-        <span class="who">{{ current_user.name }}</span>
-        <a href="{{ url_for('auth.logout') }}">로그아웃</a>
+        <a href="/map">좌석 지도</a>
+        {% if admin_mode %}<a href="/admin" class="admin-link">관리자 화면</a>{% else %}<a href="/my">내 자리</a>{% endif %}
+        <button type="button" id="admin-toggle" class="mode-switch" role="switch"
+                aria-checked="{% if admin_mode %}true{% else %}false{% endif %}" title="관리자 모드 켜기/끄기">
+          <span class="mode-label">관리자</span><span class="knob" aria-hidden="true"></span>
+        </button>
+        <a href="/logout" class="logout">로그아웃</a>
       {% else %}
-        <a href="{{ url_for('auth.login') }}">로그인</a>
+        <a href="/login">로그인</a>
       {% endif %}
     </nav>
   </header>
+  {% if admin_mode %}<div class="admin-strip">관리자 모드 · {{ current_user.name }} 님 · 스위치를 끄면 일반 사용자 화면으로 돌아갑니다</div>{% endif %}
   <main class="container {% block container_class %}{% endblock %}">
     {% block content %}{% endblock %}
   </main>
   <div id="toasts" aria-live="polite"></div>
-  <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+  <script src="{% static 'js/common.js' %}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

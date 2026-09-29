@@ -320,3 +320,52 @@ table.recon td .btn-row { flex-wrap: nowrap; }
 .seat.st-item-actual { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.16) 0 6px, transparent 6px 12px); }
 .seg button.on.s-item { background: var(--i-hoarding); color: #fff; }
 table.recon tr.mismatch[class*="i-"] td:first-child { box-shadow: inset 4px 0 0 var(--ic); }
+
+/* ---------- 관리자 모드 스위치 ---------- */
+.mode-switch { display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; color: #d6e4ff;
+  font: inherit; font-size: 14px; cursor: pointer; padding: 2px 0; }
+.mode-switch .knob { position: relative; width: 38px; height: 22px; border-radius: 999px; background: #4a5a78; transition: background .15s; }
+.mode-switch .knob::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; transition: transform .15s; }
+.mode-switch[aria-checked="true"] { color: #ffd84a; font-weight: 700; }
+.mode-switch[aria-checked="true"] .knob { background: #e0a800; }
+.mode-switch[aria-checked="true"] .knob::after { transform: translateX(16px); }
+.mode-switch:focus-visible { outline: 2px solid #7fb0ff; outline-offset: 3px; border-radius: 6px; }
+.topbar.is-admin { background: #2b2140; }
+.topbar nav a.admin-link { color: #ffd84a; font-weight: 700; }
+.admin-strip { background: #fff3c4; color: #6b4f00; font-size: 13px; text-align: center; padding: 5px 12px; }
+.legend-bang { display: inline-block; width: 14px; height: 14px; border-radius: 50%; background: var(--i-generic); color: #fff;
+  font-size: 10px; line-height: 14px; text-align: center; font-weight: 900; font-style: normal; margin-right: 4px; vertical-align: -2px; }
+
+/* ---------- 좌석 배치(20석): 구조물 ---------- */
+.map-wrap { max-width: 560px; }
+.seatmap { grid-auto-rows: auto; }
+.fixture { min-height: 0; font-size: 12px; }
+.fixture.fx-window { border: 0; border-radius: 6px; background: repeating-linear-gradient(90deg, #cfe6ff 0 18px, #b9dafc 18px 20px);
+  color: #2b5c93; font-weight: 700; letter-spacing: 2px; }
+.fixture.fx-table { border: 0; background: #e8dcc8; color: #6d5536; border-radius: 6px; }
+.fixture.fx-aisle { border: 0; color: #b4bcc6; writing-mode: vertical-rl; letter-spacing: 4px; font-size: 11px; }
+.fixture.fx-wall { border: 0; border-bottom: 4px solid #c9cfd6; border-radius: 0; color: var(--muted); align-items: flex-end; font-size: 11px; }
+.fixture.fx-door { border: 2px dashed #9aa3ad; background: #f7f8fa; }
+.fixture.fx-desk { border: 0; background: #e3e8ef; color: #3b4350; font-weight: 700; }
+.fixture.fx-locker { border: 0; background: repeating-linear-gradient(90deg, #dfe4ea 0 14px, #cfd6de 14px 16px); color: #4b5563; }
+.seat.booth { border-left: 4px solid rgba(0,0,0,.28); border-right: 4px solid rgba(0,0,0,.28); }
+.seat .sub { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- 좌석 세부 상태 지정 ---------- */
+.assign-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+.assign-group { flex: 0 0 64px; text-align: center; font-size: 12px; font-weight: 700; border-radius: 8px; padding: 6px 4px; }
+.assign-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.assign-btn { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 6px 10px; font-size: 13px; font-weight: 600;
+  cursor: pointer; color: var(--text); }
+.assign-btn:hover:not(:disabled) { background: #f0f2f5; }
+.assign-btn:disabled { opacity: .4; cursor: not-allowed; }
+.assign-btn.is-issue { color: #a4262c; border-color: #f3c2c4; }
+.assign-btn.on { background: #1c2a44; color: #fff; border-color: #1c2a44; }
+.assign-btn.on.is-issue { background: #b3141b; border-color: #b3141b; color: #fff; }
+details.hint { margin-top: 8px; font-size: 13px; color: var(--muted); }
+details.hint summary { cursor: pointer; }
+details.hint p { margin: 6px 0 0; line-height: 1.6; }
+@media (max-width: 400px) {
+  .mode-switch .mode-label { font-size: 12px; }
+}

@@ -116,23 +116,31 @@ class Simulator:
 
 
 class UserClient:
-    """테스트 계정으로 로그인해 예약 API를 호출한다."""
+    """테스트 계정으로 로그인해 예약 API를 호출한다(Django CSRF 토큰 포함)."""
 
     def __init__(self, url, student_no, password="1234"):
         self.url = url.rstrip("/")
-        self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
-        data = urllib.parse.urlencode({"student_no": student_no, "password": password}).encode()
-        self.opener.open(self.url + "/login", data=data, timeout=5)
+        self.jar = http.cookiejar.CookieJar()
+        self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.jar))
+        self.opener.open(self.url + "/login", timeout=5)  # csrftoken 쿠키 받기
+        data = urllib.parse.urlencode({"student_no": student_no, "password": password,
+                                       "csrfmiddlewaretoken": self.csrf()}).encode()
+        req = urllib.request.Request(self.url + "/login", data=data, headers={"Referer": self.url + "/login"})
+        self.opener.open(req, timeout=5)
+
+    def csrf(self):
+        return next((c.value for c in self.jar if c.name == "csrftoken"), "")
 
     def call(self, method, path, body=None):
         req = urllib.request.Request(self.url + path, method=method,
                                      data=json.dumps(body).encode() if body is not None else None,
-                                     headers={"Content-Type": "application/json"})
+                                     headers={"Content-Type": "application/json", "X-CSRFToken": self.csrf(),
+                                              "Referer": self.url + "/map"})
         try:
             with self.opener.open(req, timeout=5) as r:
                 return json.loads(r.read())
         except urllib.error.HTTPError as e:
-            print(f"  [API {e.code}] {e.read().decode(errors='replace')}")
+            print(f"  [API {e.code}] {e.read().decode(errors='replace')[:200]}")
             return None
 
     def clear(self):
@@ -144,7 +152,7 @@ class UserClient:
 def load_tokens(db_path):
     try:
         conn = sqlite3.connect(db_path)
-        rows = conn.execute("SELECT no, qr_token FROM seats").fetchall()
+        rows = conn.execute("SELECT no, qr_token FROM seats_seat").fetchall()
         conn.close()
         return dict(rows)
     except sqlite3.Error:
@@ -183,14 +191,14 @@ def run_demo(sim, url, db_path, step_sec):
     users[0].call("POST", "/api/reservations", {"seat_no": 1, "qr_token": tokens[1]})
     pause()
 
-    say("2번: 테스트2 착석·QR 예약 후 자리를 비움 → (자리 비움 허용 시간 경과 후) 장시간 자리 비움")
+    say("2번: 테스트2 착석·QR 예약 후 자리를 비움 → (이탈 기준 시간 경과 후) 이탈")
     sim.set(2, "person")
     users[1].call("POST", "/api/reservations", {"seat_no": 2, "qr_token": tokens[2]})
     pause()
     sim.set(2, "empty")
     pause()
 
-    say("3번: 예약 없이 착석 → 미예약 사용")
+    say("3번: 예약 없이 착석 → 무단 점유")
     sim.set(3, "person")
     pause()
 

@@ -1,15 +1,16 @@
 /* /admin — 관리자 대시보드: 3상태 지도 + 예약 대조 + 상황별 조치 (3초 polling) */
 (function () {
   "use strict";
-  const { api, poll, fmtRemain, fmtTime, syncClock, toast, modal, esc } = window.SS;
+  const { api, layoutGrid, poll, fmtRemain, fmtTime, syncClock, toast, modal, esc } = window.SS;
   const $ = (id) => document.getElementById(id);
 
-  const ACTUAL = { empty: "빈자리", occupied: "사용중", item: "짐만 있음", unavailable: "사용불가" };
   const SOURCE = { manual: "관리자 지정", camera: "카메라", checkin: "QR 체크인", return: "반납", seed: "초기 배분" };
+  const MARK = { ok: "관리자 확인", issue: "관리자가 문제로 지정" };
+  const NEXT = { waiting: "미입실", seated_unchecked: "미입실", away_short: "이탈", item: "사석화" };
   const RES_STATUS = { reserved: "예약(입실 전)", in_use: "이용 중" };
 
   let data = null, alerts = [], users = [];
-  let selected = Number(new URLSearchParams(location.search).get("seat")) || null; // 지도의 '관리자 처리'에서 넘어온 좌석
+  let selected = Number(new URLSearchParams(location.search).get("seat")) || null; // 좌석 지도에서 누른 좌석
   let seen = null;
   let soundOn = false, audioCtx = null;
   try { soundOn = localStorage.getItem("ss-sound") === "1"; } catch (e) { /* 저장소 없음 */ }
@@ -54,7 +55,7 @@
     if (seen === null) { seen = ids; return; }
     const fresh = alerts.filter((a) => !seen.has(a.id));
     fresh.forEach((a) => seen.add(a.id));
-    if (fresh.length) { showBanner(fresh.map((a) => `${a.seat_label} ${a.type_label}`).join(" · ") + " 발생"); beep(); }
+    if (fresh.length) { showBanner("처리 필요 · " + fresh.map((a) => `${a.seat_label} ${a.type_label}`).join(", ")); beep(); }
   }
 
   // ------------------------------------------------ 헬퍼
@@ -72,18 +73,17 @@
   }
   function tileSub(s) {
     const r = s.reservation;
-    if (s.situation !== "ok") return `<span class="warn-tag">${esc(s.situation_label)}</span>`;
-    if (s.seat_state === "unavailable") return esc(s.actual_note || "사용불가");
-    if (!r) return s.seat_state === "available" ? "빈자리" : esc(s.seat_state_label);
-    const extra = s.note ? ` · ${s.note}` : "";
-    return `${esc(r.user.name)}${extra}`;
+    if (s.needs_action) return `<span class="warn-tag">${esc(s.detail_label)}</span>`;
+    if (r && s.detail === "using") return esc(r.user.name);
+    return esc(s.detail_label);
   }
 
   // 상황별 권장 조치
-  function recommended(sit, s, alertId) {
+  function recommended(detail, s, alertId) {
     const r = s.reservation, lbl = s.label;
-    switch (sit) {
+    switch (detail) {
       case "unauthorized":
+        if (r) return btn("move", "예약자 다른 좌석으로", { res: r.id, label: lbl }, "") + btn("leave", "퇴실 안내 완료", { seat: s.no, label: lbl });
         return s.actual === "item"
           ? btn("leave", "짐 수거 완료", { seat: s.no, label: lbl, item: 1 }, "") + btn("assign", "짐 주인에게 배정", { seat: s.no, checkin: 1 })
           : btn("assign", "현장 배정", { seat: s.no, checkin: 1 }, "") + btn("leave", "퇴실 안내 완료", { seat: s.no, label: lbl });
@@ -107,24 +107,41 @@
     const sm = data.summary;
     $("chips").innerHTML =
       `<span class="chip st-available">빈자리 <b>${sm.available}</b></span>` +
-      `<span class="chip st-in_use">예약(사용중) <b>${sm.in_use}</b></span>` +
+      `<span class="chip st-in_use">사용중 <b>${sm.in_use}</b></span>` +
       `<span class="chip st-unavailable">사용불가 <b>${sm.unavailable}</b></span>` +
-      `<span class="chip st-issue${sm.issues ? "" : " zero"}">! 관리자 처리 필요 <b>${sm.issues}</b></span>`;
+      `<span class="chip st-issue${sm.issues ? "" : " zero"}">! 처리 필요 <b>${sm.issues}</b></span>`;
   }
 
   function renderMap() {
-    const el = $("admin-map"), g = data.grid;
-    el.style.gridTemplateColumns = `repeat(${g.cols}, minmax(52px, 1fr))`;
-    el.style.gridTemplateRows = `repeat(${g.rows}, minmax(76px, auto))`;
-    const html = data.fixtures.map((f) => `<div class="fixture" style="grid-column:${f.x};grid-row:${f.y}">${esc(f.label)}</div>`);
+    const el = $("admin-map");
+    const html = [layoutGrid(el, data, 52)];
     for (const s of data.seats) {
-      const issue = s.situation !== "ok";
-      html.push(`<button type="button" class="seat st-${s.seat_state}${issue ? ` issue i-${s.situation}` : ""}${s.actual === "item" ? " st-item-actual" : ""}${selected === s.no ? " selected" : ""}"
-        data-no="${s.no}" style="grid-column:${s.x};grid-row:${s.y}" title="${esc(s.seat_state_label)} · ${esc(s.situation_label)}">
+      const issue = s.needs_action;
+      html.push(`<button type="button" class="seat st-${s.seat_state}${s.booth ? " booth" : ""}${issue ? ` issue i-${s.detail}` : ""}${s.actual === "item" ? " st-item-actual" : ""}${selected === s.no ? " selected" : ""}"
+        data-no="${s.no}" style="grid-column:${s.x};grid-row:${s.y}" title="${esc(s.zone || "")} · ${esc(s.seat_state_label)} · ${esc(s.detail_label)}">
         ${issue ? '<span class="bang" aria-hidden="true">!</span>' : ""}
         ${esc(s.label)}<span class="sub">${tileSub(s)}</span></button>`);
     }
     el.innerHTML = html.join("");
+  }
+
+  // 현재 세부 상태에 해당하는 '지정' 버튼
+  function currentCode(s, codes) {
+    if (codes.includes(s.detail)) return s.detail;
+    return { empty: "empty", occupied: "using", item: "item", unavailable: s.reason || "blocked" }[s.actual];
+  }
+
+  function assignPanel(s) {
+    const codes = data.assign.groups.flatMap((g) => g.items.map((i) => i.code));
+    const cur = currentCode(s, codes);
+    const inUse = s.reservation && s.reservation.status === "in_use";
+    return data.assign.groups.map((g) => `<div class="assign-row"><span class="assign-group st-${g.state}">${esc(g.label)}</span>
+      <div class="assign-btns">${g.items.map((i) => {
+        const dis = i.needs === "in_use" && !inUse;
+        return `<button type="button" class="assign-btn${i.code === cur ? " on" : ""}${i.issue ? " is-issue" : ""}" data-act="state"
+          data-seat="${s.no}" data-detail="${i.code}" data-label="${esc(i.label)}" data-group="${g.state}"${dis ? ' disabled title="이용 중인 예약이 있는 좌석만"' : ""}>
+          ${i.issue ? "! " : ""}${esc(i.label)}</button>`;
+      }).join("")}</div></div>`).join("");
   }
 
   function renderDetail() {
@@ -132,23 +149,16 @@
     const s = seatByNo(selected);
     if (!s) { el.innerHTML = `<h2>좌석 상세 · 조치</h2><p class="empty">좌석을 선택하세요.</p>`; return; }
     const r = s.reservation;
-    const issue = s.situation !== "ok";
-    const seg = ["empty", "occupied", "item", "unavailable"].map((k) =>
-      `<button type="button" class="s-${k}${s.actual === k ? " on" : ""}" data-act="state" data-seat="${s.no}" data-state="${k}">${ACTUAL[k]}</button>`).join("");
 
     let sitHtml;
-    if (issue) {
-      sitHtml = `<div class="situation-box i-${s.situation}"><b>! ${esc(s.situation_label)}</b> — 관리자 처리가 필요합니다 · ${fmtRemain(s.elapsed_sec)} 경과<br>${esc(s.situation_desc)}
-        <div class="btn-row" style="margin-top:8px">${recommended(s.situation, s, s.alert_id)}
+    if (s.needs_action) {
+      sitHtml = `<div class="situation-box i-${s.detail}"><b>! ${esc(s.detail_label)}</b> · 처리 필요 · ${fmtRemain(s.elapsed_sec)} 경과<br>${esc(s.detail_desc)}
+        <div class="btn-row" style="margin-top:8px">${recommended(s.detail, s, s.alert_id)}
         ${s.alert_id ? btn("resolve", "처리 완료", { alert: s.alert_id }) : ""}</div></div>`;
     } else {
-      let msg = "예약 기록과 현장 상태가 일치합니다.";
-      if (s.note && s.deadline_sec != null) {
-        const next = { "입실 대기": "미입실", "잠시 자리 비움": "이탈", "짐만 두고 자리 비움": "사석화" }[s.note] || "";
-        msg = s.note === "입실 대기" ? `입실 대기 · 체크인 마감까지 ${fmtRemain(s.deadline_sec)}`
-          : `${s.note} · ${fmtRemain(s.deadline_sec)} 뒤 '${next}'`;
-      }
-      sitHtml = `<div class="situation-box ok"><b>정상</b> · ${msg}</div>`;
+      let msg = s.detail_desc || "";
+      if (s.deadline_sec != null && NEXT[s.detail]) msg = `${fmtRemain(s.deadline_sec)} 뒤 '${NEXT[s.detail]}'`;
+      sitHtml = `<div class="situation-box ok"><b>${esc(s.seat_state_label)} · ${esc(s.detail_label)}</b>${msg ? " — " + esc(msg) : ""}</div>`;
     }
 
     let resHtml;
@@ -173,17 +183,22 @@
     el.innerHTML = `<h2>${esc(s.label)} <span class="statetag st-${s.seat_state}">${esc(s.seat_state_label)}</span>
         <span class="muted small">${esc(s.zone || "")}</span></h2>
       ${sitHtml}
-      <div class="section-title">현장 상태 (임시 배분)</div>
-      <div class="seg">${seg}</div>
-      <p class="muted small" style="margin:6px 0 0">${SOURCE[s.actual_source] || s.actual_source} · ${fmtTime(s.actual_since)}부터 (${fmtRemain(s.actual_elapsed_sec)})
-        ${s.actual_note ? ` · 사유: ${esc(s.actual_note)}` : ""}</p>
+      <div class="section-title">좌석 상태 지정 (임시 배분)</div>
+      ${assignPanel(s)}
+      <p class="muted small" style="margin:6px 0 0">현장: ${esc(s.actual_label)}${s.mark ? ` · ${MARK[s.mark]}` : ""} · ${SOURCE[s.actual_source] || s.actual_source}
+        · ${fmtTime(s.actual_since)}부터 (${fmtRemain(s.actual_elapsed_sec)})${s.note ? ` · 메모: ${esc(s.note)}` : ""}</p>
+      <details class="hint"><summary>세부 상태 안내</summary>
+        <p><b>이용 중 · 짐만 있음</b>: 관리자가 확인한 정상 사용입니다. 예약이 없어도 처리 필요로 표시되지 않습니다.
+        (짐만 있음은 이용 중 예약이 있는 좌석이면 사석화 기준 시간이 지난 뒤 사석화로 바뀝니다)<br>
+        <b>! 무단 점유 · 이탈 · 사석화</b>: 기준 시간을 기다리지 않고 바로 처리 필요로 지정합니다. 이탈·사석화는 이용 중인 예약이 있는 좌석만 지정할 수 있습니다.<br>
+        <b>카메라가 연결되면</b> 좌석마다 사람·짐·비어 있음이 자동으로 갱신됩니다(사용불가 지정 좌석 제외).</p></details>
       <div class="section-title">예약 기록</div>
       ${resHtml}`;
   }
 
   function renderAlerts() {
     $("alert-count").textContent = alerts.length;
-    if (!alerts.length) { $("alerts").innerHTML = `<li class="muted small">관리자 처리가 필요한 좌석이 없습니다.</li>`; return; }
+    if (!alerts.length) { $("alerts").innerHTML = `<li class="muted small">처리 필요한 좌석이 없습니다.</li>`; return; }
     $("alerts").innerHTML = alerts.map((a) => {
       const s = seatByNo(a.seat_no) || { no: a.seat_no, label: a.seat_label, reservation: null };
       const ru = a.reservation && a.reservation.user;
@@ -192,7 +207,7 @@
         actions = ru ? btn("warn", "경고 후 확인", { user: ru.id, name: ru.name, alert: a.id, resolve: 1 }, "") : "";
       } else if (a.type === "call") {
         actions = btn("select", "좌석 보기", { seat: a.seat_no }, "");
-      } else if (s.situation === a.type) {
+      } else if (s.detail === a.type) {
         actions = recommended(a.type, s, a.id);
       }
       return `<li class="alert-item">
@@ -211,14 +226,13 @@
   function renderRecon() {
     $("recon").innerHTML = data.seats.map((s) => {
       const r = s.reservation;
-      const issue = s.situation !== "ok";
-      return `<tr class="${issue ? `mismatch i-${s.situation}` : ""}" data-act="select" data-seat="${s.no}" style="cursor:pointer">
-        <td><b>${esc(s.label)}</b></td>
+      const issue = s.needs_action;
+      return `<tr class="${issue ? `mismatch i-${s.detail}` : ""}" data-act="select" data-seat="${s.no}" style="cursor:pointer">
+        <td><b>${esc(s.label)}</b><br><span class="muted small">${esc(s.zone || "")}</span></td>
         <td>${r ? `${userLine(r.user)}<br><span class="muted small">${r.status_label} · ${fmtTime(r.start_at)}~${fmtTime(r.end_at)}</span>` : '<span class="muted">예약 없음</span>'}</td>
-        <td>${ACTUAL[s.actual]} <span class="muted small">(${fmtRemain(s.actual_elapsed_sec)})</span></td>
+        <td>${esc(s.actual_label)} <span class="muted small">(${fmtRemain(s.actual_elapsed_sec)})</span></td>
         <td><span class="statetag st-${s.seat_state}">${esc(s.seat_state_label)}</span></td>
-        <td>${issue ? `<span class="badge t-${s.situation}">! ${esc(s.situation_label)}</span>` : `<span class="statetag sit-ok">정상</span>`}
-          ${!issue && s.note ? `<span class="muted small">${esc(s.note)}</span>` : ""}</td></tr>`;
+        <td>${issue ? `<span class="badge t-${s.detail}">! ${esc(s.detail_label)}</span>` : esc(s.detail_label)}</td></tr>`;
     }).join("");
   }
 
@@ -291,22 +305,22 @@
 
     async state(d) {
       const s = seatByNo(d.seat);
-      if (!s || s.actual === d.state) return;
+      if (!s) return;
       let note = null;
-      if (d.state === "unavailable") {
-        note = await modal({ title: `${s.label} 사용불가 지정`,
-          body: s.reservation ? `현재 ${s.reservation.user.name} 님의 예약이 있습니다. 지정 후 좌석 이동이 필요합니다.` : "사유를 적어 두면 이용자에게 안내됩니다.",
-          input: { placeholder: "예: 의자 파손, 청소 중" }, ok: "사용불가로 지정" });
+      if (d.group === "unavailable") {
+        note = await modal({ title: `${s.label} 사용불가 · ${d.label}`,
+          body: s.reservation ? `현재 ${s.reservation.user.name} 님의 예약이 있습니다. 지정 후 좌석 이동이 필요합니다.` : "메모를 적어 두면 이용자에게도 안내됩니다. (선택)",
+          input: { placeholder: "예: 의자 파손, 청소 중" }, ok: "지정" });
         if (note === false) return;
       }
-      run(() => api("POST", `/api/admin/seats/${s.no}/state`, { state: d.state, note }), `${s.label} 현장 상태: ${ACTUAL[d.state]}`);
+      run(() => api("POST", `/api/admin/seats/${s.no}/state`, { detail: d.detail, note }), `${s.label} → ${d.label}`);
     },
 
     async leave(d) {
       const ok = d.item
-        ? await modal({ title: "짐 수거 완료", body: `${d.label} 좌석에 방치된 짐을 수거(보관)했나요?\n현장 상태를 '빈자리'로 바꿉니다.`, ok: "빈자리로 변경" })
-        : await modal({ title: "퇴실 안내 완료", body: `${d.label} 좌석의 무단 점유자에게 퇴실(또는 예약)을 안내했나요?\n현장 상태를 '빈자리'로 바꿉니다.`, ok: "빈자리로 변경" });
-      if (ok) run(() => api("POST", `/api/admin/seats/${d.seat}/state`, { state: "empty" }), "빈자리로 변경했습니다.");
+        ? await modal({ title: "짐 수거 완료", body: `${d.label} 좌석에 방치된 짐을 수거(보관)했나요?\n현장을 '비어 있음'으로 바꿉니다.`, ok: "비어 있음으로 변경" })
+        : await modal({ title: "퇴실 안내 완료", body: `${d.label} 좌석의 무단 점유자에게 퇴실(또는 예약)을 안내했나요?\n현장을 '비어 있음'으로 바꿉니다.`, ok: "비어 있음으로 변경" });
+      if (ok) run(() => api("POST", `/api/admin/seats/${d.seat}/state`, { detail: "empty" }), "현장을 비어 있음으로 바꿨습니다.");
     },
 
     async assign(d) {
@@ -339,7 +353,7 @@
       if (!free.length) { toast("옮길 수 있는 빈자리가 없습니다.", "error"); return; }
       const v = await modal({ title: `${d.label} 예약 좌석 이동`, body: "빈자리 중에서 옮길 좌석을 고르세요.",
         fields: [
-          { name: "seat_no", label: "옮길 좌석", type: "select", options: free.map((s) => ({ value: s.no, label: `${s.label} (${s.zone || ""})` })) },
+          { name: "seat_no", label: "옮길 좌석", type: "select", options: free.map((s) => ({ value: s.no, label: `${s.label} · ${s.zone || ""}` })) },
           { name: "memo", label: "메모 (선택)", type: "textarea", placeholder: "예: 좌석 고장으로 이동" },
         ], ok: "이동" });
       if (!v) return;
@@ -409,7 +423,7 @@
 
   $("btn-demo").onclick = async () => {
     const ok = await modal({ title: "시연 상황 배치",
-      body: "현재 예약을 모두 취소하고 미해결 알림을 정리한 뒤,\n사용자A·B·C 등으로 다양한 예약 상황을 만듭니다.\n(정상 이용, 이탈, 사석화, 무단 점유, 체크인 누락, 예약 좌석 사용불가, 미입실)",
+      body: "현재 예약을 모두 취소하고 미해결 알림을 정리한 뒤,\n사용자A·B·C·테스트 계정으로 20석에 다양한 상황을 만듭니다.\n(정상 이용, 짐만 있음, 입실 대기, 이탈, 사석화, 무단 점유, 체크인 누락, 예약 좌석 사용불가, 고장·점검, 미입실)",
       ok: "배치", danger: true });
     if (!ok) return;
     seen = null; // 배치로 생긴 알림은 배너로 띄우지 않는다

@@ -1,13 +1,12 @@
-import os
-import sys
+import json
 
 import pytest
+from django.test import Client
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-import db as dbmod  # noqa: E402
-from app import create_app  # noqa: E402
-from timeutil import to_iso  # noqa: E402
+from seats import auth as authmod
+from seats import clock as clockmod
+from seats.models import Seat, User
+from seats.seed import seed
 
 T0 = 1_790_000_000  # 2026-09-21 경
 DEVICE_KEY = "test-key"
@@ -25,101 +24,106 @@ class Clock:
         self.t += sec
 
 
+class ApiClient(Client):
+    def jpost(self, url, body=None):
+        return self.post(url, data=json.dumps({} if body is None else body), content_type="application/json")
+
+    def jput(self, url, body=None):
+        return self.put(url, data=json.dumps({} if body is None else body), content_type="application/json")
+
+    def jget(self, url):
+        return self.get(url).json()
+
+
 @pytest.fixture
 def clock():
-    return Clock(T0)
-
-
-@pytest.fixture
-def app(tmp_path, clock):
-    path = str(tmp_path / "test.db")
-    import auth
-    auth._fails.clear()
-    app = create_app({"TESTING": True, "DATABASE": path, "CLOCK": clock, "DEVICE_KEY": DEVICE_KEY,
-                      "SECRET_KEY": "test", "ADMIN_CODE": ADMIN_CODE})
-    conn = dbmod.connect(path)
-    dbmod.init_db(conn)
-    dbmod.seed(conn, app.config["SEATS_FILE"], now=T0, pw_method="pbkdf2:sha256:1000")  # 테스트 속도용
-    conn.close()
-    return app
-
-
-@pytest.fixture
-def conn(app):
-    c = dbmod.connect(app.config["DATABASE"])
+    c = Clock(T0)
+    clockmod.set_clock(c)
     yield c
-    c.close()
+    clockmod.set_clock(None)
+
+
+@pytest.fixture(autouse=True)
+def seeded(db, settings, clock):
+    settings.PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]  # 테스트 속도용
+    settings.SEATSYNC = {**settings.SEATSYNC, "DEVICE_KEY": DEVICE_KEY, "ADMIN_CODE": ADMIN_CODE}
+    authmod._fails.clear()
+    seed(now=T0)
 
 
 def login(client, student_no="20260001", password="1234"):
-    r = client.post("/login", data={"student_no": student_no, "password": password})
-    assert r.status_code == 302, r.data
+    r = client.post("/login", {"student_no": student_no, "password": password})
+    assert r.status_code == 302, r.content
     return client
 
 
 @pytest.fixture
-def user(app):
-    return login(app.test_client())
+def user():
+    return login(ApiClient())
 
 
 @pytest.fixture
-def user2(app):
-    return login(app.test_client(), "20260002")
+def user2():
+    return login(ApiClient(), "20260002")
 
 
 @pytest.fixture
-def user_a(app):
-    return login(app.test_client(), "userA")
+def user_a():
+    return login(ApiClient(), "userA")
 
 
 @pytest.fixture
-def user_b(app):
-    return login(app.test_client(), "userB")
+def user_b():
+    return login(ApiClient(), "userB")
 
 
 @pytest.fixture
-def admin(app):
-    """관리자 계정은 없다: 일반 사용자(테스트5)로 로그인한 뒤 관리자 코드로 권한을 해금한다."""
-    c = login(app.test_client(), "20260005")
-    r = c.post("/api/admin-mode/unlock", json={"code": ADMIN_CODE})
-    assert r.status_code == 200, r.get_json()
+def admin():
+    """관리자 계정은 없다: 일반 사용자(테스트5)로 로그인한 뒤 관리자 모드를 켠다."""
+    c = login(ApiClient(), "20260005")
+    r = c.jpost("/api/admin-mode/unlock", {"code": ADMIN_CODE})
+    assert r.status_code == 200, r.json()
     return c
 
 
 @pytest.fixture
-def device(app):
-    return app.test_client()
+def device():
+    return ApiClient()
 
 
 def send(device, clock, seats, ts=None, key=DEVICE_KEY):
-    """seats: {seat_no: (occupancy, since_epoch)} 또는 (occupancy, None)"""
+    """seats: {seat_no: (occupancy, since_epoch 또는 None)}"""
+    from seats.timeutil import to_iso
     body = {"camera_id": "cam1", "ts": to_iso(ts if ts is not None else clock()), "seats": []}
     for no, (occ, since) in seats.items():
         item = {"seat_no": no, "occupancy": occ}
         if since is not None:
             item["since"] = to_iso(since)
         body["seats"].append(item)
-    headers = {"X-Device-Key": key} if key else {}
-    return device.post("/api/detections", json=body, headers=headers)
+    headers = {"HTTP_X_DEVICE_KEY": key} if key else {}
+    return device.post("/api/detections", data=json.dumps(body), content_type="application/json", **headers)
 
 
-def qr_token(conn, seat_no):
-    return conn.execute("SELECT qr_token FROM seats WHERE no=?", (seat_no,)).fetchone()["qr_token"]
-
-
-def set_state(admin, no, state, note=None):
-    body = {"state": state}
+def set_state(admin, no, detail, note=None):
+    body = {"detail": detail}
     if note:
         body["note"] = note
-    r = admin.post(f"/api/admin/seats/{no}/state", json=body)
-    assert r.status_code == 200, r.get_json()
+    r = admin.jpost(f"/api/admin/seats/{no}/state", body)
+    assert r.status_code == 200, r.json()
     return r
 
 
-def user_id(conn, student_no):
-    return conn.execute("SELECT id FROM users WHERE student_no=?", (student_no,)).fetchone()["id"]
+def qr_token(no):
+    return Seat.objects.get(no=no).qr_token
+
+
+def user_id(student_no):
+    return User.objects.get(student_no=student_no).id
 
 
 def admin_seat(admin, no):
-    data = admin.get("/api/admin/seats").get_json()
-    return next(s for s in data["seats"] if s["no"] == no)
+    return next(s for s in admin.jget("/api/admin/seats")["seats"] if s["no"] == no)
+
+
+def err(r):
+    return r.json()["error"]["code"]

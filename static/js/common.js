@@ -23,22 +23,29 @@
       return await apiOnce(method, url, body, opts);
     } catch (e) {
       // 관리자 권한이 필요한 요청이면 코드 입력을 받아 해금한 뒤 한 번 다시 시도한다
-      if (e.code === "ADMIN_REQUIRED" && !opts._retried && (await requireAdmin())) {
+      if (e.code === "ADMIN_REQUIRED" && !opts._retried && (await requireAdmin(null, true))) {
         return apiOnce(method, url, body, { ...opts, _retried: true });
       }
       throw e;
     }
   }
 
+  function csrfToken() {
+    const m = document.querySelector('meta[name="csrf-token"]');
+    if (m && m.content) return m.content;
+    const c = document.cookie.split("; ").find((x) => x.startsWith("csrftoken="));
+    return c ? decodeURIComponent(c.slice(10)) : "";
+  }
+
   let adminPrompt = null;
   /** "관리자 권한이 필요합니다." → 관리자 코드 입력 → 해금. 성공하면 true. 동시에 여러 번 불려도 창은 하나. */
-  function requireAdmin(reason) {
-    if (document.body.dataset.admin === "1") return Promise.resolve(true);
+  function requireAdmin(reason, force) {
+    if (!force && document.body.dataset.admin === "1") return Promise.resolve(true);
     if (adminPrompt) return adminPrompt;
     adminPrompt = (async () => {
-      let msg = reason || "관리자 코드를 입력하면 이 기기에서 관리자 기능이 해금됩니다.";
+      let msg = reason || "관리자 코드를 입력하면 관리자 모드가 켜집니다.";
       for (;;) {
-        const v = await modal({ title: "🔒 관리자 권한이 필요합니다.", body: msg, ok: "권한 해금",
+        const v = await modal({ title: "🔒 관리자 권한이 필요합니다.", body: msg, ok: "관리자 모드 켜기",
           fields: [{ name: "code", label: "관리자 코드", type: "password", inputmode: "numeric" }] });
         if (!v) {
           if (location.pathname.startsWith("/admin")) location.href = "/map";
@@ -47,7 +54,7 @@
         try {
           await apiOnce("POST", "/api/admin-mode/unlock", { code: v.code }, { quiet: true });
           document.body.dataset.admin = "1";
-          toast("관리자 권한이 해금되었습니다.", "ok");
+          toast("관리자 모드를 켰습니다.", "ok");
           return true;
         } catch (e) {
           if (e.code === "ADMIN_LOCKED") { toast(e.message, "error", 5000); return false; }
@@ -61,6 +68,7 @@
 
   async function apiOnce(method, url, body, opts) {
     const init = { method: method, headers: { "Accept": "application/json" }, credentials: "same-origin" };
+    if (method !== "GET") init.headers["X-CSRFToken"] = csrfToken();
     if (body !== undefined && body !== null) {
       init.headers["Content-Type"] = "application/json";
       init.body = JSON.stringify(body);
@@ -87,12 +95,18 @@
 
   /** ms마다 fn 실행. 탭이 숨겨지면 멈추고, 다시 보이면 즉시 1회 실행 후 재개. */
   function poll(fn, ms) {
-    let timer = null, running = false;
-    async function tick() {
-      if (running) return;
-      running = true;
-      try { await fn(); } catch (e) { /* 다음 주기에 재시도 */ }
-      finally { running = false; }
+    let timer = null, running = null, again = false;
+    // 이미 조회 중이면 끝난 뒤 한 번 더 조회한다(조치 직후 새로고침이 이전 응답에 묻히지 않게)
+    function tick() {
+      if (running) { again = true; return running; }
+      running = (async () => {
+        do {
+          again = false;
+          try { await fn(); } catch (e) { /* 다음 주기에 재시도 */ }
+        } while (again);
+        running = null;
+      })();
+      return running;
     }
     function start() { if (!timer) { tick(); timer = setInterval(tick, ms); } }
     function stop() { if (timer) { clearInterval(timer); timer = null; } }
@@ -202,10 +216,44 @@
     });
   }
 
+  /** 좌석 지도 그리드: 열 크기, 행 크기(좌석 행은 크게, 창문·통로·테이블 행은 얇게), 구조물 HTML */
+  function layoutGrid(el, data, colMin) {
+    const g = data.grid;
+    const rows = [];
+    for (let r = 1; r <= g.rows; r++) {
+      if (data.seats.some((s) => s.y === r)) { rows.push("minmax(60px, auto)"); continue; }
+      const kinds = data.fixtures.filter((f) => f.y <= r && r < f.y + (f.h || 1)).map((f) => f.kind || "etc");
+      if (kinds.includes("window")) rows.push("22px");
+      else if (kinds.some((k) => k !== "aisle")) rows.push(kinds.includes("table") ? "30px" : "40px");
+      else rows.push("12px");
+    }
+    el.style.gridTemplateColumns = `repeat(${g.cols}, minmax(${colMin || 56}px, 1fr))`;
+    el.style.gridTemplateRows = rows.join(" ");
+    return data.fixtures.map((f) => `<div class="fixture fx-${esc(f.kind || "etc")}"
+      style="grid-column:${f.x} / span ${f.w || 1};grid-row:${f.y} / span ${f.h || 1}">${esc(f.label)}</div>`).join("");
+  }
+
+  /** 상단 [관리자] 스위치: 켜면 관리자 코드 입력, 끄면 즉시 일반 사용자 화면으로 */
+  function bindAdminToggle() {
+    const sw = document.getElementById("admin-toggle");
+    if (!sw) return;
+    sw.addEventListener("click", async () => {
+      const on = sw.getAttribute("aria-checked") === "true";
+      if (on) {
+        try { await apiOnce("POST", "/api/admin-mode/lock", {}, {}); } catch (e) { return; }
+        document.body.dataset.admin = "";
+        location.href = location.pathname.startsWith("/admin") ? "/map" : location.pathname + location.search;
+      } else if (await requireAdmin()) {
+        location.reload();
+      }
+    });
+  }
+  document.addEventListener("DOMContentLoaded", bindAdminToggle);
+
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
 
-  window.SS = { api, requireAdmin, poll, fmtRemain, fmtClock, fmtTime, parseTs, syncClock, serverNow, toast, modal, esc, ApiError };
+  window.SS = { api, requireAdmin, layoutGrid, poll, fmtRemain, fmtClock, fmtTime, parseTs, syncClock, serverNow, toast, modal, esc, ApiError };
   window.api = api; window.poll = poll; window.fmtRemain = fmtRemain;
 })();

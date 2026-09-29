@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "base.html" %}{% load static %}
 {% block title %}관리자{% endblock %}
 {% block content %}
 <div id="banner" class="banner hidden" role="alert">
@@ -12,7 +12,7 @@
   <span class="muted small" id="updated"></span>
   <button type="button" class="btn small secondary" id="sound-toggle">🔕 소리 켜기</button>
   <button type="button" class="btn small warn" id="btn-demo">시연 상황 배치</button>
-  <a class="btn small secondary" href="{{ url_for('pages.admin_settings') }}">설정</a>
+  <a class="btn small secondary" href="/admin/settings">설정</a>
 </div>
 
 <div class="chips" id="chips"></div>
@@ -24,24 +24,24 @@
       <div class="seatmap admin-map" id="admin-map"></div>
       <div class="legend">
         <span><i style="background:var(--v-available)"></i>빈자리</span>
-        <span><i style="background:var(--v-taken)"></i>예약(사용중)</span>
+        <span><i style="background:var(--v-taken)"></i>사용중</span>
         <span><i style="background:var(--v-unavailable)"></i>사용불가</span>
       </div>
       <div class="legend">
-        <b style="color:var(--text)">! 관리자 처리 필요</b>
+        <b style="color:var(--text)"><i class="legend-bang">!</i>처리 필요</b>
         <span><i style="background:var(--i-unauthorized)"></i>무단 점유</span>
         <span><i style="background:var(--i-away)"></i>이탈</span>
         <span><i style="background:var(--i-hoarding)"></i>사석화</span>
         <span><i style="background:var(--i-no_checkin)"></i>체크인 누락</span>
         <span><i style="background:var(--i-seat_unavailable)"></i>예약 좌석 사용불가</span>
       </div>
-      <p class="muted small" style="margin:8px 0 0">좌석을 누르면 예약 대조 결과와 조치 버튼이 표시됩니다.</p>
+      <p class="muted small" style="margin:8px 0 0">좌석을 누르면 세부 상태 지정과 조치 버튼이 표시됩니다.</p>
     </div>
   </div>
   <div>
     <div class="card detail" id="detail"><h2>좌석 상세 · 조치</h2><p class="empty">좌석을 선택하세요.</p></div>
     <div class="card">
-      <h2>관리자 처리 필요 <span class="pill" id="alert-count">0</span></h2>
+      <h2>처리 필요 <span class="pill" id="alert-count">0</span></h2>
       <ul class="alert-list" id="alerts"><li class="muted small">불러오는 중…</li></ul>
     </div>
   </div>
@@ -49,10 +49,10 @@
 
 <div class="card">
   <h2>예약 대조 표</h2>
-  <p class="muted small" style="margin-top:-4px">예약 기록과 현장 상태를 좌석별로 비교합니다. 붉은 행은 조치가 필요한 좌석입니다.</p>
+  <p class="muted small" style="margin-top:-4px">예약 기록과 현장 상태를 좌석별로 비교합니다. 색 막대가 있는 행은 처리가 필요한 좌석입니다.</p>
   <div class="table-wrap">
     <table class="recon">
-      <thead><tr><th>좌석</th><th>예약 기록</th><th>현장 상태</th><th>좌석 상태</th><th>대조 결과</th></tr></thead>
+      <thead><tr><th>좌석</th><th>예약 기록</th><th>현장</th><th>좌석 상태</th><th>세부 상태</th></tr></thead>
       <tbody id="recon"></tbody>
     </table>
   </div>
@@ -90,4 +90,4 @@
   <p class="muted small" id="stats-note" style="margin:8px 0 0"></p>
 </div>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/admin.js') }}"></script>{% endblock %}
+{% block scripts %}<script src="{% static 'js/admin.js' %}"></script>{% endblock %}

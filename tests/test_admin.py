@@ -1,183 +1,193 @@
-"""관리자 상황별 조치."""
-from conftest import admin_seat, set_state, user_id
+"""관리자 조치: 세부 상태 부여, 상황별 조치, 경고·정지, 시연 상황."""
+from conftest import admin_seat, err, qr_token, set_state, user_id
+
+from seats.models import Alert, Reservation, User
 
 
-def err(r):
-    return r.get_json()["error"]["code"]
+def _alert(admin, no, type_):
+    return next(a for a in admin.jget("/api/admin/alerts?open=1")["alerts"] if a["seat_no"] == no and a["type"] == type_)
 
 
-def _alert(admin, seat_no, type_):
-    alerts = admin.get("/api/admin/alerts?open=1").get_json()["alerts"]
-    return next(a for a in alerts if a["seat_no"] == seat_no and a["type"] == type_)
-
-
-def _log_actions(admin):
-    return [x["action"] for x in admin.get("/api/admin/log").get_json()["log"]]
+def _actions(admin):
+    return [x["action"] for x in admin.jget("/api/admin/log")["log"]]
 
 
 def test_permissions(user):
     r = user.get("/api/admin/seats")
-    assert r.status_code == 403 and r.get_json()["error"]["message"] == "관리자 권한이 필요합니다."
-    assert user.post("/api/admin/demo").status_code == 403
-    assert user.post("/api/admin/seats/1/state", json={"state": "empty"}).status_code == 403
+    assert r.status_code == 403 and r.json()["error"]["message"] == "관리자 권한이 필요합니다."
+    assert user.jpost("/api/admin/demo").status_code == 403
+    assert user.jpost("/api/admin/seats/1/state", {"detail": "empty"}).status_code == 403
+
+
+def test_assign_options_grouped(admin):
+    groups = admin.jget("/api/admin/seats")["assign"]["groups"]
+    assert [g["label"] for g in groups] == ["빈자리", "사용중", "사용불가"]
+    in_use = [i["label"] for i in groups[1]["items"]]
+    assert in_use == ["이용 중", "짐만 있음", "무단 점유", "이탈", "사석화"]
+    assert [i["label"] for i in groups[2]["items"]] == ["고장", "점검·청소", "사용 중지"]
 
 
 def test_seat_state_assignment(admin):
-    assert admin.post("/api/admin/seats/1/state", json={"state": "bogus"}).status_code == 400
-    set_state(admin, 1, "unavailable", note="청소 중")
+    assert admin.jpost("/api/admin/seats/1/state", {"detail": "bogus"}).status_code == 400
+    set_state(admin, 1, "maintenance", note="청소 중")
     s = admin_seat(admin, 1)
-    assert s["seat_state"] == "unavailable" and s["actual_note"] == "청소 중" and s["actual_source"] == "manual"
+    assert s["seat_state"] == "unavailable" and s["detail"] == "maintenance" and s["note"] == "청소 중"
     set_state(admin, 1, "empty")
-    assert admin_seat(admin, 1)["actual_note"] is None
-    assert _log_actions(admin)[:2] == ["seat_state", "seat_state"]
+    assert admin_seat(admin, 1)["note"] is None
+    assert _actions(admin)[:2] == ["seat_state", "seat_state"]
 
 
-def test_unauthorized_on_site_assignment(admin, conn):
+def test_away_hoarding_require_in_use_reservation(admin, user_a):
+    r = admin.jpost("/api/admin/seats/1/state", {"detail": "away"})
+    assert r.status_code == 409 and "이용 중인 예약" in r.json()["error"]["message"]
+    user_a.jpost("/api/reservations", {"seat_no": 1, "qr_token": qr_token(1)})
+    set_state(admin, 1, "hoarding")
+    s = admin_seat(admin, 1)
+    assert s["detail"] == "hoarding" and s["needs_action"] and s["mark"] == "issue"
+    set_state(admin, 1, "away")
+    assert admin_seat(admin, 1)["detail"] == "away"
+
+
+def test_unauthorized_on_site_assignment(admin):
     """무단 점유(A-3) → 앉아 있는 이용자에게 현장 배정."""
-    assert admin_seat(admin, 3)["situation"] == "unauthorized"
-    uid = user_id(conn, "userA")
-    r = admin.post("/api/admin/reservations", json={"user_id": uid, "seat_no": 3, "checkin": True})
-    assert r.status_code == 201
+    assert admin_seat(admin, 3)["detail"] == "unauthorized"
+    uid = user_id("userA")
+    assert admin.jpost("/api/admin/reservations", {"user_id": uid, "seat_no": 3, "checkin": True}).status_code == 201
     s = admin_seat(admin, 3)
-    assert s["situation"] == "ok" and s["reservation"]["user"]["name"] == "사용자A"
-    assert s["reservation"]["status"] == "in_use" and s["reservation"]["source"] == "admin"
-    # 이미 예약 있는 사용자 / 사용불가 좌석
-    assert err(admin.post("/api/admin/reservations", json={"user_id": uid, "seat_no": 1})) == "ALREADY_HAS_RESERVATION"
-    uid_b = user_id(conn, "userB")
-    assert err(admin.post("/api/admin/reservations", json={"user_id": uid_b, "seat_no": 5})) == "SEAT_UNAVAILABLE"
-    assert err(admin.post("/api/admin/reservations", json={"user_id": uid_b, "seat_no": 3})) == "SEAT_TAKEN"
+    assert s["detail"] == "using" and s["reservation"]["user"]["name"] == "사용자A"
+    assert s["reservation"]["source"] == "admin"
+    assert err(admin.jpost("/api/admin/reservations", {"user_id": uid, "seat_no": 1})) == "ALREADY_HAS_RESERVATION"
+    uid_b = user_id("userB")
+    assert err(admin.jpost("/api/admin/reservations", {"user_id": uid_b, "seat_no": 20})) == "SEAT_UNAVAILABLE"
+    assert err(admin.jpost("/api/admin/reservations", {"user_id": uid_b, "seat_no": 3})) == "SEAT_TAKEN"
 
 
-def test_unauthorized_asked_to_leave(admin, conn):
-    """무단 점유 → 퇴실 안내 후 현장 상태를 빈자리로."""
-    assert admin_seat(admin, 3)["situation"] == "unauthorized"
+def test_unauthorized_asked_to_leave(admin):
+    assert admin_seat(admin, 3)["detail"] == "unauthorized"
     set_state(admin, 3, "empty")
     assert admin_seat(admin, 3)["seat_state"] == "available"
-    assert conn.execute("SELECT resolution FROM alerts WHERE seat_no=3").fetchone()["resolution"] == "auto"
+    assert Alert.objects.get(seat_id=3).resolution == "auto"
 
 
-def test_no_checkin_proxy_checkin(admin, user_a, conn):
-    rid = user_a.post("/api/reservations", json={"seat_no": 1}).get_json()["id"]
-    set_state(admin, 1, "occupied")
-    assert admin_seat(admin, 1)["situation"] == "no_checkin"
-    assert admin.post(f"/api/admin/reservations/{rid}/checkin").status_code == 200
+def test_no_checkin_proxy_checkin(admin, user_a, device, clock):
+    from conftest import send
+    rid = user_a.jpost("/api/reservations", {"seat_no": 1}).json()["id"]
+    send(device, clock, {1: ("person", clock())})  # 카메라: 누군가 앉았지만 체크인 안 함
+    assert admin_seat(admin, 1)["detail"] == "no_checkin"
+    assert admin.jpost(f"/api/admin/reservations/{rid}/checkin").status_code == 200
     s = admin_seat(admin, 1)
-    assert s["situation"] == "ok" and s["reservation"]["status"] == "in_use"
-    assert err(admin.post(f"/api/admin/reservations/{rid}/checkin")) == "INVALID_STATE"
+    assert s["detail"] == "using" and s["reservation"]["status"] == "in_use"
+    assert err(admin.jpost(f"/api/admin/reservations/{rid}/checkin")) == "INVALID_STATE"
 
 
-def test_no_checkin_stranger_move_reserver(admin, user_a, conn):
-    """예약석에 다른 사람이 앉아 있음 → 예약자를 빈자리로 이동, 남은 사람은 무단 점유으로 바뀜."""
-    rid = user_a.post("/api/reservations", json={"seat_no": 1}).get_json()["id"]
-    set_state(admin, 1, "occupied")
-    assert err(admin.post(f"/api/admin/reservations/{rid}/move", json={"seat_no": 3})) == "SEAT_OCCUPIED"
-    assert err(admin.post(f"/api/admin/reservations/{rid}/move", json={"seat_no": 5})) == "SEAT_UNAVAILABLE"
-    assert admin.post(f"/api/admin/reservations/{rid}/move", json={"seat_no": 2}).status_code == 200
+def test_admin_marks_reserved_seat_seated(admin, user_a):
+    """관리자가 예약석에 '이용 중'을 부여하면 체크인 누락이 아닌 '착석(체크인 전)'."""
+    user_a.jpost("/api/reservations", {"seat_no": 1})
+    set_state(admin, 1, "using")
+    s = admin_seat(admin, 1)
+    assert s["detail"] == "seated_unchecked" and not s["needs_action"]
+
+
+def test_move_reserver_away_from_stranger(admin, user_a):
+    rid = user_a.jpost("/api/reservations", {"seat_no": 1}).json()["id"]
+    set_state(admin, 1, "unauthorized")
+    assert err(admin.jpost(f"/api/admin/reservations/{rid}/move", {"seat_no": 3})) == "SEAT_OCCUPIED"
+    assert err(admin.jpost(f"/api/admin/reservations/{rid}/move", {"seat_no": 20})) == "SEAT_UNAVAILABLE"
+    assert admin.jpost(f"/api/admin/reservations/{rid}/move", {"seat_no": 2}).status_code == 200
     assert admin_seat(admin, 2)["reservation"]["id"] == rid
-    assert admin_seat(admin, 1)["situation"] == "unauthorized"
-    log = admin.get("/api/admin/log").get_json()["log"][0]
-    assert log["action"] == "move" and log["memo"].startswith("A-1 → A-2")
+    assert admin_seat(admin, 1)["detail"] == "unauthorized"
+    log = admin.jget("/api/admin/log")["log"][0]
+    assert log["action"] == "move" and log["memo"].startswith("A-1 → A-2") and log["admin_name"] == "테스트5"
 
 
-def test_seat_unavailable_move_in_use(admin, user_a, conn):
-    from conftest import qr_token
-    rid = user_a.post("/api/reservations", json={"seat_no": 1, "qr_token": qr_token(conn, 1)}).get_json()["id"]
-    set_state(admin, 1, "unavailable", note="누수")
-    assert admin_seat(admin, 1)["situation"] == "seat_unavailable"
-    admin.post(f"/api/admin/reservations/{rid}/move", json={"seat_no": 2})
+def test_seat_unavailable_move_in_use(admin, user_a):
+    rid = user_a.jpost("/api/reservations", {"seat_no": 1, "qr_token": qr_token(1)}).json()["id"]
+    set_state(admin, 1, "broken", note="누수")
+    assert admin_seat(admin, 1)["detail"] == "seat_unavailable"
+    admin.jpost(f"/api/admin/reservations/{rid}/move", {"seat_no": 2})
     a1, a2 = admin_seat(admin, 1), admin_seat(admin, 2)
-    assert a1["seat_state"] == "unavailable" and a1["situation"] == "ok"
-    assert a2["situation"] == "ok" and a2["actual"] == "occupied"
+    assert a1["detail"] == "broken" and not a1["needs_action"]
+    assert a2["detail"] == "using" and a2["actual"] == "occupied"
 
 
-def test_away_force_return_and_warn(admin, user_b, conn, clock):
-    from conftest import qr_token
-    rid = user_b.post("/api/reservations", json={"seat_no": 2, "qr_token": qr_token(conn, 2)}).get_json()["id"]
-    set_state(admin, 2, "empty")
+def test_hoarding_force_return_then_collect(admin, user_b, clock):
+    rid = user_b.jpost("/api/reservations", {"seat_no": 2, "qr_token": qr_token(2)}).json()["id"]
+    set_state(admin, 2, "item")
     clock.advance(31 * 60)
-    a = _alert(admin, 2, "away")
+    a = _alert(admin, 2, "hoarding")
     assert a["reservation"]["user"]["name"] == "사용자B"
-    uid = a["reservation"]["user"]["id"]
-    r = admin.post(f"/api/admin/users/{uid}/warn", json={"alert_id": a["id"]})
-    assert r.get_json()["warnings"] == 1
-    assert admin.post(f"/api/admin/reservations/{rid}/force-return", json={"memo": "40분 자리 비움"}).status_code == 200
-    assert conn.execute("SELECT status FROM reservations WHERE id=?", (rid,)).fetchone()["status"] == "force_returned"
-    assert conn.execute("SELECT resolution FROM alerts WHERE id=?", (a["id"],)).fetchone()["resolution"] == "force_returned"
+    r = admin.jpost(f"/api/admin/users/{a['reservation']['user']['id']}/warn", {"alert_id": a["id"]})
+    assert r.json()["warnings"] == 1
+    assert admin.jpost(f"/api/admin/reservations/{rid}/force-return", {"memo": "사석화"}).status_code == 200
+    assert Reservation.objects.get(id=rid).status == "force_returned"
+    assert Alert.objects.get(id=a["id"]).resolution == "force_returned"
+    # 짐이 남아 있으면 무단 점유 → 짐 수거 후 빈자리
+    assert admin_seat(admin, 2)["detail"] == "unauthorized"
+    set_state(admin, 2, "empty")
     assert admin_seat(admin, 2)["seat_state"] == "available"
-    assert _log_actions(admin)[:2] == ["force_return", "warn"]
+    assert _actions(admin)[:3] == ["seat_state", "force_return", "warn"]
+
+
+def test_force_return_clears_issue_mark(admin, user_a):
+    rid = user_a.jpost("/api/reservations", {"seat_no": 1, "qr_token": qr_token(1)}).json()["id"]
+    set_state(admin, 1, "away")
+    admin.jpost(f"/api/admin/reservations/{rid}/force-return")
+    assert admin_seat(admin, 1)["detail"] == "empty"
 
 
 def test_no_show_warn_and_resolve(admin, user_a, clock):
-    user_a.post("/api/reservations", json={"seat_no": 1})
+    user_a.jpost("/api/reservations", {"seat_no": 1})
     clock.advance(16 * 60)
     a = _alert(admin, 1, "no_show")
-    uid = a["reservation"]["user"]["id"]
-    admin.post(f"/api/admin/users/{uid}/warn", json={"alert_id": a["id"], "resolve": True})
-    assert all(x["id"] != a["id"] for x in admin.get("/api/admin/alerts?open=1").get_json()["alerts"])
+    admin.jpost(f"/api/admin/users/{a['reservation']['user']['id']}/warn", {"alert_id": a["id"], "resolve": True})
+    assert all(x["id"] != a["id"] for x in admin.jget("/api/admin/alerts?open=1")["alerts"])
 
 
-def test_warning_limit_suggests_suspension(admin, conn, user_a):
-    uid = user_id(conn, "userA")
+def test_warning_limit_and_suspension(admin, user_a):
+    uid = user_id("userA")
     for _ in range(3):
-        r = admin.post(f"/api/admin/users/{uid}/warn", json={"reason": "테스트"}).get_json()
+        r = admin.jpost(f"/api/admin/users/{uid}/warn", {"reason": "테스트"}).json()
     assert r["warnings"] == 3 and r["suspend_suggested"] is True
-    u = next(x for x in admin.get("/api/admin/users").get_json()["users"] if x["id"] == uid)
-    assert u["suspend_suggested"] is True
-    assert admin.post(f"/api/admin/users/{uid}/unwarn").get_json()["warnings"] == 2
-    assert admin.post(f"/api/admin/users/{uid}/suspend", json={"days": 999}).status_code == 400
-    assert admin.post(f"/api/admin/users/{uid}/suspend", json={"days": 7, "reason": "반복 위반"}).status_code == 200
-    assert err(user_a.post("/api/reservations", json={"seat_no": 1})) == "SUSPENDED"
-    assert err(admin.post("/api/admin/reservations", json={"user_id": uid, "seat_no": 1})) == "SUSPENDED"
-    assert admin.post(f"/api/admin/users/{uid}/unsuspend").status_code == 200
-    assert user_a.post("/api/reservations", json={"seat_no": 1}).status_code == 201
+    assert next(x for x in admin.jget("/api/admin/users")["users"] if x["id"] == uid)["suspend_suggested"]
+    assert admin.jpost(f"/api/admin/users/{uid}/unwarn").json()["warnings"] == 2
+    assert admin.jpost(f"/api/admin/users/{uid}/suspend", {"days": 999}).status_code == 400
+    assert admin.jpost(f"/api/admin/users/{uid}/suspend", {"days": 7, "reason": "반복 위반"}).status_code == 200
+    assert err(user_a.jpost("/api/reservations", {"seat_no": 1})) == "SUSPENDED"
+    assert err(admin.jpost("/api/admin/reservations", {"user_id": uid, "seat_no": 1})) == "SUSPENDED"
+    assert admin.jpost(f"/api/admin/users/{uid}/unsuspend").status_code == 200
+    assert user_a.jpost("/api/reservations", {"seat_no": 1}).status_code == 201
 
 
-def test_admin_extend(admin, user_a, conn):
-    rid = user_a.post("/api/reservations", json={"seat_no": 1}).get_json()["id"]
-    before = conn.execute("SELECT end_at, extend_count FROM reservations WHERE id=?", (rid,)).fetchone()
-    admin.post(f"/api/admin/reservations/{rid}/extend")
-    after = conn.execute("SELECT end_at, extend_count FROM reservations WHERE id=?", (rid,)).fetchone()
-    assert after["end_at"] == before["end_at"] + 60 * 60 and after["extend_count"] == before["extend_count"]
+def test_admin_extend(admin, user_a):
+    rid = user_a.jpost("/api/reservations", {"seat_no": 1}).json()["id"]
+    before = Reservation.objects.get(id=rid)
+    admin.jpost(f"/api/admin/reservations/{rid}/extend")
+    after = Reservation.objects.get(id=rid)
+    assert after.end_at == before.end_at + 3600 and after.extend_count == before.extend_count
 
 
-def test_demo_scenario(admin, conn):
-    r = admin.post("/api/admin/demo")
-    assert r.status_code == 200 and len(r.get_json()["messages"]) == 8
-    seats = {s["label"]: s for s in admin.get("/api/admin/seats").get_json()["seats"]}
-    assert seats["A-1"]["situation"] == "ok" and seats["A-1"]["reservation"]["user"]["name"] == "사용자A"
-    assert seats["A-2"]["situation"] == "away"
-    assert seats["A-3"]["situation"] == "unauthorized"
-    assert seats["A-4"]["situation"] == "no_checkin" and seats["A-4"]["reservation"]["user"]["name"] == "사용자C"
-    assert seats["B-1"]["seat_state"] == "unavailable" and seats["B-1"]["situation"] == "ok"
-    assert seats["B-2"]["situation"] == "seat_unavailable"
-    assert seats["B-3"]["situation"] == "hoarding" and seats["B-3"]["actual"] == "item"
-    assert seats["B-4"]["seat_state"] == "available"
-    types = sorted(a["type"] for a in admin.get("/api/admin/alerts?open=1").get_json()["alerts"])
-    assert types == ["away", "hoarding", "no_checkin", "no_show", "seat_unavailable", "unauthorized"]
-    # 다시 배치해도 같은 결과(기존 예약·알림 정리)
-    admin.post("/api/admin/demo")
-    assert len(admin.get("/api/admin/alerts?open=1").get_json()["alerts"]) == 6
+def test_demo_scenario(admin):
+    r = admin.jpost("/api/admin/demo")
+    assert r.status_code == 200 and len(r.json()["messages"]) == 13
+    seats = {s["label"]: s for s in admin.jget("/api/admin/seats")["seats"]}
+    expect = {
+        "A-1": "using", "A-2": "away", "A-3": "unauthorized", "A-4": "no_checkin", "A-5": "using",
+        "B-1": "seat_unavailable", "B-2": "hoarding", "B-3": "empty", "B-4": "item", "C-1": "waiting",
+        "C-2": "unauthorized", "D-1": "maintenance", "E-3": "broken", "D-4": "empty",
+    }
+    assert {k: seats[k]["detail"] for k in expect} == expect
+    assert seats["A-1"]["reservation"]["user"]["name"] == "사용자A"
+    assert seats["A-5"]["reservation"] is None and not seats["A-5"]["needs_action"]
+    types = sorted(a["type"] for a in admin.jget("/api/admin/alerts?open=1")["alerts"])
+    assert types == ["away", "hoarding", "no_checkin", "no_show", "seat_unavailable", "unauthorized", "unauthorized"]
+    admin.jpost("/api/admin/demo")  # 다시 배치해도 같은 결과
+    assert len(admin.jget("/api/admin/alerts?open=1")["alerts"]) == 7
+    assert User.objects.count() == 8
 
 
 def test_settings(admin, user):
-    assert admin.put("/api/admin/settings", json={"nope": 1}).status_code == 400
-    assert admin.put("/api/admin/settings", json={"away_limit_min": 0}).status_code == 400
-    assert admin.put("/api/admin/settings", json={"away_limit_min": 5}).get_json()["settings"]["away_limit_min"] == 5
-    assert user.put("/api/admin/settings", json={"away_limit_min": 5}).status_code == 403
-    assert "settings" in _log_actions(admin)
-
-
-def test_hoarding_with_items(admin, user_b, conn, clock):
-    from conftest import qr_token
-    rid = user_b.post("/api/reservations", json={"seat_no": 2, "qr_token": qr_token(conn, 2)}).get_json()["id"]
-    set_state(admin, 2, "item")
-    s = admin_seat(admin, 2)
-    assert s["situation"] == "ok" and s["note"] == "짐만 두고 자리 비움"
-    clock.advance(30 * 60)
-    s = admin_seat(admin, 2)
-    assert s["situation"] == "hoarding" and s["situation_label"] == "사석화" and s["alert_id"]
-    admin.post(f"/api/admin/reservations/{rid}/force-return")
-    # 반납 후 짐이 남아 있으면 무단 점유 → 짐 수거 후 빈자리
-    assert admin_seat(admin, 2)["situation"] == "unauthorized"
-    set_state(admin, 2, "empty")
-    assert admin_seat(admin, 2)["seat_state"] == "available"
+    assert admin.jput("/api/admin/settings", {"nope": 1}).status_code == 400
+    assert admin.jput("/api/admin/settings", {"away_limit_min": 0}).status_code == 400
+    assert admin.jput("/api/admin/settings", {"away_limit_min": 5}).json()["settings"]["away_limit_min"] == 5
+    assert user.jput("/api/admin/settings", {"away_limit_min": 5}).status_code == 403
+    assert "settings" in _actions(admin)

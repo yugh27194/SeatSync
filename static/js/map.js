@@ -1,13 +1,14 @@
-/* /map — 실시간 좌석 지도 (3초 polling) */
+/* /map — 실시간 좌석 지도 (3초 polling). 처리 필요(!) 표시는 관리자 모드에서만 보인다. */
 (function () {
   "use strict";
-  const { api, requireAdmin, poll, fmtRemain, syncClock, serverNow, parseTs, toast, modal, esc } = window.SS;
+  const { api, layoutGrid, poll, fmtRemain, fmtTime, syncClock, serverNow, parseTs, toast, modal, esc } = window.SS;
   const mapEl = document.getElementById("seatmap");
   const barEl = document.getElementById("mybar");
+  const attnBar = document.getElementById("attn-bar");
   let data = null;
   let busy = false;
 
-  const SUB = { available: "빈자리", taken: "예약(사용중)", unavailable: "사용불가", mine: "내 자리" };
+  const SUB = { available: "빈자리", taken: "사용중", unavailable: "사용불가", mine: "내 자리" };
 
   function fmtMinutes(min) {
     const h = Math.floor(min / 60), m = min % 60;
@@ -15,20 +16,18 @@
   }
 
   function renderMap() {
-    const g = data.grid;
-    mapEl.style.gridTemplateColumns = `repeat(${g.cols}, minmax(56px, 1fr))`;
-    mapEl.style.gridTemplateRows = `repeat(${g.rows}, minmax(64px, auto))`;
-    const html = [];
-    for (const f of data.fixtures) {
-      html.push(`<div class="fixture" style="grid-column:${f.x};grid-row:${f.y}">${esc(f.label)}</div>`);
-    }
+    const admin = data.me.admin;
+    const html = [layoutGrid(mapEl, data, 56)];
     for (const s of data.seats) {
-      const sub = SUB[s.view];
+      const attn = admin && s.attention;
+      // 관리자 모드에서는 세부 상태(짐만 있음, 고장 등)를 함께 보여 준다
+      const sub = admin && s.view !== "mine" && s.detail_label ? s.detail_label : SUB[s.view];
       html.push(
-        `<button type="button" class="seat v-${s.view}${s.attention ? " attn" : ""}" data-no="${s.no}"
-          style="grid-column:${s.x};grid-row:${s.y}" aria-label="${esc(s.label)} ${sub}${s.attention ? " · 관리자 처리 필요" : ""}">
-          ${s.attention ? '<span class="bang" aria-hidden="true">!</span>' : ""}
-          ${esc(s.label)}<span class="sub">${sub}</span></button>`
+        `<button type="button" class="seat v-${s.view}${s.booth ? " booth" : ""}${attn ? " attn" : ""}" data-no="${s.no}"
+          style="grid-column:${s.x};grid-row:${s.y}" title="${esc(s.zone || "")}"
+          aria-label="${esc(s.label)} ${esc(sub)}${attn ? " · 처리 필요" : ""}">
+          ${attn ? '<span class="bang" aria-hidden="true">!</span>' : ""}
+          ${esc(s.label)}<span class="sub">${esc(sub)}</span></button>`
       );
     }
     mapEl.innerHTML = html.join("");
@@ -38,7 +37,7 @@
     const r = data.my_reservation;
     const me = data.me || {};
     if (!r && me.suspended_until) {
-      barEl.innerHTML = `<div class="txt"><span class="deadline">이용 정지 중</span> · ${me.suspended_until.slice(5, 10)} ${SS.fmtTime(me.suspended_until)}까지 예약할 수 없어요.</div>`;
+      barEl.innerHTML = `<div class="txt"><span class="deadline">이용 정지 중</span> · ${me.suspended_until.slice(5, 10)} ${fmtTime(me.suspended_until)}까지 예약할 수 없어요.</div>`;
       return;
     }
     if (!r) {
@@ -48,9 +47,8 @@
     const now = serverNow();
     let txt;
     if (r.status === "reserved") {
-      const left = parseTs(r.checkin_deadline) - now;
       txt = `<strong>${esc(r.seat_label)}</strong> · 예약됨<br>
-             <span class="deadline">${fmtRemain(left)}</span> 안에 좌석 QR로 체크인하세요`;
+             <span class="deadline">${fmtRemain(parseTs(r.checkin_deadline) - now)}</span> 안에 좌석 QR로 체크인하세요`;
     } else {
       txt = `<strong>${esc(r.seat_label)}</strong> · 남은 시간 <strong>${fmtRemain(parseTs(r.end_at) - now)}</strong>`;
     }
@@ -58,11 +56,11 @@
   }
 
   function renderAttention() {
-    const list = data.seats.filter((s) => s.attention);
-    $attnBar.classList.toggle("hidden", !list.length);
+    if (!attnBar) return;
+    const list = data.me.admin ? data.seats.filter((s) => s.attention) : [];
+    attnBar.classList.toggle("hidden", !list.length);
     if (list.length) {
-      document.getElementById("attn-text").textContent =
-        `관리자 처리가 필요한 좌석 ${list.length}개 (${list.map((s) => s.label).join(", ")})`;
+      document.getElementById("attn-text").textContent = `처리 필요 ${list.length}석 · ${list.map((s) => s.label).join(", ")}`;
     }
   }
 
@@ -74,23 +72,11 @@
     renderAttention();
   }
 
-  const $attnBar = document.getElementById("attn-bar");
-  async function goAdmin(seatNo) {
-    if (await requireAdmin()) location.href = "/admin" + (seatNo ? "?seat=" + seatNo : "");
-  }
-  document.getElementById("attn-btn").onclick = () => goAdmin();
-
-  async function attentionSeat(seat) {
-    const ok = await modal({ title: `⚠ ${seat.label} — 관리자 처리가 필요합니다`,
-      body: "이 좌석은 예약 기록과 실제 사용 상태가 맞지 않아 관리자 확인이 필요합니다.\n관리자라면 [관리자 처리]를 눌러 권한을 해금하세요.",
-      ok: "관리자 처리", cancel: "닫기", danger: true });
-    if (ok) goAdmin(seat.no);
-  }
-
   async function reserve(seat) {
     const p = data.policy;
-    const body = `이용 시간 ${fmtMinutes(p.default_use_min)}, ${p.checkin_limit_min}분 안에 체크인 필요`;
-    const ok = await modal({ title: `${seat.label} 좌석을 예약할까요?`, body, ok: "예약하기" });
+    const ok = await modal({ title: `${seat.label} 좌석을 예약할까요?`,
+      body: `${seat.zone ? seat.zone + " · " : ""}이용 시간 ${fmtMinutes(p.default_use_min)}, ${p.checkin_limit_min}분 안에 체크인 필요`,
+      ok: "예약하기" });
     if (!ok) return;
     busy = true;
     try {
@@ -105,14 +91,14 @@
     if (!btn || !data || busy) return;
     const seat = data.seats.find((s) => s.no === Number(btn.dataset.no));
     if (!seat) return;
+    if (data.me.admin && seat.view !== "mine") { location.href = "/admin?seat=" + seat.no; return; }
     if (seat.view === "mine") { location.href = "/my"; return; }
-    if (seat.attention) { attentionSeat(seat); return; }
     if (seat.view === "available") {
       if (data.my_reservation) { toast("이미 예약한 좌석이 있어요. 반납 후 다시 예약해 주세요.", "error"); return; }
       reserve(seat);
       return;
     }
-    toast(seat.view === "taken" ? "예약(사용중)인 좌석입니다" : "현재 사용할 수 없는 좌석입니다");
+    toast(seat.view === "taken" ? "사용중인 좌석입니다" : "현재 사용할 수 없는 좌석입니다");
   });
 
   const ticker = poll(load, 3000);
