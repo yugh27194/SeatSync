@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SeatSync — 열람실 좌석 예약 × 실제 이용 대조</title>
+  <meta name="description" content="예약 기록과 실제 착석 상태를 대조해 사석화·이탈·무단 점유를 찾아 주는 열람실 좌석 관리 서비스">
+  <meta property="og:title" content="SeatSync">
+  <meta property="og:description" content="열람실 좌석 예약 × 실제 이용 대조 서비스">
+  <link rel="icon" href="icon.svg">
+  <script src="config.js"></script>
+  <style>
+    :root {
+      --navy: #1c2a44; --blue: #2f6fdf; --blue-d: #1f56b8; --sky: #7fb0ff;
+      --text: #1c2430; --muted: #5b6573; --line: #e2e6ec; --bg: #f4f6f9;
+      --green: #23a05a; --gray: #a3abb5; --red: #d93a3f; --orange: #ef8a1f; --purple: #8e3fd6;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+      color: var(--text); background: var(--bg); line-height: 1.6; -webkit-text-size-adjust: 100%; }
+    a { color: var(--blue); }
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+
+    /* ---------- 상단 ---------- */
+    header.hero { background: radial-gradient(1200px 500px at 80% -10%, #2f4f86 0%, transparent 60%), var(--navy); color: #fff; padding: 22px 0 64px; }
+    .nav { display: flex; align-items: center; gap: 12px; }
+    .logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; letter-spacing: -.3px; color: #fff; text-decoration: none; }
+    .logo img { width: 30px; height: 30px; }
+    .logo span { color: var(--sky); }
+    .nav .gh { margin-left: auto; color: #d6e4ff; text-decoration: none; font-size: 14px; border: 1px solid rgba(255,255,255,.25); border-radius: 999px; padding: 6px 14px; }
+    .hero-body { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 40px; align-items: center; margin-top: 44px; }
+    .hero-body > * { min-width: 0; }
+    h1 { font-size: 40px; line-height: 1.25; letter-spacing: -1px; margin: 0 0 16px; }
+    h1 em { font-style: normal; color: var(--sky); }
+    .lead { font-size: 17px; color: #d6e0f2; margin: 0 0 28px; }
+    .cta { display: flex; gap: 12px; flex-wrap: wrap; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; padding: 0 26px;
+      border-radius: 14px; font-size: 17px; font-weight: 800; text-decoration: none; transition: transform .08s, background .15s; }
+    .btn:active { transform: scale(.98); }
+    .btn.primary { background: var(--blue); color: #fff; box-shadow: 0 8px 24px rgba(47,111,223,.45); }
+    .btn.primary:hover { background: var(--blue-d); }
+    .btn.ghost { color: #fff; border: 1px solid rgba(255,255,255,.35); }
+    .btn.ghost:hover { background: rgba(255,255,255,.08); }
+    .url { margin-top: 14px; font-size: 13px; color: #9fb2d3; word-break: break-all; }
+    .url code { background: rgba(255,255,255,.08); padding: 2px 6px; border-radius: 6px; }
+
+    /* 미니 좌석 지도 */
+    .mini { background: #fff; border-radius: 18px; padding: 16px; box-shadow: 0 20px 50px rgba(0,0,0,.3); color: var(--text); }
+    .mini .bar { background: #eef3ff; border-radius: 10px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; }
+    .mini .bar b { color: var(--blue); }
+    .mini .window { height: 14px; border-radius: 5px; margin-bottom: 8px;
+      background: repeating-linear-gradient(90deg, #cfe6ff 0 16px, #b9dafc 16px 18px); }
+    .grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; }
+    .s { aspect-ratio: 1 / .9; border-radius: 9px; color: #fff; font-size: 12px; font-weight: 800; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; position: relative; }
+    .s small { font-weight: 500; font-size: 9px; opacity: .95; }
+    .s.a { background: var(--green); } .s.t { background: var(--blue); } .s.u { background: var(--gray); }
+    .s.me { background: var(--blue); outline: 3px solid #0d2a66; outline-offset: -3px; }
+    .s .bang { position: absolute; top: -6px; left: -6px; width: 18px; height: 18px; border-radius: 50%; background: var(--red);
+      border: 2px solid #fff; font-size: 11px; line-height: 14px; text-align: center; }
+    .s .bang.o { background: var(--orange); } .s .bang.p { background: var(--purple); }
+    .table { grid-column: span 2; height: 18px; background: #e8dcc8; border-radius: 5px; }
+    .gap { height: 18px; }
+    .mini .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 10px; }
+    .mini .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 3px; vertical-align: -1px; }
+
+    /* ---------- 본문 ---------- */
+    section { padding: 64px 0 8px; }
+    h2 { font-size: 28px; letter-spacing: -.6px; margin: 0 0 8px; }
+    .sub { color: var(--muted); margin: 0 0 28px; }
+    .problem { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .card { background: #fff; border-radius: 16px; padding: 20px; box-shadow: 0 1px 3px rgba(20,30,50,.06), 0 6px 18px rgba(20,30,50,.05); }
+    .card .ic { font-size: 26px; }
+    .card h3 { margin: 8px 0 6px; font-size: 17px; }
+    .card p { margin: 0; color: var(--muted); font-size: 14px; }
+    .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .who { display: inline-block; font-size: 11px; font-weight: 800; border-radius: 999px; padding: 2px 8px; margin-left: 6px; vertical-align: 2px; }
+    .who.u { background: #e3edff; color: var(--blue-d); } .who.m { background: #fff1c2; color: #7a5a00; }
+    .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; counter-reset: st; }
+    .step { background: #fff; border-radius: 16px; padding: 18px; position: relative; box-shadow: 0 1px 3px rgba(20,30,50,.06); }
+    .step::before { counter-increment: st; content: counter(st); display: inline-flex; width: 28px; height: 28px; border-radius: 50%;
+      background: var(--blue); color: #fff; font-weight: 800; align-items: center; justify-content: center; margin-bottom: 8px; }
+    .step h3 { margin: 0 0 4px; font-size: 16px; } .step p { margin: 0; font-size: 14px; color: var(--muted); }
+    .states { width: 100%; border-collapse: collapse; background: #fff; border-radius: 16px; overflow: hidden; font-size: 14px; }
+    .states th, .states td { padding: 12px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    .states th { background: #fafbfc; color: var(--muted); font-weight: 600; width: 120px; }
+    .pill { display: inline-block; border-radius: 6px; padding: 1px 8px; font-weight: 800; color: #fff; font-size: 13px; }
+    .tag { display: inline-block; border-radius: 6px; padding: 0 6px; margin: 2px 2px 2px 0; background: #eef1f5; font-size: 13px; }
+    .tag.x { background: #fdecec; color: #a4262c; font-weight: 700; }
+    .try { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .try code { background: #eef1f5; padding: 1px 6px; border-radius: 6px; font-size: 14px; }
+    .final { text-align: center; padding: 64px 0; }
+    footer { border-top: 1px solid var(--line); padding: 24px 0 40px; color: var(--muted); font-size: 13px; }
+    footer a { color: var(--muted); }
+
+    @media (max-width: 820px) {
+      h1 { font-size: 30px; }
+      .hero-body { grid-template-columns: minmax(0, 1fr); gap: 28px; margin-top: 28px; }
+      .problem, .features, .try { grid-template-columns: 1fr; }
+      .steps { grid-template-columns: 1fr 1fr; }
+      section { padding-top: 48px; }
+    }
+    @media (max-width: 420px) {
+      .wrap { padding: 0 16px; }
+      .steps { grid-template-columns: 1fr; }
+      .btn { width: 100%; }
+      .states th { width: 84px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <nav class="nav">
+        <a class="logo" href="./"><img src="icon.svg" alt="">Seat<span>Sync</span></a>
+        <a class="gh" data-repo href="#">GitHub</a>
+      </nav>
+      <div class="hero-body">
+        <div>
+          <h1>예약한 자리,<br><em>정말 쓰고 있나요?</em></h1>
+          <p class="lead">SeatSync는 열람실의 <b>예약 기록</b>과 카메라가 감지한 <b>실제 착석 상태</b>를 대조해
+            사석화·이탈·무단 점유를 좌석마다 찾아 주는 좌석 관리 서비스입니다.</p>
+          <div class="cta">
+            <a class="btn primary" data-app href="#">SeatSync 바로가기 →</a>
+            <a class="btn ghost" href="#features">기능 둘러보기</a>
+          </div>
+          <p class="url">서비스 주소 <code data-app-text></code></p>
+        </div>
+        <div class="mini" aria-hidden="true">
+          <div class="bar"><b>A-2</b> · 남은 시간 <b>1시간 12분</b> · 내 자리</div>
+          <div class="window"></div>
+          <div class="grid">
+            <div class="s a">A-1<small>빈자리</small></div>
+            <div class="s me">A-2<small>내 자리</small></div>
+            <div class="s t"><span class="bang">!</span>A-3<small>무단 점유</small></div>
+            <div class="s t">A-4<small>사용중</small></div>
+            <div class="s a">A-5<small>빈자리</small></div>
+            <div class="gap"></div><div class="gap"></div><div class="gap"></div><div class="gap"></div><div class="gap"></div>
+            <div class="s t"><span class="bang o">!</span>B-1<small>이탈</small></div>
+            <div class="s a">B-2<small>빈자리</small></div>
+            <div></div>
+            <div class="s t">C-1<small>사용중</small></div>
+            <div class="s t"><span class="bang p">!</span>C-2<small>사석화</small></div>
+            <div class="table"></div><div></div><div class="table"></div>
+            <div class="s a">B-3<small>빈자리</small></div>
+            <div class="s u">B-4<small>사용불가</small></div>
+            <div></div>
+            <div class="s t">C-3<small>사용중</small></div>
+            <div class="s a">C-4<small>빈자리</small></div>
+          </div>
+          <div class="legend">
+            <span><i style="background:var(--green)"></i>빈자리</span><span><i style="background:var(--blue)"></i>사용중</span>
+            <span><i style="background:var(--gray)"></i>사용불가</span><span><i style="background:var(--red);border-radius:50%"></i>처리 필요(관리자)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <div class="wrap">
+        <h2>이런 문제를 해결합니다</h2>
+        <p class="sub">예약 시스템의 "예약됨"과 열람실의 실제 모습은 자주 다릅니다.</p>
+        <div class="problem">
+          <div class="card"><div class="ic">🎒</div><h3>사석화</h3><p>짐만 두고 몇 시간째 비어 있는 자리. 예약 화면에는 "사용중"으로 보여 다른 사람이 쓰지 못합니다.</p></div>
+          <div class="card"><div class="ic">🚶</div><h3>이탈</h3><p>예약해 놓고 자리를 떠난 채 돌아오지 않는 경우. 좌석이 계속 묶여 있습니다.</p></div>
+          <div class="card"><div class="ic">🙅</div><h3>무단 점유</h3><p>예약 없이 앉아 있어 예약한 사람이 자리를 쓰지 못하는 경우. 관리자는 돌아보기 전엔 모릅니다.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="wrap">
+        <h2>주요 기능</h2>
+        <p class="sub">이용자는 폰만으로, 관리자는 한 화면에서.</p>
+        <div class="features">
+          <div class="card"><div class="ic">🗺️</div><h3>실시간 좌석 지도<span class="who u">이용자</span></h3><p>20석 배치도에서 빈자리 · 사용중 · 사용불가를 보고 바로 예약. 지금 혼잡도도 함께.</p></div>
+          <div class="card"><div class="ic">📱</div><h3>좌석 QR 체크인<span class="who u">이용자</span></h3><p>좌석에 붙은 QR을 찍으면 체크인·바로 예약. 좌석에 가지 않고는 체크인할 수 없습니다.</p></div>
+          <div class="card"><div class="ic">🔔</div><h3>빈자리 알림<span class="who u">이용자</span></h3><p>원하는 구역을 골라 대기하면, 빈자리가 날 때 순서대로 5분간 먼저 예약할 기회를 줍니다.</p></div>
+          <div class="card"><div class="ic">⚠️</div><h3>사전 경고<span class="who u">이용자</span></h3><p>자리를 비운 지 오래되면 이탈·사석화로 처리되기 10분 전에 본인에게 먼저 알려 줍니다.</p></div>
+          <div class="card"><div class="ic">🗓️</div><h3>내 이용 기록 · 혼잡도<span class="who u">이용자</span></h3><p>일/주/월별 이용 시간, 연장·반납 이력, 요일×시간 혼잡도 히트맵.</p></div>
+          <div class="card"><div class="ic">🛠️</div><h3>관리자 대시보드<span class="who m">관리자</span></h3><p>문제 좌석 ! 표시, 상황별 조치 버튼, 예약 대조 표, 판정 피드백·정확도, 경고·이용 정지.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <h2>어떻게 동작하나요</h2>
+        <p class="sub">카메라 영상은 라즈베리파이 안에서만 처리하고, 웹은 좌석 상태만 받습니다.</p>
+        <div class="steps">
+          <div class="step"><h3>감지</h3><p>라즈베리파이 카메라가 좌석마다 사람이 있는지 판단합니다(YOLO11n).</p></div>
+          <div class="step"><h3>전송</h3><p>좌석 번호와 상태만 웹으로 보냅니다. 영상·얼굴은 저장하지 않습니다.</p></div>
+          <div class="step"><h3>대조</h3><p>예약 기록과 비교해 좌석 상태와 처리 필요 여부를 판정합니다.</p></div>
+          <div class="step"><h3>알림 · 조치</h3><p>본인에게 사전 경고, 관리자에게 처리 필요 알림. 조치는 관리자가 결정합니다.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <h2>좌석 상태</h2>
+        <p class="sub">이용자에게는 세 가지만, 관리자에게는 세부 상태와 처리 필요(!)까지 보입니다.</p>
+        <table class="states">
+          <tr><th><span class="pill" style="background:var(--green)">빈자리</span></th><td><span class="tag">빈자리</span></td></tr>
+          <tr><th><span class="pill" style="background:var(--blue)">사용중</span></th><td>
+            <span class="tag">이용 중</span><span class="tag">입실 대기</span><span class="tag">잠시 자리 비움</span><span class="tag">짐만 있음</span>
+            <span class="tag x">! 무단 점유</span><span class="tag x">! 체크인 누락</span><span class="tag x">! 이탈</span><span class="tag x">! 사석화</span></td></tr>
+          <tr><th><span class="pill" style="background:var(--gray)">사용불가</span></th><td>
+            <span class="tag">고장</span><span class="tag">점검·청소</span><span class="tag">사용 중지</span><span class="tag x">! 예약 좌석 사용불가</span></td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <h2>체험해 보기</h2>
+        <p class="sub">회원가입 후 바로 쓸 수 있고, 체험용 계정도 있습니다.</p>
+        <div class="try">
+          <div class="card"><h3>이용자로</h3><p>체험용 계정 <code>userA</code> · <code>userB</code> · <code>userC</code>, 비밀번호 <code>1234</code><br>
+            좌석 지도에서 빈자리를 눌러 예약하고, 내 자리·내 기록·혼잡도를 둘러보세요.</p></div>
+          <div class="card"><h3>관리자로</h3><p>로그인 후 상단의 <b>[관리자]</b> 스위치를 켜고 관리자 코드를 입력하면 대시보드가 열립니다.
+            (관리자 코드는 운영자에게 문의)</p></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="final">
+      <a class="btn primary" data-app href="#">SeatSync 바로가기 →</a>
+    </div>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      SeatSync · 열람실 좌석 예약 × 실제 이용 대조 서비스 ·
+      <a data-repo href="#">GitHub 저장소</a> ·
+      감지 프로토타입 <a href="https://github.com/Seojieun05/SKKU_MakerHackerton">SKKU_MakerHackerton</a>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var app = window.SEATSYNC_APP_URL, repo = window.SEATSYNC_REPO_URL;
+      document.querySelectorAll("[data-app]").forEach(function (a) { a.href = app; });
+      document.querySelectorAll("[data-repo]").forEach(function (a) { a.href = repo; });
+      document.querySelectorAll("[data-app-text]").forEach(function (el) { el.textContent = app.replace(/^https?:\/\//, ""); });
+    })();
+  </script>
+</body>
+</html>

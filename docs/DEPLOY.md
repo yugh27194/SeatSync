@@ -1,6 +1,6 @@
 # SeatSync 외부 접속 · 배포 가이드
 
-다른 사람이 **외부 링크**로 SeatSync에 들어오게 하는 방법은 두 가지다.
+다른 사람이 **외부 링크**로 SeatSync에 들어오게 하는 방법은 두 가지다. (소개 페이지는 [C](#c-소개-페이지--github-pages-httpsyugh27194githubioseatsync) 참고)
 
 | | A. 바로 공유 (Cloudflare 임시 터널) | B. 상시 배포 (PythonAnywhere) |
 |---|---|---|
@@ -95,6 +95,29 @@ Source code `~/SeatSync`, Virtualenv `~/.virtualenvs/seatsync`,
 WSGI 파일 내용을 [`deploy/pythonanywhere_wsgi.py`](../deploy/pythonanywhere_wsgi.py)로 교체,
 Static files `/static/` → `~/SeatSync/static`, Force HTTPS 켜기 → Reload.
 비밀 값은 `~/.seatsync.env`에 `SEATSYNC_SECRET_KEY=…` 형식으로 적는다.
+
+### 사이트가 빈 화면일 때
+아이디에 대문자가 있으면(예: `JiYujin`) 예전 스크립트가 WSGI 파일을 잘못된 이름으로 만들었다. 주소는 항상 소문자다.
+```bash
+cd ~/SeatSync && git pull
+~/.virtualenvs/seatsync/bin/python deploy/pythonanywhere_deploy.py
+```
+→ `https://jiyujin.pythonanywhere.com` 처럼 소문자 주소로 접속한다.
+
+---
+
+## C. 소개 페이지 — GitHub Pages (`https://yugh27194.github.io/SeatSync/`)
+
+`pages/` 폴더는 SeatSync를 소개하고 **[SeatSync 바로가기]** 버튼으로 실제 서비스(PythonAnywhere)에 연결하는 정적 페이지다.
+`pages/go/`는 바로 서비스로 넘어가는 짧은 주소다(`…/SeatSync/go/`).
+
+1. 저장소 **Settings → Pages → Build and deployment → Source: GitHub Actions** (한 번만)
+2. `pages/**`가 바뀌어 push되면 `.github/workflows/pages.yml`이 자동 배포한다
+   (처음에는 **Actions → pages → Run workflow**로 직접 실행).
+3. 서비스 주소가 바뀌면 `pages/config.js`의 `SEATSYNC_APP_URL`만 고친다.
+
+`seatsync.github.io`처럼 더 짧은 주소를 원하면 GitHub에서 `seatsync`라는 이름의 계정·조직(비어 있을 때)을 만들고
+`seatsync.github.io` 저장소에 `pages/` 내용을 올린다.
 
 ---
 

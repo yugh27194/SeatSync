@@ -146,7 +146,7 @@ python manage.py runserver 0.0.0.0:5000
 | `python tools/make_qr.py --base-url http://<주소>` | 좌석 QR 이미지 + 인쇄용 페이지 |
 
 **외부 링크로 공유**: `share.bat` 실행 → `https://….trycloudflare.com` 주소 공유 / 상시 배포는 PythonAnywhere
-(`bash deploy/pythonanywhere_setup.sh`) — [docs/DEPLOY.md](docs/DEPLOY.md)
+(`bash deploy/pythonanywhere_setup.sh`), 소개 페이지는 GitHub Pages(`pages/`) — [docs/DEPLOY.md](docs/DEPLOY.md)
 
 ### 환경변수
 
@@ -191,6 +191,7 @@ templates/ static/   화면 · CSS/JS
 config/seats.json    좌석 배치·카메라 대응
 tools/      pi_bridge.py(라즈베리파이→웹) · make_qr.py · simulate.py(가짜 감지)
 deploy/     PythonAnywhere 배포 스크립트
+pages/      소개 페이지(GitHub Pages)
 docs/       기능·구현·API·데이터 플로우·배포 문서
 tests/      pytest
 share.bat / share.sh   외부 링크 공유(Cloudflare 터널)

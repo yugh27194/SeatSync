@@ -33,8 +33,26 @@ def api_host():
 
 
 def web_domain(username):
-    site = api_host()
-    return f"{username}.eu.pythonanywhere.com" if site.startswith("eu.") else f"{username}.pythonanywhere.com"
+    # 주소(도메인)는 항상 소문자다. 아이디에 대문자가 있어도(예: JiYujin) jiyujin.pythonanywhere.com
+    name = username.lower()
+    return f"{name}.eu.pythonanywhere.com" if api_host().startswith("eu.") else f"{name}.pythonanywhere.com"
+
+
+def resolve_domain(pa, domain):
+    """이미 만들어진 웹 앱이 있으면 그 이름을 그대로 쓴다(대소문자 무시로 찾음). (도메인, 있음 여부)"""
+    for a in pa.call("GET", "/webapps/") or []:
+        if str(a.get("domain_name", "")).lower() == domain:
+            return a["domain_name"], True
+    return domain, False
+
+
+def wsgi_paths(domain):
+    """PythonAnywhere가 읽는 WSGI 파일(소문자 이름) + 대소문자만 다른 기존 파일."""
+    target = f"{domain.lower().replace('.', '_')}_wsgi.py"
+    paths = {os.path.join("/var/www", target)}
+    if os.path.isdir("/var/www"):
+        paths |= {os.path.join("/var/www", f) for f in os.listdir("/var/www") if f.lower() == target}
+    return sorted(paths)
 
 
 class PA:
@@ -110,7 +128,8 @@ def main():
     print(f"SeatSync 배포 → https://{domain}")
 
     if args.reload_only:
-        pa.call("POST", f"/webapps/{domain}/reload/")
+        app_domain, _ = resolve_domain(pa, domain)
+        pa.call("POST", f"/webapps/{app_domain}/reload/")
         print("재시작 완료.")
         return 0
 
@@ -118,26 +137,26 @@ def main():
         raise SystemExit(f"{PROJECT} 가 없습니다. 먼저 git clone 하세요.")
     env = ensure_env(args.admin_code, args.dry_run)
 
-    apps = pa.call("GET", "/webapps/")
-    if not any(a.get("domain_name") == domain for a in apps or []):
+    app_domain, exists = resolve_domain(pa, domain)
+    if not exists:
         pyver = f"python{sys.version_info.major}{sys.version_info.minor}"
         print(f"  웹 앱 만들기 ({pyver})")
         pa.call("POST", "/webapps/", {"domain_name": domain, "python_version": pyver})
     else:
-        print("  웹 앱이 이미 있습니다 — 설정만 갱신")
-    pa.call("PATCH", f"/webapps/{domain}/", {"source_directory": PROJECT, "virtualenv_path": VENV, "force_https": "true"})
+        print(f"  웹 앱이 이미 있습니다({app_domain}) — 설정만 갱신")
+    pa.call("PATCH", f"/webapps/{app_domain}/", {"source_directory": PROJECT, "virtualenv_path": VENV, "force_https": "true"})
 
-    wsgi_path = f"/var/www/{domain.replace('.', '_')}_wsgi.py"
-    print(f"  WSGI 파일: {wsgi_path}")
-    if not args.dry_run:
-        shutil.copyfile(os.path.join(PROJECT, "deploy", "pythonanywhere_wsgi.py"), wsgi_path)
+    for wsgi_path in wsgi_paths(app_domain):
+        print(f"  WSGI 파일: {wsgi_path}")
+        if not args.dry_run:
+            shutil.copyfile(os.path.join(PROJECT, "deploy", "pythonanywhere_wsgi.py"), wsgi_path)
 
-    statics = pa.call("GET", f"/webapps/{domain}/static_files/")
+    statics = pa.call("GET", f"/webapps/{app_domain}/static_files/")
     if not any(s.get("url") == "/static/" for s in statics or []):
-        pa.call("POST", f"/webapps/{domain}/static_files/", {"url": "/static/", "path": os.path.join(PROJECT, "static")})
+        pa.call("POST", f"/webapps/{app_domain}/static_files/", {"url": "/static/", "path": os.path.join(PROJECT, "static")})
     print("  정적 파일: /static/ 연결")
 
-    pa.call("POST", f"/webapps/{domain}/reload/")
+    pa.call("POST", f"/webapps/{app_domain}/reload/")
     print("\n배포 완료!")
     print(f"  사이트        : https://{domain}")
     print(f"  관리자 코드   : {env['SEATSYNC_ADMIN_CODE']}  (바꾸려면: python deploy/pythonanywhere_deploy.py --admin-code 새코드)")
