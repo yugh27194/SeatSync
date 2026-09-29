@@ -1,0 +1,62 @@
+"""실제 배치(config/seats.json, 8석: 왼쪽 A-1~A-4 · 오른쪽 B-1~B-4)로 동작하는지 확인."""
+import pytest
+from conftest import T0
+from test_camera import post, snapshot
+
+from seats.models import ACTIVE, Alert, Reservation, Seat, User, WaitEntry
+from seats.seed import seed
+
+
+@pytest.fixture
+def layout8(settings):
+    settings.SEATSYNC = {**settings.SEATSYNC, "SEATS_FILE": settings.BASE_DIR / "config" / "seats.json"}
+
+
+def test_eight_seats_left_and_right(layout8, admin):
+    seed(now=T0)
+    data = admin.jget("/api/seats")
+    seats = {s["label"]: s for s in data["seats"]}
+    assert data["grid"] == {"cols": 3, "rows": 7} and sorted(seats) == ["A-1", "A-2", "A-3", "A-4", "B-1", "B-2", "B-3", "B-4"]
+    assert {seats[f"A-{i}"]["x"] for i in range(1, 5)} == {1} and {seats[f"B-{i}"]["x"] for i in range(1, 5)} == {3}
+    # 20석 배치에서 넘어오면 9~20번은 비활성, 1~8번은 새 이름·위치로 바뀐다
+    assert Seat.objects.filter(active=True).count() == 8
+    assert Seat.objects.get(no=5).label == "B-1"
+
+
+def test_fresh_eight_seats_start_empty(layout8, db):
+    Seat.objects.all().delete()
+    seed(now=T0)
+    assert set(Seat.objects.values_list("state", flat=True)) == {"empty"}
+
+
+def test_removed_seats_release_reservations(layout8, admin, user):
+    # 20석 배치에서 12번 좌석을 예약·대기 중인 상태로 8석으로 줄인다
+    assert user.jpost("/api/reservations", {"seat_no": 12}).status_code in (200, 201)
+    WaitEntry.objects.create(user=User.objects.get(student_no="userB"), zone="집중석", created_at=T0)  # 없어질 구역
+    seed(now=T0)
+    assert not Reservation.objects.filter(seat_id=12, status__in=ACTIVE).exists()
+    assert not WaitEntry.objects.filter(user=User.objects.get(student_no="userB"), status__in=("waiting", "offered")).exists()
+    assert not Alert.objects.filter(seat_id__gt=8, resolved_at__isnull=True).exists()
+    assert user.jget("/api/seats")["my_reservation"] is None
+    assert user.jpost("/api/reservations", {"seat_no": 12}).status_code >= 400   # 없어진 좌석은 예약 불가
+
+
+def test_demo_on_eight_seats(layout8, admin):
+    seed(now=T0)
+    r = admin.jpost("/api/admin/demo")
+    assert r.status_code == 200 and len(r.json()["messages"]) == 6
+    seats = {s["label"]: s for s in admin.jget("/api/admin/seats")["seats"]}
+    expect = {"A-1": "using", "A-2": "away", "A-3": "unauthorized", "A-4": "empty",
+              "B-1": "item", "B-2": "hoarding", "B-3": "empty", "B-4": "broken"}
+    assert {k: seats[k]["detail"] for k in expect} == expect
+    assert {k for k, s in seats.items() if s["check"]} == {"A-2", "A-3", "B-1", "B-2"}
+
+
+def test_one_camera_covers_eight_seats(layout8, device, clock, admin):
+    seed(now=T0)
+    ids = {f"A0{i}": ("OCCUPIED" if i == 5 else "EMPTY", 0.9, 3) for i in range(1, 9)}
+    r = post(device, snapshot(clock, ids)).json()
+    assert r["accepted"] == 8 and not r["missing"] and not r["ignored"]
+    assert Seat.objects.get(label="B-1").state == "occupied"   # A05 = 오른쪽 첫 자리
+    cfg = device.get("/api/device/config?camera_id=cam1", HTTP_X_DEVICE_KEY="test-key").json()
+    assert [s["camera_seat"] for s in cfg["seats"]] == [f"A0{i}" for i in range(1, 9)]

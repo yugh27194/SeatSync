@@ -1,46 +1,35 @@
 {
-  "grid": {"cols": 5, "rows": 12},
+  "grid": {"cols": 3, "rows": 7},
   "cameras": {
-    "cam1": "창가석 A-1~A-5, 4인 테이블 B (좌석 9개: calibrate 순서 A01~A09)",
-    "cam2": "4인 테이블 C, 집중석 D, 노트북석 E (좌석 11개: calibrate 순서 A01~A11)"
+    "cam1": "좌석 8개 (calibrate 순서 A01~A04 = 왼쪽 A-1~A-4, A05~A08 = 오른쪽 B-1~B-4)"
   },
   "zones": {
-      "창가석": "창가 1인석 · 채광 좋음",
-      "4인 테이블 B": "마주 보는 4인 테이블",
-      "4인 테이블 C": "마주 보는 4인 테이블",
-      "집중석": "칸막이 1인 집중석",
-      "노트북석": "콘센트 있는 노트북 바"
+      "왼쪽": "왼쪽 1인석 4개",
+      "오른쪽": "오른쪽 1인석 4개"
   },
   "seats": [
-    {"no": 1, "label": "A-1", "x": 1, "y": 2, "zone": "창가석", "camera_id": "cam1", "camera_seat": "A01"},
-    {"no": 2, "label": "A-2", "x": 2, "y": 2, "zone": "창가석", "camera_id": "cam1", "camera_seat": "A02"},
-    {"no": 3, "label": "A-3", "x": 3, "y": 2, "zone": "창가석", "camera_id": "cam1", "state": "unauthorized", "camera_seat": "A03"},
-    {"no": 4, "label": "A-4", "x": 4, "y": 2, "zone": "창가석", "camera_id": "cam1", "camera_seat": "A04"},
-    {"no": 5, "label": "A-5", "x": 5, "y": 2, "zone": "창가석", "camera_id": "cam1", "state": "using", "camera_seat": "A05"},
-    {"no": 6, "label": "B-1", "x": 1, "y": 4, "zone": "4인 테이블 B", "camera_id": "cam1", "camera_seat": "A06"},
-    {"no": 7, "label": "B-2", "x": 2, "y": 4, "zone": "4인 테이블 B", "camera_id": "cam1", "camera_seat": "A07"},
-    {"no": 8, "label": "B-3", "x": 1, "y": 6, "zone": "4인 테이블 B", "camera_id": "cam1", "camera_seat": "A08"},
-    {"no": 9, "label": "B-4", "x": 2, "y": 6, "zone": "4인 테이블 B", "camera_id": "cam1", "camera_seat": "A09"},
-    {"no": 10, "label": "C-1", "x": 4, "y": 4, "zone": "4인 테이블 C", "camera_id": "cam2", "camera_seat": "A01"},
-    {"no": 11, "label": "C-2", "x": 5, "y": 4, "zone": "4인 테이블 C", "camera_id": "cam2", "camera_seat": "A02"},
-    {"no": 12, "label": "C-3", "x": 4, "y": 6, "zone": "4인 테이블 C", "camera_id": "cam2", "camera_seat": "A03"},
-    {"no": 13, "label": "C-4", "x": 5, "y": 6, "zone": "4인 테이블 C", "camera_id": "cam2", "camera_seat": "A04"},
-    {"no": 14, "label": "D-1", "x": 1, "y": 8, "zone": "집중석", "camera_id": "cam2", "booth": true, "camera_seat": "A05"},
-    {"no": 15, "label": "D-2", "x": 2, "y": 8, "zone": "집중석", "camera_id": "cam2", "booth": true, "camera_seat": "A06"},
-    {"no": 16, "label": "D-3", "x": 4, "y": 8, "zone": "집중석", "camera_id": "cam2", "booth": true, "camera_seat": "A07"},
-    {"no": 17, "label": "D-4", "x": 5, "y": 8, "zone": "집중석", "camera_id": "cam2", "booth": true, "camera_seat": "A08"},
-    {"no": 18, "label": "E-1", "x": 1, "y": 10, "zone": "노트북석", "camera_id": "cam2", "camera_seat": "A09"},
-    {"no": 19, "label": "E-2", "x": 2, "y": 10, "zone": "노트북석", "camera_id": "cam2", "camera_seat": "A10"},
-    {"no": 20, "label": "E-3", "x": 3, "y": 10, "zone": "노트북석", "camera_id": "cam2", "state": "broken", "note": "콘센트 고장", "camera_seat": "A11"}
+    {"no": 1, "label": "A-1", "x": 1, "y": 2, "zone": "왼쪽", "camera_id": "cam1", "camera_seat": "A01"},
+    {"no": 2, "label": "A-2", "x": 1, "y": 3, "zone": "왼쪽", "camera_id": "cam1", "camera_seat": "A02"},
+    {"no": 3, "label": "A-3", "x": 1, "y": 4, "zone": "왼쪽", "camera_id": "cam1", "camera_seat": "A03"},
+    {"no": 4, "label": "A-4", "x": 1, "y": 5, "zone": "왼쪽", "camera_id": "cam1", "camera_seat": "A04"},
+    {"no": 5, "label": "B-1", "x": 3, "y": 2, "zone": "오른쪽", "camera_id": "cam1", "camera_seat": "A05"},
+    {"no": 6, "label": "B-2", "x": 3, "y": 3, "zone": "오른쪽", "camera_id": "cam1", "camera_seat": "A06"},
+    {"no": 7, "label": "B-3", "x": 3, "y": 4, "zone": "오른쪽", "camera_id": "cam1", "camera_seat": "A07"},
+    {"no": 8, "label": "B-4", "x": 3, "y": 5, "zone": "오른쪽", "camera_id": "cam1", "camera_seat": "A08"}
   ],
   "fixtures": [
-    {"label": "창문", "x": 1, "y": 1, "w": 5, "kind": "window"},
-    {"label": "테이블", "x": 1, "y": 5, "w": 2, "kind": "table"},
-    {"label": "테이블", "x": 4, "y": 5, "w": 2, "kind": "table"},
-    {"label": "통로", "x": 3, "y": 4, "h": 5, "kind": "aisle"},
-    {"label": "사물함", "x": 4, "y": 10, "w": 2, "kind": "locker"},
-    {"label": "벽 · 콘센트", "x": 1, "y": 11, "w": 3, "kind": "wall"},
-    {"label": "출입문", "x": 1, "y": 12, "w": 2, "kind": "door"},
-    {"label": "안내데스크", "x": 4, "y": 12, "w": 2, "kind": "desk"}
+    {"label": "창문", "x": 1, "y": 1, "w": 3, "kind": "window"},
+    {"label": "통로", "x": 2, "y": 2, "h": 4, "kind": "aisle"},
+    {"label": "벽 · 콘센트", "x": 1, "y": 6, "w": 3, "kind": "wall"},
+    {"label": "출입문", "x": 1, "y": 7, "kind": "door"},
+    {"label": "안내데스크", "x": 3, "y": 7, "kind": "desk"}
+  ],
+  "demo": [
+    {"seat": "A-1", "user": "userA", "reservation": "in_use", "start_ago_min": 30, "state": "occupied", "state_ago_min": 30, "memo": "정상 이용"},
+    {"seat": "A-2", "user": "userB", "reservation": "in_use", "start_ago_min": 50, "state": "empty", "state_ago_min": 40, "memo": "이탈"},
+    {"seat": "A-3", "state": "occupied", "state_ago_min": 10, "memo": "무단 점유"},
+    {"seat": "B-1", "user": "20260004", "reservation": "in_use", "start_ago_min": 40, "state": "item", "state_ago_min": 5, "memo": "짐만 있음(잠시 자리 비움)"},
+    {"seat": "B-2", "user": "20260002", "reservation": "in_use", "start_ago_min": 60, "state": "item", "state_ago_min": 40, "memo": "사석화"},
+    {"seat": "B-4", "state": "unavailable", "reason": "broken", "state_ago_min": 90, "note": "콘센트 고장", "memo": "고장(콘센트)"}
   ]
 }

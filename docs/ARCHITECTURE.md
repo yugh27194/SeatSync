@@ -33,7 +33,7 @@ seats/                    핵심 앱
   clock.py / timeutil.py  현재 시각(테스트에서 교체) / KST 변환(Windows 시간대 DB 없을 때 +09:00 대체)
   management/commands/    init_db · demo · demo_history · serve
 templates/ static/        화면(Django 템플릿), CSS·JS
-config/seats.json         좌석 20석 배치·구역·카메라 대응표
+config/seats.json         좌석 8석 배치·구역·카메라 대응표·시연 상황
 tools/                    pi_bridge.py(Pi→웹) · simulate.py · make_qr.py
 deploy/ docs/             배포 스크립트 · 문서
 tests/                    pytest
@@ -129,7 +129,7 @@ flowchart LR
 
 | 경로 | 화면 | JS |
 |---|---|---|
-| `/map` | 좌석 지도(20석 배치도), 내 자리 바, 빈자리 알림, 지금 혼잡도 | map.js (3초) |
+| `/map` | 좌석 지도(8석 배치도), 내 자리 바, 빈자리 알림, 지금 혼잡도 | map.js (3초) |
 | `/seat/{no}` | 좌석 QR 도착 페이지 — 체크인·바로 예약·연장·반납·관리자 호출 | seat.js |
 | `/my` | 내 자리 — 남은 시간 카운트다운, 연장·반납·호출, 내 좌석 경고 | my.js |
 | `/history` | 내 이용 기록 | history.js |

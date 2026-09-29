@@ -325,26 +325,13 @@ def compute_hourly_stats(day_start, day_end, now):
 # ---------------------------------------------------------------- 시연 상황 배치
 
 # (좌석 라벨, 예약자 아이디, 예약 상태, 예약 시작(분 전; None=체크인 제한 초과), 현장 상태, mark, 사유, 현장 시작(분 전), 설명)
-DEMO_LAYOUT = [
-    ("A-1", "userA",    "in_use",   30, "occupied",    None,  None,          30, "정상 이용"),
-    ("A-2", "userB",    "in_use",   50, "empty",       None,  None,          40, "이탈"),
-    ("A-3", None,       None,        0, "occupied",    None,  None,          10, "무단 점유"),
-    ("A-4", "userC",    "reserved",  5, "occupied",    None,  None,           3, "체크인 누락"),
-    ("A-5", None,       None,        0, "occupied",    "ok",  None,          20, "이용 중(관리자 확인, 예약 없음)"),
-    ("B-1", "20260001", "reserved",  3, "unavailable", None,  "broken",       1, "예약 좌석 사용불가"),
-    ("B-2", "20260002", "in_use",   60, "item",        None,  None,          40, "사석화"),
-    ("B-3", "20260003", "reserved", None, "empty",     None,  None,          30, "미입실 → 자동 취소"),
-    ("B-4", "20260004", "in_use",   40, "item",        None,  None,           5, "짐만 있음(잠시 자리 비움)"),
-    ("C-1", "20260005", "reserved",  3, "empty",       None,  None,          30, "입실 대기"),
-    ("C-2", None,       None,        0, "item",        None,  None,          15, "무단 점유(짐으로 자리 맡기)"),
-    ("D-1", None,       None,        0, "unavailable", None,  "maintenance", 30, "점검·청소"),
-    ("E-3", None,       None,        0, "unavailable", None,  "broken",      90, "고장(콘센트)"),
-]
-DEMO_NOTES = {"B-1": "의자 파손", "D-1": "청소 중", "E-3": "콘센트 고장"}
-
-
 def setup_demo(now):
-    """활성 예약·미해결 알림을 정리하고 DEMO_LAYOUT대로 다양한 상황을 만든다. 안내 문구 목록을 돌려준다."""
+    """활성 예약·미해결 알림을 정리하고 seats.json의 "demo" 목록대로 다양한 상황을 만든다. 안내 문구 목록을 돌려준다.
+
+    demo 항목: {"seat": 좌석 라벨, "user": 아이디, "reservation": "in_use"|"reserved", "start_ago_min": 예약 시작 몇 분 전
+    (없으면 체크인 제한을 넘긴 예약 → 미입실), "state": 현장 상태, "mark", "reason", "state_ago_min", "note", "memo"}
+    """
+    from .seed import load_layout
     msgs = []
     with transaction.atomic():
         s = get_settings()
@@ -354,15 +341,18 @@ def setup_demo(now):
         SeatState.objects.all().delete()  # 같은 상태라도 알림이 새로 생기게 캐시를 비운다
         seats = {st.label: st for st in Seat.objects.filter(active=True)}
         # 목록에 없는 좌석은 빈자리로
-        listed = {row[0] for row in DEMO_LAYOUT}
+        demo = load_layout()["demo"]
+        listed = {d["seat"] for d in demo}
         Seat.objects.filter(active=True).exclude(label__in=listed).update(
             state="empty", mark=None, reason=None, note=None, state_since=now, state_source="manual")
-        for label, sno, status, start_ago, state, mark, reason, state_ago, memo in DEMO_LAYOUT:
+        for d in demo:
+            label, sno, status, start_ago = d["seat"], d.get("user"), d.get("reservation", "in_use"), d.get("start_ago_min")
             seat = seats.get(label)
             if seat is None:
                 continue
-            seat.state, seat.mark, seat.reason = state, mark, reason
-            seat.note, seat.state_since, seat.state_source = DEMO_NOTES.get(label), now - state_ago * 60, "manual"
+            seat.state, seat.mark, seat.reason = d.get("state", "empty"), d.get("mark"), d.get("reason")
+            seat.note, seat.state_since = d.get("note"), now - int(d.get("state_ago_min", 0)) * 60
+            seat.state_source = "manual"
             seat.save()
             who = "예약 없음"
             if sno:
@@ -379,7 +369,7 @@ def setup_demo(now):
                 if status == "in_use":
                     record_event(res, "checkin", start)
                 who = f"{user.name} {'이용 중' if status == 'in_use' else '예약'}"
-            msgs.append(f"{label}: {who} → {memo}")
+            msgs.append(f"{label}: {who} → {d.get('memo', '')}")
         refresh(now)
     return msgs
 

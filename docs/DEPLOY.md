@@ -73,7 +73,7 @@ bash deploy/pythonanywhere_setup.sh --admin-code admin
 ```bash
 cd ~/SeatSync && bash deploy/pythonanywhere_update.sh
 ```
-`git pull` → 패키지 설치 → DB 마이그레이션 → 웹 앱 재시작.
+`git pull` → 패키지 설치 → DB 마이그레이션·좌석 배치 반영 → 웹 앱 재시작.
 
 ### 4) 설정 바꾸기
 - 관리자 코드: `~/.virtualenvs/seatsync/bin/python deploy/pythonanywhere_deploy.py --admin-code 새코드`
@@ -81,7 +81,7 @@ cd ~/SeatSync && bash deploy/pythonanywhere_update.sh
 
 ### 5) 알아 둘 점 (무료 계정)
 - 3개월마다 Web 탭의 **"Run until 3 months from today"** 버튼을 눌러 연장해야 한다(메일로 알려 줌).
-- 사용량(CPU) 제한이 있지만 이 사이트 규모(좌석 20석, 3초 polling)에서는 충분하다.
+- 사용량(CPU) 제한이 있지만 이 사이트 규모(좌석 8석, 3초 polling)에서는 충분하다.
 - 오류가 나면 Web 탭의 **Error log**를 확인한다.
 - 좌석 QR은 고정 주소로 한 번만 만들면 된다:
   `~/.virtualenvs/seatsync/bin/python tools/make_qr.py --base-url https://아이디.pythonanywhere.com`

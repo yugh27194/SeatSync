@@ -7,7 +7,7 @@ from django.contrib.auth.hashers import make_password
 from django.db import transaction
 
 from . import clock
-from .models import Seat, Setting, User
+from .models import ACTIVE, Alert, Reservation, Seat, Setting, User, WaitEntry
 from .status import ASSIGNABLE, DEFAULT_SETTINGS
 
 # (학번/아이디, 이름, 비밀번호). 관리자 계정은 두지 않는다 — 관리자 권한은 관리자 코드로 켠다.
@@ -21,7 +21,8 @@ def load_layout(path=None):
     with open(path or settings.SEATSYNC["SEATS_FILE"], encoding="utf-8") as f:
         data = json.load(f)
     return {"grid": data.get("grid", {"cols": 1, "rows": 1}), "seats": data.get("seats", []),
-            "fixtures": data.get("fixtures", []), "zones": data.get("zones", {}), "cameras": data.get("cameras", {})}
+            "fixtures": data.get("fixtures", []), "zones": data.get("zones", {}), "cameras": data.get("cameras", {}),
+            "demo": data.get("demo", [])}
 
 
 def seed(now=None, seats_file=None):
@@ -49,8 +50,19 @@ def seed(now=None, seats_file=None):
             state, mark, reason, _ = ASSIGNABLE[detail]
             Seat.objects.create(no=st["no"], qr_token=secrets.token_urlsafe(8), state=state, mark=mark, reason=reason,
                                 note=st.get("note"), state_since=now, state_source="seed", **common)
-        # seats.json에서 빠진 좌석은 비활성 (이력 보존을 위해 삭제하지 않음)
+        # seats.json에서 빠진 좌석은 비활성 (이력 보존을 위해 삭제하지 않음).
+        # 그 좌석의 진행 중 예약·빈자리 안내·미해결 알림은 정리한다 — 지도에서 사라진 좌석에 묶여 있지 않게.
+        gone = list(Seat.objects.filter(active=True).exclude(no__in=nos).values_list("no", flat=True))
+        if gone:
+            Reservation.objects.filter(seat_id__in=gone, status__in=ACTIVE).update(status="cancelled", ended_at=now)
+            WaitEntry.objects.filter(offered_seat_id__in=gone, status="offered").update(
+                status="waiting", offered_seat=None, offered_at=None, expires_at=None)
+            Alert.objects.filter(seat_id__in=gone, resolved_at__isnull=True).update(resolved_at=now, resolution="seat_removed")
         Seat.objects.exclude(no__in=nos).update(active=False)
+        # 없어진 구역으로 대기 중인 빈자리 알림은 취소 (다시 신청하도록)
+        zones = {st.get("zone", "") for st in layout["seats"]}
+        WaitEntry.objects.filter(status__in=("waiting", "offered")).exclude(zone="").exclude(zone__in=zones).update(
+            status="cancelled", ended_at=now)
 
         for student_no, name, pw in SEED_ACCOUNTS:
             if not User.objects.filter(student_no=student_no).exists():

@@ -105,7 +105,7 @@ flowchart LR
 
 ```json
 {"camera_id": "cam1", "post_interval_sec": 2, "server_time": "...",
- "seats": [{"camera_id": "cam1", "camera_seat": "A01", "seat_no": 1, "label": "A-1", "zone": "창가석"}, ...]}
+ "seats": [{"camera_id": "cam1", "camera_seat": "A01", "seat_no": 1, "label": "A-1", "zone": "왼쪽"}, ...]}
 ```
 
 ---
@@ -118,8 +118,9 @@ flowchart LR
 
 | 카메라 | calibrate 순서 → 웹 좌석 |
 |---|---|
-| `cam1` (9석) | A01~A05 → 창가석 **A-1~A-5**, A06~A09 → 4인 테이블 **B-1~B-4** |
-| `cam2` (11석) | A01~A04 → 4인 테이블 **C-1~C-4**, A05~A08 → 집중석 **D-1~D-4**, A09~A11 → 노트북석 **E-1~E-3** |
+| `cam1` (8석) | A01~A04 → 왼쪽 **A-1~A-4**, A05~A08 → 오른쪽 **B-1~B-4** (각각 위에서 아래로) |
+
+카메라를 더 달면 `seats.json`에 `cam2` 등을 추가하고 좌석마다 `camera_id`·`camera_seat`를 적는다.
 
 **현장 작업 순서**: 카메라별로 위 순서대로 좌석 다각형을 그린다 → `pi_bridge.py --check --seats-config config/seats.json`으로
 Pi 설정과 웹 대응표가 일치하는지 확인한다(불일치 좌석을 알려 줌). 대응을 바꾸려면 웹의 `seats.json`을 고치고 `python manage.py init_db`.

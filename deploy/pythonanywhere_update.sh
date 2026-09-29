@@ -5,5 +5,5 @@ cd "$(dirname "$0")/.."
 VENV="$HOME/.virtualenvs/seatsync"
 git pull --ff-only
 "$VENV/bin/pip" install -q -r requirements.txt
-"$VENV/bin/python" manage.py migrate
+"$VENV/bin/python" manage.py init_db   # migrate + 좌석 배치(config/seats.json) 반영
 "$VENV/bin/python" deploy/pythonanywhere_deploy.py --reload-only

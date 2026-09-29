@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 from django.test import Client
@@ -10,6 +11,7 @@ from seats.seed import seed
 
 T0 = 1_790_000_000  # 2026-09-21 경
 DEVICE_KEY = "test-key"
+SEATS20 = Path(__file__).parent / "seats20.json"
 ADMIN_CODE = "test-code"
 
 
@@ -46,7 +48,8 @@ def clock():
 @pytest.fixture(autouse=True)
 def seeded(db, settings, clock):
     settings.PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]  # 테스트 속도용
-    settings.SEATSYNC = {**settings.SEATSYNC, "DEVICE_KEY": DEVICE_KEY, "ADMIN_CODE": ADMIN_CODE}
+    # 테스트는 20석 배치(tests/seats20.json)로 돌린다. 실제 배치(config/seats.json)는 test_layout8.py에서 따로 확인
+    settings.SEATSYNC = {**settings.SEATSYNC, "DEVICE_KEY": DEVICE_KEY, "ADMIN_CODE": ADMIN_CODE, "SEATS_FILE": SEATS20}
     authmod._fails.clear()
     seed(now=T0)
 
