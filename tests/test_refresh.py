@@ -23,7 +23,7 @@ def test_initial_layout_20_seats(admin):
     assert seats["A-3"]["detail"] == "unauthorized"            # seats.json 초기 배분
     assert seats["A-5"]["detail"] == "using" and not seats["A-5"]["needs_action"]
     assert seats["E-3"]["detail"] == "broken" and seats["E-3"]["note"] == "콘센트 고장"
-    assert data["summary"] == {"available": 17, "in_use": 2, "unavailable": 1, "issues": 1}
+    assert data["summary"] == {"available": 17, "in_use": 2, "unavailable": 1, "issues": 1, "checks": 1}
     assert {f["kind"] for f in data["fixtures"]} >= {"window", "table", "door", "desk"}
 
 

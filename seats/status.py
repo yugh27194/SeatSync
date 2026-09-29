@@ -75,22 +75,25 @@ OK = "ok"
 
 # 세부 상태: (상위 상태, 라벨, 처리 필요 여부, 설명)
 DETAILS = {
-    "empty":            (AVAILABLE,   "빈자리",           False, ""),
-    "using":            (IN_USE,      "이용 중",          False, ""),
+    "empty":            (AVAILABLE,   "빈자리",           False, "비어 있어 누구나 예약할 수 있는 좌석입니다."),
+    "using":            (IN_USE,      "이용 중",          False, "예약자가 체크인해 정상적으로 이용하고 있습니다."),
     "waiting":          (IN_USE,      "입실 대기",        False, "예약 후 체크인 전입니다."),
     "seated_unchecked": (IN_USE,      "착석(체크인 전)",  False, "예약자가 착석했지만 아직 체크인하지 않았습니다."),
-    "away_short":       (IN_USE,      "잠시 자리 비움",   False, ""),
-    "item":             (IN_USE,      "짐만 있음",        False, ""),
+    "away_short":       (IN_USE,      "잠시 자리 비움",   False, "이용 중인 예약자가 짐 없이 자리를 비웠습니다. 이탈 기준 시간을 넘기면 '이탈'이 됩니다."),
+    "item":             (IN_USE,      "짐만 있음",        False, "사람은 없고 짐만 있습니다. 이용 중인 예약이 있으면 사석화 기준 시간을 넘길 때 '사석화'가 됩니다."),
     "unauthorized":     (IN_USE,      "무단 점유",        True,  "예약 없이 좌석을 사용하거나 짐으로 자리를 맡아 두었습니다."),
     "no_checkin":       (IN_USE,      "체크인 누락",      True,  "예약 좌석에 착석(또는 짐)이 있지만 체크인하지 않았습니다."),
     "away":             (IN_USE,      "이탈",             True,  "이용 중인 좌석이 기준 시간보다 오래 비어 있습니다."),
     "hoarding":         (IN_USE,      "사석화",           True,  "짐만 두고 기준 시간보다 오래 자리를 비웠습니다."),
-    "broken":           (UNAVAILABLE, "고장",             False, ""),
-    "maintenance":      (UNAVAILABLE, "점검·청소",        False, ""),
-    "blocked":          (UNAVAILABLE, "사용 중지",        False, ""),
+    "broken":           (UNAVAILABLE, "고장",             False, "좌석·책상·전원 등이 고장 나 예약할 수 없습니다."),
+    "maintenance":      (UNAVAILABLE, "점검·청소",        False, "점검이나 청소 중이라 잠시 예약할 수 없습니다."),
+    "blocked":          (UNAVAILABLE, "사용 중지",        False, "운영상 이유로 사용을 막아 둔 좌석입니다."),
     "seat_unavailable": (UNAVAILABLE, "예약 좌석 사용불가", True, "예약된 좌석이 사용불가 상태입니다. 다른 좌석으로 옮겨 주세요."),
 }
 ISSUES = [k for k, v in DETAILS.items() if v[2]]
+# 좌석 지도에서 붉게 강조하고 '!'(확인 필요)를 붙이는 세부 상태: 이석·짐만 있음·무단 점유 등.
+# 처리 필요(ISSUES)에 더해, 아직 기준 시간 전인 '잠시 자리 비움'·'짐만 있음'도 눈으로 확인하도록 표시한다.
+CHECK = frozenset(ISSUES) | {"away_short", "item"}
 UNAVAILABLE_REASONS = ("broken", "maintenance", "blocked")
 
 ALERT_TYPE_LABELS = {**{k: DETAILS[k][1] for k in ISSUES}, "no_show": "미입실", "call": "이용자 호출"}
@@ -154,6 +157,11 @@ class Judgement:
     @property
     def needs_action(self):
         return DETAILS[self.detail][2]
+
+    @property
+    def check(self):
+        """좌석 지도에 '!'(확인 필요)로 강조할지."""
+        return self.detail in CHECK
 
 
 def _j(detail, since, deadline=None, stale=False):

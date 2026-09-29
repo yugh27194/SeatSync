@@ -13,7 +13,7 @@
     :root {
       --navy: #1c2a44; --blue: #2f6fdf; --blue-d: #1f56b8; --sky: #7fb0ff;
       --text: #1c2430; --muted: #5b6573; --line: #e2e6ec; --bg: #f4f6f9;
-      --green: #23a05a; --gray: #a3abb5; --red: #d93a3f; --orange: #ef8a1f; --purple: #8e3fd6;
+      --green: #23a05a; --gray: #a3abb5; --red: #d93a3f; --orange: #ef8414; --check: #de4a26; --bang: #d0101c;
     }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
@@ -54,11 +54,11 @@
     .s { aspect-ratio: 1 / .9; border-radius: 9px; color: #fff; font-size: 12px; font-weight: 800; display: flex; flex-direction: column;
       align-items: center; justify-content: center; position: relative; }
     .s small { font-weight: 500; font-size: 9px; opacity: .95; }
-    .s.a { background: var(--green); } .s.t { background: var(--blue); } .s.u { background: var(--gray); }
-    .s.me { background: var(--blue); outline: 3px solid #0d2a66; outline-offset: -3px; }
-    .s .bang { position: absolute; top: -6px; left: -6px; width: 18px; height: 18px; border-radius: 50%; background: var(--red);
+    .s.a { background: var(--green); } .s.t { background: var(--orange); } .s.u { background: var(--gray); }
+    .s.c { background: var(--check); box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--bang); }
+    .s.me { background: var(--orange); outline: 3px solid #0d2a66; outline-offset: -3px; }
+    .s .bang { position: absolute; top: -6px; left: -6px; width: 18px; height: 18px; border-radius: 50%; background: var(--bang);
       border: 2px solid #fff; font-size: 11px; line-height: 14px; text-align: center; }
-    .s .bang.o { background: var(--orange); } .s .bang.p { background: var(--purple); }
     .table { grid-column: span 2; height: 18px; background: #e8dcc8; border-radius: 5px; }
     .gap { height: 18px; }
     .mini .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 10px; }
@@ -132,15 +132,15 @@
           <div class="grid">
             <div class="s a">A-1<small>빈자리</small></div>
             <div class="s me">A-2<small>내 자리</small></div>
-            <div class="s t"><span class="bang">!</span>A-3<small>무단 점유</small></div>
+            <div class="s c"><span class="bang">!</span>A-3<small>무단 점유</small></div>
             <div class="s t">A-4<small>사용중</small></div>
             <div class="s a">A-5<small>빈자리</small></div>
             <div class="gap"></div><div class="gap"></div><div class="gap"></div><div class="gap"></div><div class="gap"></div>
-            <div class="s t"><span class="bang o">!</span>B-1<small>이탈</small></div>
+            <div class="s c"><span class="bang">!</span>B-1<small>이석</small></div>
             <div class="s a">B-2<small>빈자리</small></div>
             <div></div>
             <div class="s t">C-1<small>사용중</small></div>
-            <div class="s t"><span class="bang p">!</span>C-2<small>사석화</small></div>
+            <div class="s c"><span class="bang">!</span>C-2<small>짐만 있음</small></div>
             <div class="table"></div><div></div><div class="table"></div>
             <div class="s a">B-3<small>빈자리</small></div>
             <div class="s u">B-4<small>사용불가</small></div>
@@ -149,8 +149,8 @@
             <div class="s a">C-4<small>빈자리</small></div>
           </div>
           <div class="legend">
-            <span><i style="background:var(--green)"></i>빈자리</span><span><i style="background:var(--blue)"></i>사용중</span>
-            <span><i style="background:var(--gray)"></i>사용불가</span><span><i style="background:var(--red);border-radius:50%"></i>처리 필요(관리자)</span>
+            <span><i style="background:var(--green)"></i>빈자리</span><span><i style="background:var(--orange)"></i>사용중</span>
+            <span><i style="background:var(--gray)"></i>사용불가</span><span><i style="background:var(--check)"></i>! 확인 필요(관리자)</span>
           </div>
         </div>
       </div>
@@ -192,8 +192,8 @@
         <div class="steps">
           <div class="step"><h3>감지</h3><p>라즈베리파이 카메라가 좌석마다 사람이 있는지 판단합니다(YOLO11n).</p></div>
           <div class="step"><h3>전송</h3><p>좌석 번호와 상태만 웹으로 보냅니다. 영상·얼굴은 저장하지 않습니다.</p></div>
-          <div class="step"><h3>대조</h3><p>예약 기록과 비교해 좌석 상태와 처리 필요 여부를 판정합니다.</p></div>
-          <div class="step"><h3>알림 · 조치</h3><p>본인에게 사전 경고, 관리자에게 처리 필요 알림. 조치는 관리자가 결정합니다.</p></div>
+          <div class="step"><h3>대조</h3><p>예약 기록과 비교해 좌석 상태와 확인이 필요한지 판정합니다.</p></div>
+          <div class="step"><h3>알림 · 조치</h3><p>본인에게 사전 경고, 관리자에게 확인 필요 알림. 조치는 관리자가 결정합니다.</p></div>
         </div>
       </div>
     </section>
@@ -201,14 +201,12 @@
     <section>
       <div class="wrap">
         <h2>좌석 상태</h2>
-        <p class="sub">이용자에게는 세 가지만, 관리자에게는 세부 상태와 처리 필요(!)까지 보입니다.</p>
+        <p class="sub">색만 보면 됩니다. 확인 필요(!)는 관리자 모드에서만 보입니다.</p>
         <table class="states">
-          <tr><th><span class="pill" style="background:var(--green)">빈자리</span></th><td><span class="tag">빈자리</span></td></tr>
-          <tr><th><span class="pill" style="background:var(--blue)">사용중</span></th><td>
-            <span class="tag">이용 중</span><span class="tag">입실 대기</span><span class="tag">잠시 자리 비움</span><span class="tag">짐만 있음</span>
-            <span class="tag x">! 무단 점유</span><span class="tag x">! 체크인 누락</span><span class="tag x">! 이탈</span><span class="tag x">! 사석화</span></td></tr>
-          <tr><th><span class="pill" style="background:var(--gray)">사용불가</span></th><td>
-            <span class="tag">고장</span><span class="tag">점검·청소</span><span class="tag">사용 중지</span><span class="tag x">! 예약 좌석 사용불가</span></td></tr>
+          <tr><th><span class="pill" style="background:var(--green)">초록</span></th><td>빈자리 — 바로 예약할 수 있어요</td></tr>
+          <tr><th><span class="pill" style="background:var(--orange)">주황</span></th><td>사용중</td></tr>
+          <tr><th><span class="pill" style="background:var(--gray)">회색</span></th><td>사용불가 (고장·점검 등)</td></tr>
+          <tr><th><span class="pill" style="background:var(--check)">! 붉은색</span></th><td>확인 필요 — 이석·짐만 있음·무단 점유 등. 관리자가 좌석을 누르면 어떤 상태인지와 처리 방법이 나옵니다.</td></tr>
         </table>
       </div>
     </section>

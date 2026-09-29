@@ -125,8 +125,8 @@ def seats(request):
         seat, j = it["seat"], it["j"]
         row = {"no": seat.no, "label": seat.label, "x": seat.x, "y": seat.y, "zone": seat.zone,
                "booth": seat.no in booths, "view": _seat_view(it, my, request.user.id)}
-        if request.admin:  # 관리자 모드에서만 '처리 필요' 표시
-            row["attention"] = j.needs_action
+        if request.admin:  # 관리자 모드에서만 '!'(확인 필요) 표시
+            row["attention"] = j.check
             row["detail_label"] = DETAILS[j.detail][1]
         out.append(row)
     return jres({

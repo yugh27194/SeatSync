@@ -11,9 +11,12 @@
   --warn: #ef8a1f;
   --ok: #23a05a;
 
+  /* 좌석 색: 초록 빈자리 · 주황 사용중 · 회색 사용불가 · 붉은 주황 + 빨간 ! 확인 필요 */
   --v-available: #23a05a;
-  --v-taken: #2f6fdf;
+  --v-taken: #ef8414;
   --v-unavailable: #a3abb5;
+  --v-check: #de4a26;
+  --bang: #d0101c;
 
   --radius: 12px;
   --shadow: 0 1px 3px rgba(20, 30, 50, .08), 0 4px 12px rgba(20, 30, 50, .05);
@@ -129,6 +132,8 @@ input:focus, textarea:focus { outline: 2px solid #b8d0ff; border-color: var(--pr
 .seat.v-available { background: var(--v-available); }
 .seat.v-taken { background: var(--v-taken); }
 .seat.v-unavailable { background: var(--v-unavailable); }
+/* 사용중 좌석이 이석·짐만 있음·무단 점유 등이면 조금 더 붉게 (사용불가 좌석은 회색 유지, !만 붙음) */
+.seat.v-taken.check, .seat.v-mine.check, .seat.st-in_use.check { background: var(--v-check); }
 .seat.v-mine { background: var(--v-taken); border: 4px solid #0d2a66; box-shadow: 0 0 0 2px #fff inset; }
 .seat.v-mine::after { content: "★"; position: absolute; top: 2px; right: 6px; color: #ffd84a; font-size: 14px; }
 .seat.checking { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.18) 0 6px, transparent 6px 12px); }
@@ -247,7 +252,6 @@ table.recon tr.mismatch td:first-child { box-shadow: inset 4px 0 0 var(--danger)
 .st-in_use      { background: var(--v-taken); color: #fff; }
 .st-unavailable { background: var(--v-unavailable); color: #fff; }
 .chip.st-issue  { background: #fdecec; color: #a4262c; }
-.admin-map .seat.issue { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--danger); }
 .admin-map .seat .warn-tag { display: inline-block; margin-top: 3px; background: #fff; color: #b3141b; border-radius: 6px; padding: 0 5px; font-size: 11px; font-weight: 800; }
 .statetag.sit-issue { background: #fdecec; color: #a4262c; }
 .statetag.sit-ok { background: #e2f5ea; color: #17733f; }
@@ -265,6 +269,8 @@ table.recon tr.mismatch td:first-child { box-shadow: inset 4px 0 0 var(--danger)
 .situation-box { border-radius: 10px; padding: 10px 12px; margin: 10px 0; background: #fdecec; color: #7d1d21; font-size: 14px; }
 .situation-box b { font-size: 15px; }
 .situation-box.ok { background: #eef7f1; color: #17563a; }
+.situation-box .sit-desc { margin: 6px 0 0; }
+.situation-box .sit-guide { margin: 6px 0 0; background: rgba(255,255,255,.7); border-radius: 8px; padding: 6px 8px; color: #3b2a1a; }
 .warnings { font-weight: 700; }
 .warnings.hot { color: var(--danger); }
 table.recon td .btn-row { flex-wrap: nowrap; }
@@ -278,12 +284,13 @@ table.recon td .btn-row { flex-wrap: nowrap; }
 
 /* ---------- 문제 좌석 표시 (!) ---------- */
 :root {
-  --i-unauthorized: #d93a3f;     /* 무단 점유 */
-  --i-away: #ef8a1f;             /* 이탈 */
-  --i-hoarding: #8e3fd6;         /* 사석화 */
-  --i-no_checkin: #e0a800;       /* 체크인 누락 */
-  --i-seat_unavailable: #334155; /* 예약 좌석 사용불가 */
-  --i-generic: #d93a3f;
+  /* 유형별로 색을 나누지 않고 모두 빨간색 하나로 강조한다 */
+  --i-unauthorized: var(--bang);
+  --i-away: var(--bang);
+  --i-hoarding: var(--bang);
+  --i-no_checkin: var(--bang);
+  --i-seat_unavailable: var(--bang);
+  --i-generic: var(--bang);
 }
 .seat .bang {
   position: absolute; top: -8px; left: -8px; z-index: 2;
@@ -295,8 +302,7 @@ table.recon td .btn-row { flex-wrap: nowrap; }
 }
 @keyframes bang { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.18); } }
 @media (prefers-reduced-motion: reduce) { .seat .bang { animation: none; } }
-.seat.attn { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--ic, var(--i-generic)); }
-.admin-map .seat.issue { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--ic, var(--i-generic)); }
+.seat.check { box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--bang); }
 .admin-map .seat .warn-tag { color: var(--ic, #b3141b); }
 .i-unauthorized { --ic: var(--i-unauthorized); }
 .i-away { --ic: var(--i-away); }
@@ -317,8 +323,7 @@ table.recon td .btn-row { flex-wrap: nowrap; }
 .attn-bar .txt { flex: 1 1 200px; }
 .attn-bar .dot { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%;
   background: var(--i-generic); color: #fff; font-weight: 900; margin-right: 6px; }
-.seat.st-item-actual { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.16) 0 6px, transparent 6px 12px); }
-.seg button.on.s-item { background: var(--i-hoarding); color: #fff; }
+.seg button.on.s-item { background: var(--v-check); color: #fff; }
 table.recon tr.mismatch[class*="i-"] td:first-child { box-shadow: inset 4px 0 0 var(--ic); }
 
 /* ---------- 관리자 모드 스위치 ---------- */

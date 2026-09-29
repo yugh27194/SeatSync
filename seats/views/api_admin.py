@@ -92,16 +92,18 @@ def seats(request):
         open_alerts.setdefault(a.seat_id, {})[a.type] = a.id
     summary = {k: 0 for k in SEAT_STATES}
     summary["issues"] = 0
+    summary["checks"] = 0
     out = []
     for it in results:
         seat, j, res = it["seat"], it["j"], it["res"]
         summary[j.seat_state] += 1
         summary["issues"] += j.needs_action
+        summary["checks"] += j.check
         out.append({
             "no": seat.no, "label": seat.label, "x": seat.x, "y": seat.y, "zone": seat.zone, "booth": seat.no in booths,
             "seat_state": j.seat_state, "seat_state_label": SEAT_STATES[j.seat_state],
             "detail": j.detail, "detail_label": DETAILS[j.detail][1], "detail_desc": DETAILS[j.detail][3],
-            "needs_action": j.needs_action,
+            "needs_action": j.needs_action, "check": j.check,
             "since": to_iso(j.since), "elapsed_sec": max(0, now - j.since),
             "deadline": to_iso(j.deadline), "deadline_sec": (j.deadline - now) if j.deadline else None,
             "actual": seat.state, "actual_label": ACTUAL_STATES[seat.state], "mark": seat.mark, "reason": seat.reason,

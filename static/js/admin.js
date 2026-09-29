@@ -7,6 +7,17 @@
   const SOURCE = { manual: "관리자 지정", camera: "카메라", checkin: "QR 체크인", return: "반납", seed: "초기 배분" };
   const MARK = { ok: "관리자 확인", issue: "관리자가 문제로 지정" };
   const NEXT = { waiting: "미입실", seated_unchecked: "미입실", away_short: "이탈", item: "사석화" };
+  // 확인 필요(!) 좌석을 처리할 때 보여 주는 안내: 지금 어떤 상태인지 + 무엇을 하면 되는지
+  const GUIDE = {
+    unauthorized: "현장에서 이용자를 확인해 좌석을 배정하거나 퇴실을 안내하세요. 짐만 있다면 짐 주인에게 배정하거나 짐을 수거하세요.",
+    no_checkin: "앉아 있는 사람이 예약자면 대리 체크인, 다른 사람이면 예약자를 다른 좌석으로 옮기세요.",
+    away: "예약자가 기준 시간보다 오래 자리를 비웠습니다. 돌아오지 않으면 강제 반납하고, 반복되면 경고하세요.",
+    hoarding: "짐만 두고 기준 시간보다 오래 비웠습니다. 짐을 보관 처리하고 강제 반납하거나 예약자에게 경고하세요.",
+    seat_unavailable: "예약자를 다른 좌석으로 옮기거나 예약을 취소하세요.",
+    away_short: "아직 기준 시간 전입니다. 곧 돌아오는지 지켜보고, 필요하면 [사전 경고]로 예약자에게 알리세요.",
+    item_res: "예약자가 짐만 두고 자리를 비웠습니다. 기준 시간 전에 돌아오는지 확인하고, 필요하면 [사전 경고]를 보내세요.",
+    item_nores: "예약 없이 짐만 있습니다. 짐 주인을 찾아 좌석을 배정하거나 짐을 수거하세요.",
+  };
   const RES_STATUS = { reserved: "예약(입실 전)", in_use: "이용 중" };
 
   let data = null, alerts = [], users = [];
@@ -55,7 +66,7 @@
     if (seen === null) { seen = ids; return; }
     const fresh = alerts.filter((a) => !seen.has(a.id));
     fresh.forEach((a) => seen.add(a.id));
-    if (fresh.length) { showBanner("처리 필요 · " + fresh.map((a) => `${a.seat_label} ${a.type_label}`).join(", ")); beep(); }
+    if (fresh.length) { showBanner("확인 필요 · " + fresh.map((a) => `${a.seat_label} ${a.type_label}`).join(", ")); beep(); }
   }
 
   // ------------------------------------------------ 헬퍼
@@ -76,9 +87,9 @@
   function tileSub(s) {
     const r = s.reservation;
     if (s.offer) return `🔔 ${esc(s.offer.user_name)} 안내 중`;
-    if (s.needs_action) return `<span class="warn-tag">${esc(s.detail_label)}</span>`;
+    if (s.check) return `<span class="warn-tag">${esc(s.detail_label)}</span>`;
     if (r && s.detail === "using") return esc(r.user.name);
-    return esc(s.detail_label);
+    return esc(s.seat_state_label);
   }
 
   // 상황별 권장 조치
@@ -97,6 +108,11 @@
       case "hoarding":
         return r ? btn("force", "강제 반납", { res: r.id, label: lbl }, "danger") +
           btn("warn", "예약자 경고", { user: r.user.id, name: r.user.name, alert: alertId || "" }) : "";
+      case "away_short":
+        return r ? btn("notice", "사전 경고", { user: r.user.id, name: r.user.name, seat: s.no, detail: s.detail }, "") : "";
+      case "item":
+        if (r) return btn("notice", "사전 경고", { user: r.user.id, name: r.user.name, seat: s.no, detail: s.detail }, "");
+        return btn("assign", "짐 주인에게 배정", { seat: s.no, checkin: 1 }, "") + btn("leave", "짐 수거 완료", { seat: s.no, label: lbl, item: 1 });
       case "seat_unavailable":
         return r ? btn("move", "다른 좌석으로 이동", { res: r.id, label: lbl }, "") +
           btn("force", "예약 취소", { res: r.id, label: lbl }, "danger") : "";
@@ -112,7 +128,7 @@
       `<span class="chip st-available">빈자리 <b>${sm.available}</b></span>` +
       `<span class="chip st-in_use">사용중 <b>${sm.in_use}</b></span>` +
       `<span class="chip st-unavailable">사용불가 <b>${sm.unavailable}</b></span>` +
-      `<span class="chip st-issue${sm.issues ? "" : " zero"}">! 처리 필요 <b>${sm.issues}</b></span>` +
+      `<span class="chip st-issue${sm.checks ? "" : " zero"}">! 확인 필요 <b>${sm.checks}</b></span>` +
       `<span class="chip plain">점유율 <b>${Math.round(data.live.occupancy * 100)}%</b> · 실사용 <b>${Math.round(data.live.actual_rate * 100)}%</b></span>` +
       `<span class="chip plain${data.waiting ? "" : " zero"}">🔔 빈자리 대기 <b>${data.waiting}</b></span>`;
   }
@@ -121,10 +137,10 @@
     const el = $("admin-map");
     const html = [layoutGrid(el, data, 52)];
     for (const s of data.seats) {
-      const issue = s.needs_action;
-      html.push(`<button type="button" class="seat st-${s.seat_state}${s.booth ? " booth" : ""}${issue ? ` issue i-${s.detail}` : ""}${s.actual === "item" ? " st-item-actual" : ""}${selected === s.no ? " selected" : ""}"
+      const check = s.check;
+      html.push(`<button type="button" class="seat st-${s.seat_state}${s.booth ? " booth" : ""}${check ? " check" : ""}${selected === s.no ? " selected" : ""}"
         data-no="${s.no}" style="grid-column:${s.x};grid-row:${s.y}" title="${esc(s.zone || "")} · ${esc(s.seat_state_label)} · ${esc(s.detail_label)}">
-        ${issue ? '<span class="bang" aria-hidden="true">!</span>' : ""}
+        ${check ? '<span class="bang" aria-hidden="true">!</span>' : ""}
         ${s.stale ? '<span class="cam-off" title="카메라 감지 확인 불가 — 마지막 상태 표시 중">📷?</span>' : ""}
         ${esc(s.label)}<span class="sub">${tileSub(s)}</span></button>`);
     }
@@ -157,8 +173,13 @@
     const r = s.reservation;
 
     let sitHtml;
-    if (s.needs_action) {
-      sitHtml = `<div class="situation-box i-${s.detail}"><b>! ${esc(s.detail_label)}</b> · 처리 필요 · ${fmtRemain(s.elapsed_sec)} 경과<br>${esc(s.detail_desc)}
+    if (s.check) {
+      let when = `${fmtRemain(s.elapsed_sec)}째`;
+      if (s.deadline_sec != null && NEXT[s.detail]) when += ` · ${fmtRemain(s.deadline_sec)} 뒤 '${NEXT[s.detail]}'`;
+      const guide = s.detail === "item" ? GUIDE[r ? "item_res" : "item_nores"] : GUIDE[s.detail];
+      sitHtml = `<div class="situation-box i-${s.detail}"><b>! ${esc(s.seat_state_label)} · ${esc(s.detail_label)}</b> · 확인 필요 · ${when}
+        <p class="sit-desc">${esc(s.detail_desc)}</p>
+        ${guide ? `<p class="sit-guide"><b>처리 방법</b> ${esc(guide)}</p>` : ""}
         <div class="btn-row" style="margin-top:8px">${recommended(s.detail, s, s.alert_id)}
         ${s.alert_id ? btn("resolve", "처리 완료", { alert: s.alert_id }) : ""}</div></div>`;
     } else {
@@ -207,9 +228,10 @@
       <p class="muted small" style="margin:6px 0 0">현장: ${esc(s.actual_label)}${s.mark ? ` · ${MARK[s.mark]}` : ""} · ${SOURCE[s.actual_source] || s.actual_source}
         · ${fmtTime(s.actual_since)}부터 (${fmtRemain(s.actual_elapsed_sec)})${s.note ? ` · 메모: ${esc(s.note)}` : ""}</p>
       <details class="hint"><summary>세부 상태 안내</summary>
-        <p><b>이용 중 · 짐만 있음</b>: 관리자가 확인한 정상 사용입니다. 예약이 없어도 처리 필요로 표시되지 않습니다.
-        (짐만 있음은 이용 중 예약이 있는 좌석이면 사석화 기준 시간이 지난 뒤 사석화로 바뀝니다)<br>
-        <b>! 무단 점유 · 이탈 · 사석화</b>: 기준 시간을 기다리지 않고 바로 처리 필요로 지정합니다. 이탈·사석화는 이용 중인 예약이 있는 좌석만 지정할 수 있습니다.<br>
+        <p><b>이용 중</b>: 관리자가 확인한 정상 사용입니다. 예약이 없어도 무단 점유로 바뀌지 않습니다.<br>
+        <b>짐만 있음</b>: 지도에 붉게 !(확인 필요)로 표시되지만 경고·알림은 보내지 않습니다.
+        (이용 중 예약이 있는 좌석이면 사석화 기준 시간이 지난 뒤 사석화로 바뀝니다)<br>
+        <b>! 무단 점유 · 이탈 · 사석화</b>: 기준 시간을 기다리지 않고 바로 조치 목록에 올립니다. 이탈·사석화는 이용 중인 예약이 있는 좌석만 지정할 수 있습니다.<br>
         <b>카메라가 연결되면</b> 좌석마다 사람·짐·비어 있음이 자동으로 갱신됩니다(사용불가 지정 좌석 제외).</p></details>
       <div class="section-title">예약 기록</div>
       ${resHtml}`;
@@ -217,7 +239,7 @@
 
   function renderAlerts() {
     $("alert-count").textContent = alerts.length;
-    if (!alerts.length) { $("alerts").innerHTML = `<li class="muted small">처리 필요한 좌석이 없습니다.</li>`; return; }
+    if (!alerts.length) { $("alerts").innerHTML = `<li class="muted small">조치할 좌석이 없습니다.</li>`; return; }
     $("alerts").innerHTML = alerts.map((a) => {
       const s = seatByNo(a.seat_no) || { no: a.seat_no, label: a.seat_label, reservation: null };
       const ru = a.reservation && a.reservation.user;

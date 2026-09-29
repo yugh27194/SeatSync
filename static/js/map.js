@@ -1,4 +1,5 @@
-/* /map — 실시간 좌석 지도 (3초 polling). 처리 필요(!) 표시는 관리자 모드에서만 보인다. */
+/* /map — 실시간 좌석 지도 (3초 polling). 초록 빈자리 · 주황 사용중 · 회색 사용불가.
+   확인 필요(붉은 강조 + !)는 관리자 모드에서만 보인다. */
 (function () {
   "use strict";
   const { api, layoutGrid, poll, fmtRemain, fmtTime, syncClock, serverNow, parseTs, toast, modal, esc } = window.SS;
@@ -21,12 +22,11 @@
     const html = [layoutGrid(mapEl, data, 56)];
     for (const s of data.seats) {
       const attn = admin && s.attention;
-      // 관리자 모드에서는 세부 상태(짐만 있음, 고장 등)를 함께 보여 준다
-      const sub = admin && s.view !== "mine" && s.detail_label ? s.detail_label : SUB[s.view];
+      const sub = SUB[s.view];
       html.push(
-        `<button type="button" class="seat v-${s.view}${s.booth ? " booth" : ""}${attn ? " attn" : ""}" data-no="${s.no}"
-          style="grid-column:${s.x};grid-row:${s.y}" title="${esc(s.zone || "")}"
-          aria-label="${esc(s.label)} ${esc(sub)}${attn ? " · 처리 필요" : ""}">
+        `<button type="button" class="seat v-${s.view}${s.booth ? " booth" : ""}${attn ? " check" : ""}" data-no="${s.no}"
+          style="grid-column:${s.x};grid-row:${s.y}" title="${esc(s.zone || "")}${attn ? ` · 확인 필요: ${esc(s.detail_label)}` : ""}"
+          aria-label="${esc(s.label)} ${esc(sub)}${attn ? " · 확인 필요" : ""}">
           ${attn ? '<span class="bang" aria-hidden="true">!</span>' : ""}
           ${esc(s.label)}<span class="sub">${esc(sub)}</span></button>`
       );
@@ -89,7 +89,7 @@
     const list = data.me.admin ? data.seats.filter((s) => s.attention) : [];
     attnBar.classList.toggle("hidden", !list.length);
     if (list.length) {
-      document.getElementById("attn-text").textContent = `처리 필요 ${list.length}석 · ${list.map((s) => s.label).join(", ")}`;
+      document.getElementById("attn-text").textContent = `확인 필요 ${list.length}석 · ${list.map((s) => s.label).join(", ")}`;
     }
   }
 
