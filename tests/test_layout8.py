@@ -16,8 +16,12 @@ def test_eight_seats_left_and_right(layout8, admin):
     seed(now=T0)
     data = admin.jget("/api/seats")
     seats = {s["label"]: s for s in data["seats"]}
-    assert data["grid"] == {"cols": 3, "rows": 7} and sorted(seats) == ["A-1", "A-2", "A-3", "A-4", "B-1", "B-2", "B-3", "B-4"]
-    assert {seats[f"A-{i}"]["x"] for i in range(1, 5)} == {1} and {seats[f"B-{i}"]["x"] for i in range(1, 5)} == {3}
+    assert data["grid"] == {"cols": 5, "rows": 5} and sorted(seats) == ["A-1", "A-2", "A-3", "A-4", "B-1", "B-2", "B-3", "B-4"]
+    # A1 A2 | B1 B2
+    # A3 A4 | B3 B4
+    pos = {k: (v["x"], v["y"]) for k, v in seats.items()}
+    assert pos == {"A-1": (1, 2), "A-2": (2, 2), "A-3": (1, 3), "A-4": (2, 3),
+                   "B-1": (4, 2), "B-2": (5, 2), "B-3": (4, 3), "B-4": (5, 3)}
     # 20석 배치에서 넘어오면 9~20번은 비활성, 1~8번은 새 이름·위치로 바뀐다
     assert Seat.objects.filter(active=True).count() == 8
     assert Seat.objects.get(no=5).label == "B-1"

@@ -50,10 +50,8 @@
     .mini .bar b { color: var(--blue); }
     .mini .window { height: 14px; border-radius: 5px; margin-bottom: 8px;
       background: repeating-linear-gradient(90deg, #cfe6ff 0 16px, #b9dafc 16px 18px); }
-    .grid { display: grid; grid-template-columns: minmax(0, 1fr) 36px minmax(0, 1fr); gap: 7px; }
-    .grid .s:nth-child(1), .grid .s:nth-child(4), .grid .s:nth-child(6), .grid .s:nth-child(8) { grid-column: 1; }
-    .grid .s:nth-child(3), .grid .s:nth-child(5), .grid .s:nth-child(7), .grid .s:nth-child(9) { grid-column: 3; }
-    .aisle { grid-column: 2; grid-row: 1 / span 4; writing-mode: vertical-rl; display: flex; align-items: center; justify-content: center;
+    .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 30px minmax(0, 1fr) minmax(0, 1fr); gap: 7px; }
+    .aisle { grid-column: 3; grid-row: 1 / span 2; writing-mode: vertical-rl; display: flex; align-items: center; justify-content: center;
       font-size: 11px; color: var(--muted); letter-spacing: 6px; border-left: 1px dashed #dfe3e8; border-right: 1px dashed #dfe3e8; }
     .s { height: 52px; border-radius: 9px; color: #fff; font-size: 12px; font-weight: 800; display: flex; flex-direction: column;
       align-items: center; justify-content: center; position: relative; }
@@ -132,10 +130,11 @@
           <div class="bar"><b>A-2</b> · 남은 시간 <b>1시간 12분</b> · 내 자리</div>
           <div class="window"></div>
           <div class="grid">
-            <div class="s a">A-1<small>빈자리</small></div><div class="aisle">통로</div><div class="s t">B-1<small>사용중</small></div>
-            <div class="s me">A-2<small>내 자리</small></div><div class="s c"><span class="bang">!</span>B-2<small>짐만 있음</small></div>
-            <div class="s c"><span class="bang">!</span>A-3<small>무단 점유</small></div><div class="s a">B-3<small>빈자리</small></div>
-            <div class="s c"><span class="bang">!</span>A-4<small>이석</small></div><div class="s u">B-4<small>사용불가</small></div>
+            <div class="s a">A-1<small>빈자리</small></div><div class="s me">A-2<small>내 자리</small></div>
+            <div class="aisle">통로</div>
+            <div class="s t">B-1<small>사용중</small></div><div class="s c"><span class="bang">!</span>B-2<small>짐만 있음</small></div>
+            <div class="s c"><span class="bang">!</span>A-3<small>무단 점유</small></div><div class="s c"><span class="bang">!</span>A-4<small>이석</small></div>
+            <div class="s a">B-3<small>빈자리</small></div><div class="s u">B-4<small>사용불가</small></div>
           </div>
           <div class="legend">
             <span><i style="background:var(--green)"></i>빈자리</span><span><i style="background:var(--orange)"></i>사용중</span>
