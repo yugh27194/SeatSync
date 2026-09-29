@@ -125,6 +125,7 @@
       html.push(`<button type="button" class="seat st-${s.seat_state}${s.booth ? " booth" : ""}${issue ? ` issue i-${s.detail}` : ""}${s.actual === "item" ? " st-item-actual" : ""}${selected === s.no ? " selected" : ""}"
         data-no="${s.no}" style="grid-column:${s.x};grid-row:${s.y}" title="${esc(s.zone || "")} · ${esc(s.seat_state_label)} · ${esc(s.detail_label)}">
         ${issue ? '<span class="bang" aria-hidden="true">!</span>' : ""}
+        ${s.stale ? '<span class="cam-off" title="카메라 감지 확인 불가 — 마지막 상태 표시 중">📷?</span>' : ""}
         ${esc(s.label)}<span class="sub">${tileSub(s)}</span></button>`);
     }
     el.innerHTML = html.join("");
@@ -195,6 +196,11 @@
           <span class="muted">(${SRC_LABEL[s.actual_source] || s.actual_source})</span> — 실제와 같나요?</span>
         <div class="btn-row">${btn("fb_ok", "✓ 맞음", { seat: s.no }, "ok-btn")}${btn("fb_wrong", "✗ 틀림", { seat: s.no }, "danger")}</div>
       </div>
+      ${s.camera ? `<p class="small cam-line" style="margin:6px 0 0">📷 ${esc(s.camera.camera_id)}·${esc(s.camera.camera_seat)}
+        · ${s.camera.state ? { OCCUPIED: "사람 있음", EMPTY: "사람 없음", UNKNOWN: "확인 불가" }[s.camera.state] : "수신 없음"}
+        ${s.camera.confidence ? ` (점수 ${s.camera.confidence.toFixed(2)})` : ""}
+        ${s.camera.seen_at ? ` · ${fmtTime(s.camera.seen_at)} 수신` : ""}
+        ${s.stale ? ' · <b class="warn-text">감지 끊김 — 마지막 상태 유지, 이탈·사석화 판정 보류</b>' : ""}</p>` : ""}
       ${s.offer ? `<p class="small" style="margin:6px 0 0">🔔 빈자리 알림 대기자 <b>${esc(s.offer.user_name)}</b> 님에게 안내 중 (${fmtRemain(s.offer.left_sec)} 남음)</p>` : ""}
       <div class="section-title">좌석 상태 지정 (임시 배분)</div>
       ${assignPanel(s)}
@@ -523,6 +529,26 @@
   }
   loadAccuracy();
   setInterval(() => { if (document.visibilityState !== "hidden") loadAccuracy(); }, 30000);
+
+  // ------------------------------------------------ 카메라 연결 상태
+  const CAM_STATE = { OCCUPIED: "사람", EMPTY: "없음", UNKNOWN: "확인 불가" };
+  async function loadCameras() {
+    let d;
+    try { d = await api("GET", "/api/admin/cameras", null, { quiet: true }); } catch (e) { return; }
+    $("cameras").innerHTML = d.cameras.map((c) => {
+      const status = !c.connected ? `<span class="pill">연결 기록 없음</span>`
+        : c.fresh ? `<span class="pill green">정상</span>` : `<span class="pill red">끊김 · ${esc(c.health || "")}</span>`;
+      return `<div class="cam-card"><div class="ri-head"><b>📷 ${esc(c.camera_id)}</b> ${status}
+          <span class="muted small">${c.last_seen_at ? `마지막 수신 ${fmtRemain(c.last_seen_sec)} 전` : "아직 수신 없음"}
+          ${c.meaning ? ` · 감지 범위: ${c.meaning === "person_presence_only" ? "사람만(짐 구분 없음)" : esc(c.meaning)}` : ""}
+          ${c.clock_offset ? ` · 시계 보정 ${c.clock_offset}초` : ""}</span></div>
+        <div class="cam-seats">${c.seats.map((st) => `<span class="cam-seat cs-${esc(st.cam_state || "NONE")}"
+          title="${esc(st.camera_seat)} → ${esc(st.label)}${st.confidence ? " · 점수 " + st.confidence.toFixed(2) : ""}">
+          ${esc(st.camera_seat)}→<b>${esc(st.label)}</b> ${st.cam_state ? CAM_STATE[st.cam_state] : "-"}</span>`).join("")}</div></div>`;
+    }).join("") || `<p class="muted small">카메라가 연결된 좌석이 없습니다. config/seats.json에 camera_id·camera_seat를 지정하세요.</p>`;
+  }
+  loadCameras();
+  setInterval(() => { if (document.visibilityState !== "hidden") loadCameras(); }, 5000);
 
   const ticker = poll(load, 3000);
 

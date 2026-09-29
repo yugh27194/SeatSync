@@ -58,9 +58,29 @@ class Seat(models.Model):
     note = models.CharField(max_length=200, null=True, blank=True)
     state_since = models.BigIntegerField(default=0)
     state_source = models.CharField(max_length=10, default="manual")  # manual | camera | checkin | return | seed
+    # 카메라(라즈베리파이 감지 프로토타입) 연동: 이 좌석이 카메라에서 불리는 이름과 마지막 감지 정보
+    camera_seat = models.CharField(max_length=20, blank=True, default="")  # 예: "A01" (calibrate 순서로 붙는 ID)
+    cam_state = models.CharField(max_length=10, null=True, blank=True)       # OCCUPIED | EMPTY | UNKNOWN
+    cam_confidence = models.FloatField(null=True, blank=True)                # 현재 프레임 사람 탐지 점수
+    cam_seen_at = models.BigIntegerField(null=True, blank=True)              # 서버가 마지막으로 받은 시각
+    cam_valid_until = models.BigIntegerField(null=True, blank=True)          # 이 시각이 지나면 감지 확인 불가
+    cam_unknown_since = models.BigIntegerField(null=True, blank=True)        # UNKNOWN(확인 불가) 시작 시각
 
     class Meta:
         ordering = ["no"]
+
+
+class Camera(models.Model):
+    """라즈베리파이 카메라 1대의 연결 상태 (감지 프로토타입의 status.json 스냅샷 기준)."""
+    camera_id = models.CharField(max_length=50, primary_key=True)
+    health = models.CharField(max_length=30, default="")        # ok | starting | inference_too_slow | stopped | error ...
+    meaning = models.CharField(max_length=40, default="")       # person_presence_only 등 (감지 범위)
+    schema_version = models.IntegerField(null=True)
+    observed_at = models.BigIntegerField(null=True)              # 촬영 시각(서버 시계로 보정)
+    valid_until = models.BigIntegerField(null=True)
+    last_seen_at = models.BigIntegerField(null=True)             # 서버 수신 시각
+    clock_offset = models.IntegerField(default=0)                # 서버 - Pi 시계 차이(초)
+    seats_reported = models.IntegerField(default=0)
 
 
 class Reservation(models.Model):
@@ -211,3 +231,5 @@ class JudgmentFeedback(models.Model):
     correct_detail = models.CharField(max_length=20, null=True, blank=True)
     memo = models.CharField(max_length=200, null=True, blank=True)
     applied = models.BooleanField(default=False)     # 올바른 상태로 바로 수정했는지
+    cam_state = models.CharField(max_length=10, null=True, blank=True)   # 피드백 시점의 카메라 판정
+    cam_confidence = models.FloatField(null=True, blank=True)            # 피드백 시점의 사람 탐지 점수 (임계값 조정용)

@@ -8,7 +8,7 @@ from .. import clock
 from ..auth import admin_required
 from ..http import ApiError, int_field, jres, json_body, str_field
 from .. import analytics
-from ..models import AdminLog, Alert, JudgmentFeedback, Reservation, Seat, Setting, User, WaitEntry
+from ..models import AdminLog, Alert, Camera, JudgmentFeedback, Reservation, Seat, Setting, User, WaitEntry
 from ..services import (clear_marks, compute_hourly_stats, get_settings, log_admin, notify, record_event, refresh,
                         set_seat_state, setup_demo)
 from ..status import (ACTUAL_STATES, ALERT_TYPE_LABELS, ASSIGN_GROUPS, ASSIGNABLE, DEFAULT_SETTINGS, DETAILS,
@@ -109,6 +109,12 @@ def seats(request):
             "actual_source": seat.state_source, "note": seat.note,
             "reservation": _res_summary(res, now, s),
             "alert_id": open_alerts.get(seat.no, {}).get(j.detail),
+            "stale": j.stale,
+            "camera": {"camera_id": seat.camera_id, "camera_seat": seat.camera_seat, "state": seat.cam_state,
+                       "confidence": seat.cam_confidence, "seen_at": to_iso(seat.cam_seen_at),
+                       "valid_until": to_iso(seat.cam_valid_until),
+                       "fresh": seat.cam_state in ("OCCUPIED", "EMPTY") and (seat.cam_valid_until or 0) >= now}
+                      if seat.camera_seat else None,
             "offer": {"user_name": it["offer"].user.name, "expires_at": to_iso(it["offer"].expires_at),
                       "left_sec": max(0, it["offer"].expires_at - now)} if it.get("offer") else None,
         })
@@ -561,7 +567,7 @@ def feedback(request, no):
         fb = JudgmentFeedback.objects.create(
             seat=seat, admin_id=request.user.id, at=now, shown_state=j.seat_state, shown_detail=j.detail,
             source=seat.state_source, verdict=verdict, correct_detail=correct if verdict == "wrong" else None,
-            memo=memo, applied=apply)
+            memo=memo, applied=apply, cam_state=seat.cam_state, cam_confidence=seat.cam_confidence)
         if apply:
             state, mark, reason, _ = ASSIGNABLE[correct]
             set_seat_state(seat, state, "manual", now, mark=mark, reason=reason, note=seat.note if state == "unavailable" else None)
@@ -593,3 +599,32 @@ def demo_history(request):
     n = generate_history(now, weeks=weeks)
     log_admin(request.user.id, "demo_history", now, memo=f"{weeks}주 · 예약 {n}건")
     return _ok(reservations=n)
+
+
+# ---------------------------------------------------------------- 카메라 연결 상태
+
+@require_GET
+@admin_required
+def cameras(request):
+    now = clock.now()
+    seats = list(Seat.objects.filter(active=True).exclude(camera_seat="").order_by("camera_id", "camera_seat"))
+    by_cam = {}
+    for st in seats:
+        by_cam.setdefault(st.camera_id, []).append(st)
+    known = {c.camera_id: c for c in Camera.objects.all()}
+    out = []
+    for cid in sorted(set(by_cam) | set(known)):
+        c, cs = known.get(cid), by_cam.get(cid, [])
+        fresh = bool(c and c.health == "ok" and (c.valid_until or 0) >= now)
+        out.append({
+            "camera_id": cid, "connected": c is not None, "fresh": fresh,
+            "health": c.health if c else None, "meaning": c.meaning if c else None,
+            "last_seen_at": to_iso(c.last_seen_at) if c else None,
+            "last_seen_sec": (now - c.last_seen_at) if c and c.last_seen_at else None,
+            "observed_at": to_iso(c.observed_at) if c else None, "valid_until": to_iso(c.valid_until) if c else None,
+            "clock_offset": c.clock_offset if c else 0,
+            "seats": [{"camera_seat": st.camera_seat, "label": st.label, "cam_state": st.cam_state,
+                       "confidence": st.cam_confidence, "state_source": st.state_source} for st in cs],
+            "unknown": sum(1 for st in cs if st.cam_state in (None, "UNKNOWN")),
+        })
+    return jres({"server_time": to_iso(now), "cameras": out})

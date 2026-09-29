@@ -499,3 +499,14 @@ table.heatmap td { height: 26px; border-radius: 4px; text-align: center; font-si
 .acc-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .acc-big { font-size: 36px; font-weight: 800; color: var(--primary); letter-spacing: -1px; }
 ul.conf { margin: 0; padding-left: 18px; font-size: 14px; }
+
+/* ---------- 카메라 연동 ---------- */
+.seat .cam-off { position: absolute; bottom: 2px; right: 3px; font-size: 10px; background: rgba(255,255,255,.85);
+  color: #6b4f00; border-radius: 4px; padding: 0 3px; line-height: 14px; }
+.warn-text { color: #a4262c; }
+.cam-card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+.cam-seats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.cam-seat { font-size: 12px; border-radius: 6px; padding: 3px 7px; background: #eef1f5; }
+.cam-seat.cs-OCCUPIED { background: #e3edff; color: #1f56b8; }
+.cam-seat.cs-EMPTY { background: #e2f5ea; color: #17733f; }
+.cam-seat.cs-UNKNOWN, .cam-seat.cs-NONE { background: #f4f4f4; color: #8a929c; }

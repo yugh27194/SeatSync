@@ -45,6 +45,7 @@ urlpatterns = [
     path("api/admin/seats/<int:no>/state", api_admin.change_seat_state),
     path("api/admin/seats/<int:no>/feedback", api_admin.feedback),
     path("api/admin/feedback", api_admin.feedback_list),
+    path("api/admin/cameras", api_admin.cameras),
     path("api/admin/alerts", api_admin.alerts),
     path("api/admin/alerts/<int:alert_id>/resolve", api_admin.resolve_alert),
     path("api/admin/reservations", api_admin.assign),
@@ -66,4 +67,5 @@ urlpatterns = [
 
     # 디바이스(Pi)
     path("api/detections", api_device.detections),
+    path("api/device/config", api_device.device_config),
 ]

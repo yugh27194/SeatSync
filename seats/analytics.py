@@ -252,6 +252,11 @@ def feedback_stats(limit=20):
             "shown": f"{SEAT_STATES.get(f.shown_state, f.shown_state)} · {DETAILS.get(f.shown_detail, (None, f.shown_detail))[1]}",
             "source": f.source, "verdict": f.verdict,
             "correct": DETAILS[f.correct_detail][1] if f.correct_detail in DETAILS else None,
-            "memo": f.memo, "applied": f.applied,
+            "memo": f.memo, "applied": f.applied, "cam_state": f.cam_state, "cam_confidence": f.cam_confidence,
         } for f in rows[:limit]],
+        # 카메라 판정 좌석의 사람 탐지 점수: 맞음/틀림 평균 (--confidence 임계값 조정 참고용)
+        "camera_confidence": {v: (round(sum(xs) / len(xs), 3) if xs else None) for v, xs in {
+            "correct": [f.cam_confidence for f in rows if f.source == "camera" and f.verdict == "correct" and f.cam_confidence is not None],
+            "wrong": [f.cam_confidence for f in rows if f.source == "camera" and f.verdict == "wrong" and f.cam_confidence is not None],
+        }.items()},
     }

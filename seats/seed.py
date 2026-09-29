@@ -21,7 +21,7 @@ def load_layout(path=None):
     with open(path or settings.SEATSYNC["SEATS_FILE"], encoding="utf-8") as f:
         data = json.load(f)
     return {"grid": data.get("grid", {"cols": 1, "rows": 1}), "seats": data.get("seats", []),
-            "fixtures": data.get("fixtures", []), "zones": data.get("zones", {})}
+            "fixtures": data.get("fixtures", []), "zones": data.get("zones", {}), "cameras": data.get("cameras", {})}
 
 
 def seed(now=None, seats_file=None):
@@ -36,7 +36,7 @@ def seed(now=None, seats_file=None):
         for st in layout["seats"]:
             nos.append(int(st["no"]))
             common = {"label": st["label"], "x": st["x"], "y": st["y"], "zone": st.get("zone", ""),
-                      "camera_id": st.get("camera_id", ""), "active": True}
+                      "camera_id": st.get("camera_id", ""), "camera_seat": st.get("camera_seat", ""), "active": True}
             seat = Seat.objects.filter(no=st["no"]).first()
             if seat:
                 for k, v in common.items():

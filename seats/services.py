@@ -33,8 +33,20 @@ def to_res(r):
     return ResView(id=r.id, status=r.status, start_at=r.start_at, end_at=r.end_at, checked_in_at=r.checked_in_at)
 
 
-def to_actual(seat):
-    return Actual(state=seat.state, since=seat.state_since, mark=seat.mark, reason=seat.reason)
+def camera_stale_since(seat, now):
+    """카메라가 판정한 좌석의 감지를 믿을 수 없게 된 시각. 수동 지정·QR 체크인 등 카메라가 아닌 상태면 None."""
+    if seat.state_source != "camera":
+        return None
+    if seat.cam_state == "UNKNOWN":
+        return seat.cam_unknown_since or now
+    if seat.cam_valid_until is not None and now > seat.cam_valid_until:
+        return seat.cam_valid_until
+    return None
+
+
+def to_actual(seat, now):
+    return Actual(state=seat.state, since=seat.state_since, mark=seat.mark, reason=seat.reason,
+                  stale_since=camera_stale_since(seat, now))
 
 
 # ---------------------------------------------------------------- 파이프라인
@@ -72,7 +84,7 @@ def _judge_seats(now, s):
     out = []
     for seat in Seat.objects.filter(active=True):
         res = res_map.get(seat.no)
-        out.append({"seat": seat, "res": res, "j": judge(to_res(res), to_actual(seat), now, s)})
+        out.append({"seat": seat, "res": res, "j": judge(to_res(res), to_actual(seat, now), now, s)})
     return out
 
 

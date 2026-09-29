@@ -135,6 +135,7 @@ class Actual:
     since: int
     mark: str | None = None   # None(자동) | ok | issue
     reason: str | None = None  # 사용불가 사유: broken | maintenance | blocked
+    stale_since: int | None = None  # 카메라 감지를 믿을 수 없게 된 시각(UNKNOWN·유효 시간 경과). 카메라 판정 좌석만
 
 
 @dataclass(frozen=True)
@@ -143,6 +144,7 @@ class Judgement:
     detail: str               # DETAILS 키
     since: int                # 현재 세부 상태가 시작된 시각
     deadline: int | None = None  # 다음 변화 예정 시각 (체크인 마감, 이탈·사석화 기준)
+    stale: bool = False          # 카메라 감지 확인 불가 — 마지막으로 확인된 상태를 보여 주는 중
 
     @property
     def situation(self):
@@ -154,12 +156,17 @@ class Judgement:
         return DETAILS[self.detail][2]
 
 
-def _j(detail, since, deadline=None):
-    return Judgement(DETAILS[detail][0], detail, since, deadline)
+def _j(detail, since, deadline=None, stale=False):
+    return Judgement(DETAILS[detail][0], detail, since, deadline, stale)
 
 
 def judge(res: Reservation | None, actual: Actual, now: int, s: Settings) -> Judgement:
     """res: 해당 좌석의 활성 예약(reserved/in_use)만. actual: 현장 상태."""
+    j = _judge(res, actual, now, s)
+    return Judgement(j.seat_state, j.detail, j.since, j.deadline, True) if actual.stale_since is not None else j
+
+
+def _judge(res, actual, now, s):
     a, mark = actual.state, actual.mark
     since = min(actual.since, now)
 
@@ -194,6 +201,10 @@ def judge(res: Reservation | None, actual: Actual, now: int, s: Settings) -> Jud
         limit, short, issue = s.away_limit_min * 60, "away_short", "away"
     if mark == "issue":
         return _j(issue, start)
+    # 카메라 감지를 믿을 수 없는 동안에는 이탈·사석화로 넘기지 않는다(감지 끊김을 자리 비움으로 오해하지 않게).
+    # 끊기기 전에 이미 기준 시간을 넘었다면 그대로 처리 필요.
+    if actual.stale_since is not None and actual.stale_since < start + limit:
+        return _j(short, start)
     if now - start < limit:
         return _j(short, start, start + limit)
     return _j(issue, start + limit)
