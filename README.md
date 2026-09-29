@@ -18,6 +18,8 @@ python app.py                    # 0.0.0.0:5000
 - M1: 골격, 스키마, init-db/seed, 로그인·회원가입·역할 분기
 - M2: 판정 로직(`status.py`) + 테스트, `POST /api/detections`, `service.refresh`, 관리자 판정 API, `tools/simulate.py`
 - M3: `/map` 실시간 좌석 지도, 예약/반납, `/seat/<no>` QR 페이지(체크인·바로 예약·관리자 호출), `tools/make_qr.py`
+- M4: `/admin` 대시보드 — 12개 상태 지도·상세 패널·요약 칩·문제 좌석 목록(처리 완료·강제 반납)
+- M5: `/my`(카운트다운·연장·반납·관리자 호출), 새 알림 배너+비프, 예약 대조 표, `/admin/settings`(시연 모드·기본값 복원)
 
 ## 개발 도구
 

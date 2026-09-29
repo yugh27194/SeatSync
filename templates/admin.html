@@ -1,2 +1,57 @@
 {% extends "base.html" %}
-{% block content %}<div class="card"><p class="muted">준비 중입니다.</p></div>{% endblock %}
+{% block title %}관리자{% endblock %}
+{% block content %}
+<div id="banner" class="banner hidden" role="alert">
+  <div class="msg" id="banner-msg"></div>
+  <button type="button" id="banner-close">닫기</button>
+</div>
+
+<div class="toolbar">
+  <h1 style="margin:0">관리자 대시보드</h1>
+  <span class="spacer"></span>
+  <span class="muted small" id="updated"></span>
+  <button type="button" class="btn small secondary" id="sound-toggle">🔕 소리 켜기</button>
+  <a class="btn small secondary" href="{{ url_for('pages.admin_settings') }}">설정</a>
+</div>
+
+<div class="chips" id="chips"></div>
+
+<div class="admin-grid">
+  <div>
+    <div class="card">
+      <h2>좌석 지도</h2>
+      <div class="seatmap admin-map" id="admin-map"></div>
+      <p class="muted small" style="margin:8px 0 0">좌석을 누르면 상세 정보가 표시됩니다.</p>
+    </div>
+  </div>
+  <div>
+    <div class="card detail" id="detail"><h2>좌석 상세</h2><p class="empty">좌석을 선택하세요.</p></div>
+    <div class="card">
+      <h2>문제 좌석 <span class="pill" id="alert-count">0</span></h2>
+      <ul class="alert-list" id="alerts"><li class="muted small">불러오는 중…</li></ul>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>예약 대조 표</h2>
+  <div class="table-wrap">
+    <table class="recon">
+      <thead><tr><th>좌석</th><th>예약</th><th>감지</th><th>판정</th></tr></thead>
+      <tbody id="recon"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="toolbar" style="margin-bottom:6px">
+    <h2 style="margin:0">시간대별 사석화율</h2>
+    <span class="spacer"></span>
+    <input type="date" id="stats-date" style="max-width:170px">
+  </div>
+  <div class="chart" id="chart"></div>
+  <div class="chart-x" id="chart-x"></div>
+  <p class="muted small" id="stats-note" style="margin:8px 0 0"></p>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/admin.js') }}"></script>{% endblock %}

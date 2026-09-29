@@ -165,7 +165,8 @@ input:focus, textarea:focus { outline: 2px solid #b8d0ff; border-color: var(--pr
 .st-OFFLINE          { background: #c9cdd3; color: #3b4350; }
 
 /* ---------- 관리자 레이아웃 ---------- */
-.admin-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.admin-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.admin-grid > div { min-width: 0; }
 @media (min-width: 960px) {
   .admin-grid { grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr); align-items: start; }
 }
@@ -236,6 +237,7 @@ table.recon tr.mismatch td:first-child { box-shadow: inset 4px 0 0 var(--danger)
   .topbar { padding: 10px 12px; }
   .topbar nav { gap: 10px; font-size: 13px; }
   .topbar nav .who { display: none; }
+  .card { padding: 12px; }
   .seatmap { gap: 6px; padding: 8px; }
   .seat { font-size: 13px; }
 }

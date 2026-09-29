@@ -1,2 +1,21 @@
 {% extends "base.html" %}
-{% block content %}<div class="card"><p class="muted">준비 중입니다.</p></div>{% endblock %}
+{% block title %}설정{% endblock %}
+{% block content %}
+<div style="max-width:760px;margin:0 auto">
+  <div class="toolbar">
+    <h1 style="margin:0">판정 기준 설정</h1>
+    <span class="spacer"></span>
+    <a class="btn small secondary" href="{{ url_for('pages.admin') }}">대시보드로</a>
+  </div>
+  <div class="notice">저장하면 다음 갱신(최대 3초)부터 판정에 바로 반영됩니다. 시연 모드는 값을 채워 넣기만 하므로 [저장]을 눌러야 적용됩니다.</div>
+  <form class="card" id="settings-form" novalidate>
+    <div id="rows"><p class="muted">불러오는 중…</p></div>
+    <div class="btn-row" style="margin-top:14px">
+      <button type="submit" class="btn">저장</button>
+      <button type="button" class="btn warn" id="btn-demo">시연 모드</button>
+      <button type="button" class="btn secondary" id="btn-default">기본값 복원</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/settings.js') }}"></script>{% endblock %}

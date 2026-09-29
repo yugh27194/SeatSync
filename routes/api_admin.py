@@ -7,7 +7,7 @@ from auth import admin_required
 from db import get_db, get_settings, load_layout, tx
 from routes import ApiError, json_body, now_ts
 from service import refresh
-from status import ALERT_TYPE_LABELS, SETTINGS_META, STATE_META, STATES, HOARDING, IN_USE, UNAUTHORIZED
+from status import ALERT_TYPE_LABELS, DEFAULT_SETTINGS, SETTINGS_META, STATE_META, STATES, HOARDING, IN_USE, UNAUTHORIZED
 from timeutil import to_iso
 from config import tz
 
@@ -135,6 +135,7 @@ def force_return(res_id):
 def _settings_json(s):
     return {
         "settings": s.as_dict(),
+        "defaults": DEFAULT_SETTINGS,
         "meta": {k: {"label": m[0], "unit": m[1], "desc": m[2], "min": m[3], "max": m[4]} for k, m in SETTINGS_META.items()},
     }
 

@@ -16,6 +16,7 @@ def create_app(overrides=None):
     app.config["CLOCK"] = time.time
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=14)
     app.json.ensure_ascii = False
+    app.json.sort_keys = False  # 설정·상태 요약을 명세 순서대로
     if overrides:
         app.config.update(overrides)
 
