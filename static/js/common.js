@@ -46,7 +46,7 @@
       let msg = reason || "관리자 코드를 입력하면 관리자 모드가 켜집니다.";
       for (;;) {
         const v = await modal({ title: "🔒 관리자 권한이 필요합니다.", body: msg, ok: "관리자 모드 켜기",
-          fields: [{ name: "code", label: "관리자 코드", type: "password", inputmode: "numeric" }] });
+          fields: [{ name: "code", label: "관리자 코드", type: "password" }] });
         if (!v) {
           if (location.pathname.startsWith("/admin")) location.href = "/map";
           return false;
@@ -180,7 +180,7 @@
           }
           if (f.value != null) el.value = f.value;
         } else if (f.type === "password") {
-          el = document.createElement("input"); el.type = "password"; el.autocomplete = "off";
+          el = document.createElement("input"); el.type = "password"; el.autocomplete = "off"; el.setAttribute("autocapitalize", "off");
           if (f.inputmode) el.inputMode = f.inputmode;
           el.addEventListener("keydown", (e) => { if (e.key === "Enter") ok.click(); });
         } else if (f.type === "number") {

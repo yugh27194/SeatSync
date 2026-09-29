@@ -12,7 +12,7 @@
     {% csrf_token %}
     <input type="hidden" name="next" value="{{ next_url }}">
     <label for="code">관리자 코드</label>
-    <input id="code" name="code" type="password" inputmode="numeric" autocomplete="off" required autofocus{% if locked_sec %} disabled{% endif %}>
+    <input id="code" name="code" type="password" autocomplete="off" autocapitalize="off" required autofocus{% if locked_sec %} disabled{% endif %}>
     <div style="margin-top:16px"><button class="btn block" type="submit"{% if locked_sec %} disabled{% endif %}>관리자 모드 켜기</button></div>
   </form>
   <p class="muted small" style="margin-top:14px;text-align:center">

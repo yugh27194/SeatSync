@@ -99,3 +99,40 @@ def test_login_redirects_to_map():
 def test_login_required_redirect_keeps_qr_url():
     r = ApiClient().get("/seat/3?t=abc")
     assert r.status_code == 302 and r["Location"] == "/login?next=/seat/3%3Ft%3Dabc"
+
+
+def test_default_admin_code_is_admin():
+    from seatsync import settings as project_settings
+    import os
+    if "SEATSYNC_ADMIN_CODE" not in os.environ:
+        assert project_settings.SEATSYNC["ADMIN_CODE"] == "admin"
+
+
+def _csrf_client_login(origin, host):
+    """실제 브라우저처럼 CSRF 검사를 켠 클라이언트로 외부 주소(터널)에서 로그인·API 호출."""
+    from django.test import Client
+    c = Client(enforce_csrf_checks=True, HTTP_HOST=host)
+    c.get("/login")
+    token = c.cookies["csrftoken"].value
+    r = c.post("/login", {"student_no": "userA", "password": "1234", "csrfmiddlewaretoken": token}, HTTP_ORIGIN=origin)
+    return c, r
+
+
+def test_tunnel_origin_passes_csrf():
+    c, r = _csrf_client_login("https://quiet-river-1234.trycloudflare.com", "quiet-river-1234.trycloudflare.com")
+    assert r.status_code == 302 and r["Location"] == "/map"
+    token = c.cookies["csrftoken"].value
+    r = c.post("/api/admin-mode/unlock", data='{"code": "test-code"}', content_type="application/json",
+               HTTP_ORIGIN="https://quiet-river-1234.trycloudflare.com", HTTP_X_CSRFTOKEN=token)
+    assert r.status_code == 200
+
+
+def test_foreign_origin_blocked():
+    c, r = _csrf_client_login("https://evil.example", "quiet-river-1234.trycloudflare.com")
+    assert r.status_code == 403
+
+
+def test_extra_trusted_origin(settings):
+    settings.CSRF_TRUSTED_ORIGINS = settings.CSRF_TRUSTED_ORIGINS + ["https://seat.example.com"]
+    _c, r = _csrf_client_login("https://seat.example.com", "seat.example.com")
+    assert r.status_code == 302

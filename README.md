@@ -33,7 +33,7 @@ python manage.py runserver 0.0.0.0:5000     :: 실행
 ### 관리자 모드 (관리자 계정 없음)
 
 로그인한 누구든 상단 **[관리자] 스위치**를 켜면 "관리자 권한이 필요합니다."가 표시되고,
-**관리자 코드**(기본 `0000`)를 입력하면 관리자 모드가 켜진다. 스위치를 끄면 바로 일반 사용자 화면으로 돌아간다.
+**관리자 코드**(기본 `admin`)를 입력하면 관리자 모드가 켜진다. 스위치를 끄면 바로 일반 사용자 화면으로 돌아간다.
 
 - 일반 사용자 화면에는 **`!`(처리 필요) 표시가 없다.** 관리자 모드에서만 좌석 지도에 `!`와 세부 상태가 보인다.
 - 마지막 사용 후 60분이 지나거나 로그아웃하면 자동으로 꺼진다. 코드를 5번 틀리면 5분간 입력할 수 없다.
@@ -43,15 +43,29 @@ python manage.py runserver 0.0.0.0:5000     :: 실행
 
 | 이름 | 기본값 | 설명 |
 |---|---|---|
-| `SEATSYNC_ADMIN_CODE` | `0000` | 관리자 모드 코드 (**실제 운영 시 반드시 변경**) |
+| `SEATSYNC_ADMIN_CODE` | `admin` | 관리자 모드 코드 (**외부 공개 시 추측하기 어려운 값 권장**) |
 | `SEATSYNC_ADMIN_MODE_MIN` | `60` | 관리자 모드 유지 시간(분, 마지막 사용 기준) |
 | `SEATSYNC_SECRET_KEY` | 개발용 값 | Django 세션·CSRF 서명 키 (운영 시 변경) |
 | `SEATSYNC_DEVICE_KEY` | `dev-key` | Pi 인증 키 (`X-Device-Key` 헤더) |
 | `SEATSYNC_DB` | `seatsync.db` | SQLite 파일 경로 |
 | `SEATSYNC_TZ` | `Asia/Seoul` | 표시용 타임존 |
 | `SEATSYNC_DEBUG` | `0` | `1`이면 Django 디버그 화면 |
+| `SEATSYNC_TRUSTED_ORIGINS` | (없음) | 외부 배포 주소 추가 허용 (쉼표 구분, 예: `https://seat.example.com`) |
+| `SEATSYNC_HTTPS` | `0` | HTTPS 전용 호스팅이면 `1` (노트북 실행에서는 켜지 않음) |
 
 cmd에서는 `set SEATSYNC_ADMIN_CODE=1357` 후 같은 창에서 `python manage.py runserver 0.0.0.0:5000`.
+
+## 외부 링크로 공유하기
+
+자세한 순서는 **[docs/DEPLOY.md](docs/DEPLOY.md)**.
+
+| 방법 | 하는 법 | 주소 |
+|---|---|---|
+| **바로 공유** (가입 없음) | `winget install --id Cloudflare.cloudflared` 후 **`share.bat` 실행** | `https://임의단어.trycloudflare.com` (켤 때마다 바뀜, 노트북이 켜져 있어야 함) |
+| **상시 배포** (무료 가입) | PythonAnywhere에 올리기 — [가이드](docs/DEPLOY.md#b-상시-배포--pythonanywhere-무료) | `https://아이디.pythonanywhere.com` (고정) |
+
+- 외부 공유 시에는 개발 서버(`runserver`) 대신 **`python manage.py serve`** (waitress, 운영용 서버)로 실행된다.
+- 외부에 공개하면 누구나 가입할 수 있으므로, 공개 기간에는 관리자 코드를 바꾸는 것을 권장한다.
 
 ## 화면
 

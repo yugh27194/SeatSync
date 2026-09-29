@@ -49,6 +49,24 @@ DATABASES = {
     }
 }
 
+# ---------------------------------------------------------------- 외부 접속 (터널·호스팅)
+# 외부 링크(HTTPS)로 들어온 로그인·예약 요청이 CSRF 검사에서 막히지 않도록 신뢰할 출처를 둔다.
+#  - Cloudflare 임시 터널(*.trycloudflare.com), ngrok, PythonAnywhere 기본 주소
+#  - 그 밖의 주소는 SEATSYNC_TRUSTED_ORIGINS="https://seat.example.com,https://other.example.com"
+CSRF_TRUSTED_ORIGINS = [
+    "https://*.trycloudflare.com",
+    "https://*.ngrok-free.app",
+    "https://*.ngrok.app",
+    "https://*.pythonanywhere.com",
+] + [o.strip() for o in os.environ.get("SEATSYNC_TRUSTED_ORIGINS", "").split(",") if o.strip()]
+
+# 호스팅(HTTPS 전용)으로 배포할 때만 1로: 프록시의 HTTPS 표시를 믿고, 세션 쿠키를 HTTPS에서만 보낸다.
+# 같은 Wi-Fi에서 http://IP:5000 으로도 쓰는 노트북 실행에서는 켜지 않는다(켜면 http 접속 시 로그인이 풀린다).
+if os.environ.get("SEATSYNC_HTTPS") == "1":
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
 AUTH_USER_MODEL = "seats.User"
 LOGIN_URL = "/login"
 SESSION_COOKIE_AGE = 14 * 24 * 3600
@@ -69,7 +87,7 @@ SEATSYNC = {
     "DEVICE_KEY": os.environ.get("SEATSYNC_DEVICE_KEY", "dev-key"),
     "TZ": os.environ.get("SEATSYNC_TZ", "Asia/Seoul"),
     # 관리자 계정 대신, 관리자 모드를 켤 때 이 코드를 입력한다.
-    "ADMIN_CODE": os.environ.get("SEATSYNC_ADMIN_CODE", "0000"),
+    "ADMIN_CODE": os.environ.get("SEATSYNC_ADMIN_CODE", "admin"),
     "ADMIN_MODE_MIN": int(os.environ.get("SEATSYNC_ADMIN_MODE_MIN", "60")),
     "SEATS_FILE": BASE_DIR / "config" / "seats.json",
 }
