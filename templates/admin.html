@@ -10,11 +10,8 @@
   <h1 style="margin:0">관리자 대시보드</h1>
   <span class="spacer"></span>
   <span class="muted small" id="updated"></span>
-  <button type="button" class="btn small secondary" id="sound-toggle">🔕 소리 켜기</button>
   <button type="button" class="btn small warn" id="btn-demo">시연 상황 배치</button>
   <button type="button" class="btn small secondary" id="btn-sample">샘플 이력 생성</button>
-  <a class="btn small secondary" href="/congestion">혼잡도</a>
-  <a class="btn small secondary" href="/admin/settings">설정</a>
 </div>
 
 <div class="chips" id="chips"></div>
@@ -43,38 +40,16 @@
 </div>
 
 <div class="card">
-  <h2>예약 대조 표</h2>
-  <p class="muted small" style="margin-top:-4px">예약 기록과 현장 상태를 좌석별로 비교합니다. 색 막대가 있는 행은 처리가 필요한 좌석입니다.</p>
+  <h2>예약 대조 · 카메라</h2>
+  <div class="cam-line" id="cam-line"><span class="muted small">카메라 상태 불러오는 중…</span></div>
   <div class="table-wrap">
     <table class="recon">
-      <thead><tr><th>좌석</th><th>예약 기록</th><th>현장</th><th>좌석 상태</th><th>세부 상태</th></tr></thead>
+      <thead><tr><th>좌석</th><th>예약</th><th>카메라 감지</th><th>현장</th><th>상태</th></tr></thead>
       <tbody id="recon"></tbody>
     </table>
   </div>
-</div>
-
-<div class="card">
-  <h2>카메라 연결 상태 <span class="muted small">(라즈베리파이 감지)</span></h2>
-  <p class="muted small" style="margin-top:-4px">카메라 좌석 ID(A01…)가 웹 좌석과 어떻게 연결되는지, 마지막 감지가 언제였는지 보여 줍니다.
-    감지가 끊긴 좌석은 마지막 상태를 유지하고 이탈·사석화로 넘기지 않습니다.</p>
-  <div id="cameras"><p class="muted small">불러오는 중…</p></div>
-</div>
-
-<div class="card">
-  <h2>판정 정확도 <span class="muted small">(관리자 판정 피드백 기준)</span></h2>
-  <p class="muted small" style="margin-top:-4px">좌석을 직접 확인한 뒤 좌석 상세의 [맞음]/[틀림]으로 기록하면 카메라·수동 판정의 정확도를 측정합니다.</p>
-  <div id="accuracy"><p class="muted small">불러오는 중…</p></div>
-</div>
-
-<div class="card">
-  <h2>이용자 관리</h2>
-  <p class="muted small" style="margin-top:-4px" id="users-note"></p>
-  <div class="table-wrap">
-    <table class="recon">
-      <thead><tr><th>이용자</th><th>현재 예약</th><th>경고</th><th>상태</th><th>조치</th></tr></thead>
-      <tbody id="users"></tbody>
-    </table>
-  </div>
+  <p class="muted small" style="margin:8px 0 0">행을 누르면 좌석 상세가 열립니다. 붉은 막대 = 확인 필요.
+    카메라 감지가 끊긴 좌석은 마지막 상태를 유지하고 이탈·사석화로 넘기지 않습니다.</p>
 </div>
 
 <div class="card">

@@ -1,4 +1,4 @@
-/* /admin — 관리자 대시보드: 3상태 지도 + 예약 대조 + 상황별 조치 (3초 polling) */
+/* /admin — 관리자 대시보드: 좌석 지도(좌석명만) + 좌석 상세·조치 + 조치 목록 + 예약 대조·카메라 (3초 polling) */
 (function () {
   "use strict";
   const { api, layoutGrid, poll, fmtRemain, fmtTime, syncClock, toast, modal, esc } = window.SS;
@@ -6,7 +6,7 @@
 
   const SOURCE = { manual: "관리자 지정", camera: "카메라", checkin: "QR 체크인", return: "반납", seed: "초기 배분" };
   const MARK = { ok: "관리자 확인", issue: "관리자가 문제로 지정" };
-  const NEXT = { waiting: "미입실", seated_unchecked: "미입실", away_short: "이탈", item: "사석화" };
+  const NEXT = { waiting: "미입실", away_short: "이탈", item: "사석화" };
   // 확인 필요(!) 좌석을 처리할 때 보여 주는 안내: 지금 어떤 상태인지 + 무엇을 하면 되는지
   const GUIDE = {
     unauthorized: "현장에서 이용자를 확인해 좌석을 배정하거나 퇴실을 안내하세요. 짐만 있다면 짐 주인에게 배정하거나 짐을 수거하세요.",
@@ -14,6 +14,7 @@
     away: "예약자가 기준 시간보다 오래 자리를 비웠습니다. 돌아오지 않으면 강제 반납하고, 반복되면 경고하세요.",
     hoarding: "짐만 두고 기준 시간보다 오래 비웠습니다. 짐을 보관 처리하고 강제 반납하거나 예약자에게 경고하세요.",
     seat_unavailable: "예약자를 다른 좌석으로 옮기거나 예약을 취소하세요.",
+    no_show: "예약자가 체크인 시간 안에 오지 않았습니다. 연락이 없으면 예약을 취소하고, 늦게 도착했다면 대리 체크인하세요.",
     away_short: "아직 기준 시간 전입니다. 곧 돌아오는지 지켜보고, 필요하면 [사전 경고]로 예약자에게 알리세요.",
     item_res: "예약자가 짐만 두고 자리를 비웠습니다. 기준 시간 전에 돌아오는지 확인하고, 필요하면 [사전 경고]를 보내세요.",
     item_nores: "예약 없이 짐만 있습니다. 짐 주인을 찾아 좌석을 배정하거나 짐을 수거하세요.",
@@ -23,35 +24,6 @@
   let data = null, alerts = [], users = [];
   let selected = Number(new URLSearchParams(location.search).get("seat")) || null; // 좌석 지도에서 누른 좌석
   let seen = null;
-  let soundOn = false, audioCtx = null;
-  try { soundOn = localStorage.getItem("ss-sound") === "1"; } catch (e) { /* 저장소 없음 */ }
-
-  // ------------------------------------------------ 소리·배너
-  function updateSoundBtn() { $("sound-toggle").textContent = soundOn ? "🔔 소리 끄기" : "🔕 소리 켜기"; }
-  function ensureAudio() {
-    if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; } }
-    if (audioCtx.state === "suspended") audioCtx.resume();
-  }
-  function beep() {
-    if (!soundOn || !audioCtx || audioCtx.state !== "running") return;
-    [0, 0.22].forEach((t) => {
-      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-      o.frequency.value = 880;
-      g.gain.setValueAtTime(0.0001, audioCtx.currentTime + t);
-      g.gain.exponentialRampToValueAtTime(0.25, audioCtx.currentTime + t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + t + 0.18);
-      o.connect(g).connect(audioCtx.destination);
-      o.start(audioCtx.currentTime + t); o.stop(audioCtx.currentTime + t + 0.2);
-    });
-  }
-  $("sound-toggle").onclick = () => {
-    soundOn = !soundOn;
-    try { localStorage.setItem("ss-sound", soundOn ? "1" : "0"); } catch (e) { /* 무시 */ }
-    if (soundOn) { ensureAudio(); beep(); }
-    updateSoundBtn();
-  };
-  document.addEventListener("click", () => { if (soundOn) ensureAudio(); }, { once: true });
-  updateSoundBtn();
 
   let bannerTimer = null;
   function showBanner(msg) {
@@ -66,7 +38,7 @@
     if (seen === null) { seen = ids; return; }
     const fresh = alerts.filter((a) => !seen.has(a.id));
     fresh.forEach((a) => seen.add(a.id));
-    if (fresh.length) { showBanner("확인 필요 · " + fresh.map((a) => `${a.seat_label} ${a.type_label}`).join(", ")); beep(); }
+    if (fresh.length) { showBanner("확인 필요 · " + fresh.map((a) => `${a.seat_label} ${a.type_label}`).join(", ")); }
   }
 
   // ------------------------------------------------ 헬퍼
@@ -82,15 +54,6 @@
     const a = Object.entries(attrs || {}).map(([k, v]) => `data-${k}="${esc(v)}"`).join(" ");
     return `<button type="button" class="btn small ${cls || "secondary"}" data-act="${act}" ${a}>${label}</button>`;
   }
-  const SRC_LABEL = { camera: "카메라", manual: "관리자 지정", checkin: "QR 체크인", return: "반납", seed: "초기 배분" };
-
-  function tileSub(s) {
-    const r = s.reservation;
-    if (s.offer) return `🔔 ${esc(s.offer.user_name)} 안내 중`;
-    if (s.check) return `<span class="warn-tag">${esc(s.detail_label)}</span>`;
-    if (r && s.detail === "using") return esc(r.user.name);
-    return esc(s.seat_state_label);
-  }
 
   // 상황별 권장 조치
   function recommended(detail, s, alertId) {
@@ -101,6 +64,9 @@
         return s.actual === "item"
           ? btn("leave", "짐 수거 완료", { seat: s.no, label: lbl, item: 1 }, "") + btn("assign", "짐 주인에게 배정", { seat: s.no, checkin: 1 })
           : btn("assign", "현장 배정", { seat: s.no, checkin: 1 }, "") + btn("leave", "퇴실 안내 완료", { seat: s.no, label: lbl });
+      case "no_show":
+        return r ? btn("force", "예약 취소(미입실)", { res: r.id, label: lbl, noshow: 1 }, "danger") +
+          btn("checkin", "대리 체크인", { res: r.id, label: lbl }) : "";
       case "no_checkin":
         return r ? btn("checkin", "대리 체크인", { res: r.id, label: lbl }, "") +
           btn("move", "예약자 다른 좌석으로", { res: r.id, label: lbl }) : "";
@@ -139,31 +105,27 @@
     for (const s of data.seats) {
       const check = s.check;
       html.push(`<button type="button" class="seat st-${s.seat_state}${s.booth ? " booth" : ""}${check ? " check" : ""}${selected === s.no ? " selected" : ""}"
-        data-no="${s.no}" style="grid-column:${s.x};grid-row:${s.y}" title="${esc(s.zone || "")} · ${esc(s.seat_state_label)} · ${esc(s.detail_label)}">
+        data-no="${s.no}" style="grid-column:${s.x};grid-row:${s.y}" title="${esc(s.label)} · ${esc(s.seat_state_label)} · ${esc(s.detail_label)}" aria-label="${esc(s.label)} ${esc(s.seat_state_label)}${check ? " · 확인 필요" : ""}">
         ${check ? '<span class="bang" aria-hidden="true">!</span>' : ""}
         ${s.stale ? '<span class="cam-off" title="카메라 감지 확인 불가 — 마지막 상태 표시 중">📷?</span>' : ""}
-        ${esc(s.label)}<span class="sub">${tileSub(s)}</span></button>`);
+        ${esc(s.label)}</button>`);
     }
     el.innerHTML = html.join("");
   }
 
-  // 현재 세부 상태에 해당하는 '지정' 버튼
-  function currentCode(s, codes) {
-    if (codes.includes(s.detail)) return s.detail;
-    return { empty: "empty", occupied: "using", item: "item", unavailable: s.reason || "blocked" }[s.actual];
-  }
-
+  // 좌석 상태 지정: 빈자리 / 예약 / 사용중 / 사용불가 (예약은 사용중과 같은 주황색)
   function assignPanel(s) {
-    const codes = data.assign.groups.flatMap((g) => g.items.map((i) => i.code));
-    const cur = currentCode(s, codes);
-    const inUse = s.reservation && s.reservation.status === "in_use";
-    return data.assign.groups.map((g) => `<div class="assign-row"><span class="assign-group st-${g.state}">${esc(g.label)}</span>
-      <div class="assign-btns">${g.items.map((i) => {
-        const dis = i.needs === "in_use" && !inUse;
-        return `<button type="button" class="assign-btn${i.code === cur ? " on" : ""}${i.issue ? " is-issue" : ""}" data-act="state"
-          data-seat="${s.no}" data-detail="${i.code}" data-label="${esc(i.label)}" data-group="${g.state}"${dis ? ' disabled title="이용 중인 예약이 있는 좌석만"' : ""}>
-          ${i.issue ? "! " : ""}${esc(i.label)}</button>`;
-      }).join("")}</div></div>`).join("");
+    const r = s.reservation;
+    const cur = s.seat_state === "available" ? "empty" : s.seat_state === "unavailable" ? "unavailable"
+      : (r && r.status === "reserved" ? "reserve" : "using");
+    const b = (code, label, cls, attrs, dis) => `<button type="button" class="assign-btn a-${cls}${code === cur ? " on" : ""}" ${attrs}${dis ? ` disabled title="${dis}"` : ""}>${label}</button>`;
+    return `<div class="assign-btns">
+      ${b("empty", "빈자리", "available", `data-act="state" data-seat="${s.no}" data-detail="empty" data-label="빈자리"`)}
+      ${b("reserve", "예약", "in_use", `data-act="reserve" data-seat="${s.no}"`,
+          r ? "이미 예약이 있는 좌석" : s.seat_state === "unavailable" ? "사용불가 좌석" : "")}
+      ${b("using", "사용중", "in_use", `data-act="state" data-seat="${s.no}" data-detail="using" data-label="사용중"`)}
+      ${b("unavailable", "사용불가", "unavailable", `data-act="state" data-seat="${s.no}" data-detail="blocked" data-label="사용불가" data-group="unavailable"`)}
+    </div>`;
   }
 
   function renderDetail() {
@@ -211,28 +173,16 @@
     el.innerHTML = `<h2>${esc(s.label)} <span class="statetag st-${s.seat_state}">${esc(s.seat_state_label)}</span>
         <span class="muted small">${esc(s.zone || "")}</span></h2>
       ${sitHtml}
-      <div class="section-title">판정 확인</div>
-      <div class="feedback-row">
-        <span class="small">화면 판정 <b>${esc(s.seat_state_label)} · ${esc(s.detail_label)}</b>
-          <span class="muted">(${SRC_LABEL[s.actual_source] || s.actual_source})</span> — 실제와 같나요?</span>
-        <div class="btn-row">${btn("fb_ok", "✓ 맞음", { seat: s.no }, "ok-btn")}${btn("fb_wrong", "✗ 틀림", { seat: s.no }, "danger")}</div>
-      </div>
       ${s.camera ? `<p class="small cam-line" style="margin:6px 0 0">📷 ${esc(s.camera.camera_id)}·${esc(s.camera.camera_seat)}
         · ${s.camera.state ? { OCCUPIED: "사람 있음", EMPTY: "사람 없음", UNKNOWN: "확인 불가" }[s.camera.state] : "수신 없음"}
         ${s.camera.confidence ? ` (점수 ${s.camera.confidence.toFixed(2)})` : ""}
         ${s.camera.seen_at ? ` · ${fmtTime(s.camera.seen_at)} 수신` : ""}
         ${s.stale ? ' · <b class="warn-text">감지 끊김 — 마지막 상태 유지, 이탈·사석화 판정 보류</b>' : ""}</p>` : ""}
       ${s.offer ? `<p class="small" style="margin:6px 0 0">🔔 빈자리 알림 대기자 <b>${esc(s.offer.user_name)}</b> 님에게 안내 중 (${fmtRemain(s.offer.left_sec)} 남음)</p>` : ""}
-      <div class="section-title">좌석 상태 지정 (임시 배분)</div>
+      <div class="section-title">좌석 상태 지정</div>
       ${assignPanel(s)}
       <p class="muted small" style="margin:6px 0 0">현장: ${esc(s.actual_label)}${s.mark ? ` · ${MARK[s.mark]}` : ""} · ${SOURCE[s.actual_source] || s.actual_source}
         · ${fmtTime(s.actual_since)}부터 (${fmtRemain(s.actual_elapsed_sec)})${s.note ? ` · 메모: ${esc(s.note)}` : ""}</p>
-      <details class="hint"><summary>세부 상태 안내</summary>
-        <p><b>이용 중</b>: 관리자가 확인한 정상 사용입니다. 예약이 없어도 무단 점유로 바뀌지 않습니다.<br>
-        <b>짐만 있음</b>: 지도에 붉게 !(확인 필요)로 표시되지만 경고·알림은 보내지 않습니다.
-        (이용 중 예약이 있는 좌석이면 사석화 기준 시간이 지난 뒤 사석화로 바뀝니다)<br>
-        <b>! 무단 점유 · 이탈 · 사석화</b>: 기준 시간을 기다리지 않고 바로 조치 목록에 올립니다. 이탈·사석화는 이용 중인 예약이 있는 좌석만 지정할 수 있습니다.<br>
-        <b>카메라가 연결되면</b> 좌석마다 사람·짐·비어 있음이 자동으로 갱신됩니다(사용불가 지정 좌석 제외).</p></details>
       <div class="section-title">예약 기록</div>
       ${resHtml}`;
   }
@@ -244,9 +194,7 @@
       const s = seatByNo(a.seat_no) || { no: a.seat_no, label: a.seat_label, reservation: null };
       const ru = a.reservation && a.reservation.user;
       let actions = "";
-      if (a.type === "no_show") {
-        actions = ru ? btn("warn", "경고 후 확인", { user: ru.id, name: ru.name, alert: a.id, resolve: 1 }, "") : "";
-      } else if (a.type === "call") {
+      if (a.type === "call") {
         actions = btn("select", "좌석 보기", { seat: a.seat_no }, "");
       } else if (s.detail === a.type) {
         actions = recommended(a.type, s, a.id);
@@ -259,43 +207,30 @@
           ${ru ? `예약자 ${userLine(ru)} ${warnBadge(ru)}` : "예약 없음"}
           ${a.caller ? ` · 호출자 ${esc(a.caller.name)}` : ""}</div>
         ${a.memo ? `<div class="memo">${esc(a.memo)}</div>` : ""}
-        <div class="btn-row">${actions}${btn("resolve", a.type === "no_show" ? "확인" : "처리 완료", { alert: a.id })}</div>
+        <div class="btn-row">${actions}${btn("resolve", "처리 완료", { alert: a.id })}</div>
       </li>`;
     }).join("");
+  }
+
+  const CAM_STATE = { OCCUPIED: "사람 있음", EMPTY: "비어 있음", UNKNOWN: "확인 불가" };
+  function camCell(s) {
+    const c = s.camera;
+    if (!c) return '<span class="muted small">카메라 없음</span>';
+    const st = c.state ? CAM_STATE[c.state] : "수신 없음";
+    const ago = c.seen_at ? ` · ${fmtRemain(Math.max(0, (Date.parse(data.server_time) - Date.parse(c.seen_at)) / 1000))} 전` : "";
+    const cls = !c.state ? "cs-NONE" : (c.fresh ? `cs-${c.state}` : "cs-UNKNOWN");
+    return `<span class="cam-seat ${cls}">${esc(c.camera_seat)} ${st}</span><span class="muted small">${ago}${!c.fresh && c.state ? " · 끊김" : ""}</span>`;
   }
 
   function renderRecon() {
     $("recon").innerHTML = data.seats.map((s) => {
       const r = s.reservation;
-      const issue = s.needs_action;
-      return `<tr class="${issue ? `mismatch i-${s.detail}` : ""}" data-act="select" data-seat="${s.no}" style="cursor:pointer">
-        <td><b>${esc(s.label)}</b><br><span class="muted small">${esc(s.zone || "")}</span></td>
-        <td>${r ? `${userLine(r.user)}<br><span class="muted small">${r.status_label} · ${fmtTime(r.start_at)}~${fmtTime(r.end_at)}</span>` : '<span class="muted">예약 없음</span>'}</td>
-        <td>${esc(s.actual_label)} <span class="muted small">(${fmtRemain(s.actual_elapsed_sec)})</span></td>
-        <td><span class="statetag st-${s.seat_state}">${esc(s.seat_state_label)}</span></td>
-        <td>${issue ? `<span class="badge t-${s.detail}">! ${esc(s.detail_label)}</span>` : esc(s.detail_label)}</td></tr>`;
-    }).join("");
-  }
-
-  function renderUsers(d) {
-    $("users-note").textContent = `경고 ${d.warning_limit}회 이상이면 이용 정지를 권장합니다. 정지된 이용자는 새 예약을 할 수 없습니다.`;
-    $("users").innerHTML = d.users.map((u) => {
-      const r = u.reservation;
-      const status = u.suspended_until
-        ? `<span class="badge t-suspended">정지</span> <span class="muted small">~${u.suspended_until.slice(5, 10)} ${fmtTime(u.suspended_until)}</span>`
-        : (u.suspend_suggested ? `<span class="badge t-return_due">정지 권장</span>` : `<span class="muted">정상</span>`);
-      return `<tr>
-        <td>${userLine(u)}</td>
-        <td>${r ? `${esc(r.seat_label)} · ${r.status_label}` : '<span class="muted">없음</span>'}</td>
-        <td><span class="warnings${u.warnings >= d.warning_limit ? " hot" : ""}">${u.warnings}</span></td>
-        <td>${status}</td>
-        <td><div class="btn-row">
-          ${btn("notice", "사전 경고", { user: u.id, name: u.name })}
-          ${btn("warn", "경고", { user: u.id, name: u.name })}
-          ${u.warnings ? btn("unwarn", "경고 취소", { user: u.id, name: u.name }) : ""}
-          ${u.suspended_until ? btn("unsuspend", "정지 해제", { user: u.id, name: u.name })
-            : btn("suspend", "이용 정지", { user: u.id, name: u.name }, u.suspend_suggested ? "danger" : "secondary")}
-        </div></td></tr>`;
+      return `<tr class="${s.check ? "mismatch" : ""}" data-act="select" data-seat="${s.no}" style="cursor:pointer">
+        <td><b>${esc(s.label)}</b></td>
+        <td>${r ? `${userLine(r.user)}<br><span class="muted small">${r.status === "reserved" ? "예약" : "이용 중"} · ${fmtTime(r.start_at)}~${fmtTime(r.end_at)}</span>` : '<span class="muted">없음</span>'}</td>
+        <td>${camCell(s)}</td>
+        <td>${esc(s.actual_label)}</td>
+        <td><span class="statetag st-${s.seat_state}">${esc(s.seat_state_label)}</span>${s.check ? ` <b class="warn-text">! ${esc(s.detail_label)}</b>` : ""}</td></tr>`;
     }).join("");
   }
 
@@ -319,7 +254,7 @@
     ]);
     data = s; alerts = a.alerts; users = u.users;
     syncClock(s.server_time);
-    renderChips(); renderMap(); renderDetail(); renderAlerts(); renderRecon(); renderUsers(u); renderLog(l);
+    renderChips(); renderMap(); renderDetail(); renderAlerts(); renderRecon(); renderLog(l);
     checkNewAlerts();
     $("updated").textContent = "갱신 " + s.server_time.slice(11, 19);
   }
@@ -350,7 +285,7 @@
       if (!s) return;
       let note = null;
       if (d.group === "unavailable") {
-        note = await modal({ title: `${s.label} 사용불가 · ${d.label}`,
+        note = await modal({ title: `${s.label} 사용불가로 지정`,
           body: s.reservation ? `현재 ${s.reservation.user.name} 님의 예약이 있습니다. 지정 후 좌석 이동이 필요합니다.` : "메모를 적어 두면 이용자에게도 안내됩니다. (선택)",
           input: { placeholder: "예: 의자 파손, 청소 중" }, ok: "지정" });
         if (note === false) return;
@@ -385,6 +320,24 @@
         `${s.label} 좌석을 배정했습니다.`);
     },
 
+    async reserve(d) {
+      const s = seatByNo(d.seat);
+      const opts = userOptions();
+      const first = opts.find((o) => !o.disabled);
+      const v = await modal({
+        title: `${s.label} 예약`,
+        body: `이용자를 고르면 이 좌석을 예약합니다. 체크인 제한 시간(${data.settings.checkin_limit_min}분) 안에 아무도 오지 않으면 '! 확인 필요(미입실)'로 표시됩니다.`,
+        fields: [
+          { name: "user_id", label: "이용자", type: "select", options: opts, value: first ? first.value : "" },
+          { name: "memo", label: "메모 (선택)", type: "textarea", placeholder: "예: 전화 예약" },
+        ],
+        ok: "예약", okDisabled: !first,
+      });
+      if (!v) return;
+      run(() => api("POST", "/api/admin/reservations", { user_id: Number(v.user_id), seat_no: s.no, checkin: false, memo: v.memo }),
+        `${s.label} 좌석을 예약했습니다.`);
+    },
+
     async checkin(d) {
       const ok = await modal({ title: "대리 체크인", body: `${d.label} 좌석에 예약자 본인이 앉아 있는지 확인했나요?`, ok: "체크인 처리" });
       if (ok) run(() => api("POST", `/api/admin/reservations/${d.res}/checkin`), "대리 체크인했습니다.");
@@ -408,6 +361,12 @@
     },
 
     async force(d) {
+      if (d.noshow) {
+        const m = await modal({ title: "미입실 예약 취소", body: `${d.label} 좌석의 예약을 미입실로 취소할까요?\n예약자에게 알림이 갑니다.`,
+          input: { placeholder: "메모 (선택)" }, ok: "예약 취소", danger: true });
+        if (m !== false) run(() => api("POST", `/api/admin/reservations/${d.res}/force-return`, { memo: m, no_show: true }), "미입실로 예약을 취소했습니다.");
+        return;
+      }
       const memo = await modal({ title: "강제 반납", body: `${d.label} 좌석의 예약을 종료할까요?\n해당 좌석의 미해결 알림도 함께 처리됩니다.`,
         input: { placeholder: "사유 (선택) 예: 40분 이상 자리 비움" }, ok: "강제 반납", danger: true });
       if (memo !== false) run(() => api("POST", `/api/admin/reservations/${d.res}/force-return`, { memo }), "강제 반납했습니다.");
@@ -444,31 +403,6 @@
     async unsuspend(d) {
       const ok = await modal({ title: "정지 해제", body: `${d.name} 님의 이용 정지를 해제할까요?`, ok: "해제" });
       if (ok) run(() => api("POST", `/api/admin/users/${d.user}/unsuspend`), "정지를 해제했습니다.");
-    },
-
-    async fb_ok(d) {
-      const s = seatByNo(d.seat);
-      run(() => api("POST", `/api/admin/seats/${d.seat}/feedback`, { verdict: "correct" }),
-        `${s.label} 판정 '맞음'을 기록했습니다.`).then(loadAccuracy);
-    },
-
-    async fb_wrong(d) {
-      const s = seatByNo(d.seat);
-      const inUse = s.reservation && s.reservation.status === "in_use";
-      const options = data.assign.groups.flatMap((g) => g.items.map((i) => ({
-        value: i.code, label: `${g.label} · ${i.label}`, disabled: i.needs === "in_use" && !inUse })));
-      const v = await modal({ title: `${s.label} 판정이 틀렸어요`,
-        body: `화면 판정: ${s.seat_state_label} · ${s.detail_label} (${SRC_LABEL[s.actual_source] || s.actual_source})\n실제 좌석 상태를 골라 주세요.`,
-        fields: [
-          { name: "correct", label: "실제 상태", type: "select", options, value: options.find((o) => !o.disabled && o.value !== s.detail)?.value },
-          { name: "apply", label: "좌석에 바로 반영", type: "select", value: "1",
-            options: [{ value: "1", label: "예 — 이 상태로 수정" }, { value: "0", label: "아니오 — 기록만" }] },
-          { name: "memo", label: "메모 (선택)", type: "textarea", placeholder: "예: 가방을 사람으로 인식함" },
-        ], ok: "피드백 기록", danger: true });
-      if (!v) return;
-      run(() => api("POST", `/api/admin/seats/${d.seat}/feedback`,
-        { verdict: "wrong", correct_detail: v.correct, apply: v.apply === "1", memo: v.memo }),
-        "판정 피드백을 기록했습니다.").then(loadAccuracy);
     },
 
     async notice(d) {
@@ -525,49 +459,16 @@
     if (res) toast(`샘플 이력 생성 완료 · 예약 ${res.reservations}건`, "ok");
   };
 
-  // ------------------------------------------------ 판정 정확도
-  async function loadAccuracy() {
-    let d;
-    try { d = await api("GET", "/api/admin/feedback", null, { quiet: true }); } catch (e) { return; }
-    const pctv = (a) => (a.accuracy == null ? "-" : Math.round(a.accuracy * 100) + "%");
-    if (!d.overall.total) {
-      $("accuracy").innerHTML = `<p class="muted small">아직 피드백이 없습니다. 좌석을 누르고 [✓ 맞음] / [✗ 틀림]을 기록해 보세요.</p>`;
-      return;
-    }
-    const src = Object.entries(d.by_source).map(([k, a]) => `<span class="chip plain">${SRC_LABEL[k] || k} <b>${pctv(a)}</b> <span class="muted">(${a.correct}/${a.total})</span></span>`).join("");
-    const st = Object.entries(d.by_state).map(([k, a]) => `<span class="chip plain">${esc(k)} <b>${pctv(a)}</b></span>`).join("");
-    const conf = d.confusion.map((c) => `<li>${esc(c.shown)} → 실제 ${esc(c.correct)} <b>${c.count}회</b></li>`).join("");
-    const recent = d.recent.map((f) => `<tr><td class="small">${f.at.slice(5, 10)} ${fmtTime(f.at)}</td><td>${esc(f.seat_label)}</td>
-      <td class="small">${esc(f.shown)} <span class="muted">(${SRC_LABEL[f.source] || f.source})</span></td>
-      <td>${f.verdict === "correct" ? '<span class="pill green">맞음</span>' : `<span class="pill red">틀림</span> ${esc(f.correct || "")}${f.applied ? ' <span class="muted small">수정함</span>' : ""}`}</td>
-      <td class="small">${esc(f.admin_name || "")}${f.memo ? " · " + esc(f.memo) : ""}</td></tr>`).join("");
-    $("accuracy").innerHTML = `<div class="acc-top"><div class="acc-big">${pctv(d.overall)}</div>
-        <div><b>전체 정확도</b> · ${d.overall.correct}/${d.overall.total}건 맞음<div class="chips" style="margin:6px 0 0">${src}</div>
-        <div class="chips" style="margin:4px 0 0">${st}</div></div></div>
-      ${conf ? `<div class="section-title">자주 틀리는 판정</div><ul class="conf">${conf}</ul>` : ""}
-      <div class="section-title">최근 피드백</div>
-      <div class="table-wrap"><table class="recon"><thead><tr><th>시각</th><th>좌석</th><th>화면 판정</th><th>결과</th><th>확인자·메모</th></tr></thead>
-      <tbody>${recent}</tbody></table></div>`;
-  }
-  loadAccuracy();
-  setInterval(() => { if (document.visibilityState !== "hidden") loadAccuracy(); }, 30000);
-
   // ------------------------------------------------ 카메라 연결 상태
-  const CAM_STATE = { OCCUPIED: "사람", EMPTY: "없음", UNKNOWN: "확인 불가" };
   async function loadCameras() {
     let d;
     try { d = await api("GET", "/api/admin/cameras", null, { quiet: true }); } catch (e) { return; }
-    $("cameras").innerHTML = d.cameras.map((c) => {
+    $("cam-line").innerHTML = d.cameras.map((c) => {
       const status = !c.connected ? `<span class="pill">연결 기록 없음</span>`
-        : c.fresh ? `<span class="pill green">정상</span>` : `<span class="pill red">끊김 · ${esc(c.health || "")}</span>`;
-      return `<div class="cam-card"><div class="ri-head"><b>📷 ${esc(c.camera_id)}</b> ${status}
-          <span class="muted small">${c.last_seen_at ? `마지막 수신 ${fmtRemain(c.last_seen_sec)} 전` : "아직 수신 없음"}
-          ${c.meaning ? ` · 감지 범위: ${c.meaning === "person_presence_only" ? "사람만(짐 구분 없음)" : esc(c.meaning)}` : ""}
-          ${c.clock_offset ? ` · 시계 보정 ${c.clock_offset}초` : ""}</span></div>
-        <div class="cam-seats">${c.seats.map((st) => `<span class="cam-seat cs-${esc(st.cam_state || "NONE")}"
-          title="${esc(st.camera_seat)} → ${esc(st.label)}${st.confidence ? " · 점수 " + st.confidence.toFixed(2) : ""}">
-          ${esc(st.camera_seat)}→<b>${esc(st.label)}</b> ${st.cam_state ? CAM_STATE[st.cam_state] : "-"}</span>`).join("")}</div></div>`;
-    }).join("") || `<p class="muted small">카메라가 연결된 좌석이 없습니다. config/seats.json에 camera_id·camera_seat를 지정하세요.</p>`;
+        : c.fresh ? `<span class="pill green">정상</span>` : `<span class="pill red">끊김${c.health ? " · " + esc(c.health) : ""}</span>`;
+      return `<span class="cam-chip">📷 <b>${esc(c.camera_id)}</b> ${status}
+        <span class="muted small">${c.last_seen_at ? `마지막 수신 ${fmtRemain(c.last_seen_sec)} 전` : "아직 수신 없음"} · 좌석 ${c.seats.length}개</span></span>`;
+    }).join("") || `<span class="muted small">카메라가 연결된 좌석이 없습니다.</span>`;
   }
   loadCameras();
   setInterval(() => { if (document.visibilityState !== "hidden") loadCameras(); }, 5000);

@@ -31,7 +31,8 @@
     <a href="/my" class="{% if p == '/my' %}on{% endif %}"><span class="ti">💺</span>내 자리</a>
     <a href="/congestion" class="{% if p == '/congestion' %}on{% endif %}"><span class="ti">📊</span>혼잡도</a>
     <a href="/history" class="{% if p == '/history' %}on{% endif %}"><span class="ti">🗓️</span>내 기록</a>
-    {% if admin_mode %}<a href="/admin" class="admin-tab {% if p|slice:':6' == '/admin' %}on{% endif %}"><span class="ti">🛠️</span>관리</a>{% endif %}
+    {% if admin_mode %}<a href="/admin" class="admin-tab {% if p == '/admin' %}on{% endif %}"><span class="ti">🛠️</span>관리</a>
+    <a href="/admin/settings" class="admin-tab {% if p == '/admin/settings' %}on{% endif %}"><span class="ti">⚙️</span>설정</a>{% endif %}
   </nav>
   {% endwith %}
   {% endif %}

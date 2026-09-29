@@ -83,6 +83,7 @@ DETAILS = {
     "item":             (IN_USE,      "짐만 있음",        False, "사람은 없고 짐만 있습니다. 이용 중인 예약이 있으면 사석화 기준 시간을 넘길 때 '사석화'가 됩니다."),
     "unauthorized":     (IN_USE,      "무단 점유",        True,  "예약 없이 좌석을 사용하거나 짐으로 자리를 맡아 두었습니다."),
     "no_checkin":       (IN_USE,      "체크인 누락",      True,  "예약 좌석에 착석(또는 짐)이 있지만 체크인하지 않았습니다."),
+    "no_show":          (IN_USE,      "미입실",           True,  "체크인 제한 시간 안에 예약자가 오지 않았습니다. 예약은 관리자가 취소할 때까지 유지됩니다."),
     "away":             (IN_USE,      "이탈",             True,  "이용 중인 좌석이 기준 시간보다 오래 비어 있습니다."),
     "hoarding":         (IN_USE,      "사석화",           True,  "짐만 두고 기준 시간보다 오래 자리를 비웠습니다."),
     "broken":           (UNAVAILABLE, "고장",             False, "좌석·책상·전원 등이 고장 나 예약할 수 없습니다."),
@@ -197,6 +198,8 @@ def _judge(res, actual, now, s):
             if mark == "ok":
                 return _j("seated_unchecked", start, checkin_deadline)
             return _j("no_checkin", start, checkin_deadline)
+        if now >= checkin_deadline:  # 시간 안에 아무도 오지 않음 → 확인 필요 (자동 취소하지 않고 관리자가 판단)
+            return _j("no_show", checkin_deadline)
         return _j("waiting", res.start_at, checkin_deadline)
 
     # in_use: 자리 비움은 체크인 시점 이후부터 센다

@@ -60,7 +60,7 @@ def test_history_splits_across_midnight(user, clock):
 
 def test_no_show_counted(user, clock):
     reserve(user, 1)
-    clock.advance(16 * 60)
+    clock.advance(121 * 60)  # 예약 끝까지 체크인하지 않음
     s = user.jget("/api/me/history")["summary"]
     assert s["no_shows"] == 1 and s["total_min"] == 0
 
@@ -242,7 +242,7 @@ def test_prewarn_checkin_deadline(user, clock):
     assert notes("20260001", "prewarn") == ["A-1 체크인 마감 9분 전"]
     clock.advance(10 * 60)
     user.get("/api/seats")
-    assert "A-1 예약이 자동 취소됐어요" in notes("20260001", "issue")
+    assert "A-1 체크인 시간이 지났어요" in notes("20260001", "issue")
 
 
 def test_admin_actions_notify_user(user, admin):

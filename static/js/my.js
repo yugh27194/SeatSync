@@ -24,7 +24,7 @@
         ${reserved
           ? `<p style="text-align:center;margin:0">체크인 마감까지</p>
              <div class="countdown" id="cd"></div>
-             <div class="notice warn">좌석에 붙은 QR을 스캔해 체크인하세요. 마감까지 체크인하지 않으면 예약이 자동 취소됩니다.</div>`
+             <div class="notice warn">좌석에 붙은 QR을 스캔해 체크인하세요. 마감까지 체크인하지 않으면 '미입실'로 표시되고 관리자가 예약을 취소할 수 있어요.</div>`
           : `<p style="text-align:center;margin:0">남은 시간</p><div class="countdown" id="cd"></div>`}
         <dl class="kv">
           <dt>시작</dt><dd>${fmtTime(r.start_at)}</dd>
@@ -53,9 +53,10 @@
     const el = document.getElementById("cd");
     if (!el || !r) return;
     const left = (r.status === "reserved" ? parseTs(r.checkin_deadline) : parseTs(r.end_at)) - serverNow();
-    el.textContent = fmtClock(left);
+    const overdue = r.status === "reserved" && left <= 0;  // 체크인 시간 지남: 예약은 유지(미입실 표시)
+    el.textContent = overdue ? "시간 지남" : fmtClock(left);
     el.classList.toggle("low", left < 600);
-    if (left <= 0) sync();
+    if (left <= 0 && !overdue) sync();
   }
 
   function bind() {

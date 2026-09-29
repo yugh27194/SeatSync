@@ -28,7 +28,7 @@
           style="grid-column:${s.x};grid-row:${s.y}" title="${esc(s.zone || "")}${attn ? ` · 확인 필요: ${esc(s.detail_label)}` : ""}"
           aria-label="${esc(s.label)} ${esc(sub)}${attn ? " · 확인 필요" : ""}">
           ${attn ? '<span class="bang" aria-hidden="true">!</span>' : ""}
-          ${esc(s.label)}<span class="sub">${esc(sub)}</span></button>`
+          ${esc(s.label)}</button>`
       );
     }
     mapEl.innerHTML = html.join("");
@@ -50,7 +50,9 @@
     }
     if (r) {
       const txt = r.status === "reserved"
-        ? `<strong>${esc(r.seat_label)}</strong> · 예약됨<br><span class="deadline">${fmtRemain(parseTs(r.checkin_deadline) - now)}</span> 안에 좌석 QR로 체크인하세요`
+        ? (parseTs(r.checkin_deadline) > now
+          ? `<strong>${esc(r.seat_label)}</strong> · 예약됨<br><span class="deadline">${fmtRemain(parseTs(r.checkin_deadline) - now)}</span> 안에 좌석 QR로 체크인하세요`
+          : `<strong>${esc(r.seat_label)}</strong> · 예약됨<br><span class="deadline">체크인 시간이 지났어요.</span> 도착했다면 바로 좌석 QR로 체크인하세요`)
         : `<strong>${esc(r.seat_label)}</strong> · 남은 시간 <strong>${fmtRemain(parseTs(r.end_at) - now)}</strong>`;
       barEl.innerHTML = `<div class="txt">${txt}</div><a class="btn small" href="/my">내 자리 관리</a>${statusLine()}`;
       return;

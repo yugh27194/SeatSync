@@ -327,16 +327,21 @@ def force_return(request, res_id):
     now = clock.now()
     with transaction.atomic():
         r = _get_reservation(res_id)
-        r.status, r.ended_at = "force_returned", now
+        no_show = bool(body.get("no_show")) and r.status == "reserved"  # 미입실 예약 취소
+        r.status, r.ended_at = ("no_show" if no_show else "force_returned"), now
         r.save(update_fields=["status", "ended_at"])
         Alert.objects.filter(seat_id=r.seat_id, resolved_at__isnull=True).update(
             resolved_at=now, resolved_by_id=request.user.id, resolution="force_returned")
         # 관리자 지정 의도는 예약과 함께 정리한다(남은 짐·사람은 예약 없는 좌석으로 다시 판정됨)
         clear_marks([r.seat_id])
         memo = str_field(body, "memo")
-        record_event(r, "force_return", now, memo=memo)
-        notify(r.user_id, "issue", "danger", f"{r.seat.label} 예약이 관리자에 의해 반납됐어요",
-               memo or "좌석 이용 규정 위반으로 관리자가 반납 처리했습니다.", now, seat=r.seat, reservation=r)
+        record_event(r, "no_show" if no_show else "force_return", now, memo=memo)
+        if no_show:
+            notify(r.user_id, "issue", "danger", f"{r.seat.label} 예약이 미입실로 취소됐어요",
+                   memo or "체크인 시간 안에 오지 않아 관리자가 예약을 취소했습니다.", now, seat=r.seat, reservation=r)
+        else:
+            notify(r.user_id, "issue", "danger", f"{r.seat.label} 예약이 관리자에 의해 반납됐어요",
+                   memo or "좌석 이용 규정 위반으로 관리자가 반납 처리했습니다.", now, seat=r.seat, reservation=r)
         log_admin(request.user.id, "force_return", now, seat_no=r.seat_id, reservation_id=r.id,
                   target_user_id=r.user_id, memo=memo)
         refresh(now)

@@ -92,11 +92,32 @@ def test_seat_unavailable_with_reservation(admin, user):
     assert s["seat_state"] == "unavailable" and s["detail"] == "seat_unavailable" and _open(6) == ["seat_unavailable"]
 
 
-def test_no_show_sweep_alert(user, clock, admin):
+def test_no_show_marks_check_until_admin_cancels(user, clock, admin):
+    """체크인 시간 안에 아무도 오지 않으면 자동 취소 대신 '미입실'(확인 필요), 관리자가 취소한다."""
     rid = user.jpost("/api/reservations", {"seat_no": 1}).json()["id"]
     clock.advance(15 * 60 + 1)
-    admin.get("/api/admin/seats")
-    assert Reservation.objects.get(id=rid).status == "no_show" and _open(1) == ["no_show"]
+    s = admin_seat(admin, 1)
+    assert s["detail"] == "no_show" and s["check"] and s["seat_state"] == "in_use" and _open(1) == ["no_show"]
+    assert Reservation.objects.get(id=rid).status == "reserved"
+    assert user.jget("/api/seats")["my_status"]["detail"] == "no_show"
+    admin.jpost(f"/api/admin/reservations/{rid}/force-return", {"no_show": True})
+    assert Reservation.objects.get(id=rid).status == "no_show" and _open(1) == []
+    assert admin_seat(admin, 1)["detail"] == "empty"
+
+
+def test_late_arrival_can_still_check_in(user, clock, admin):
+    from conftest import qr_token
+    rid = user.jpost("/api/reservations", {"seat_no": 1}).json()["id"]
+    clock.advance(20 * 60)
+    assert user.jpost(f"/api/reservations/{rid}/checkin", {"qr_token": qr_token(1)}).status_code == 200
+    assert admin_seat(admin, 1)["detail"] == "using" and _open(1) == []
+
+
+def test_reserved_until_end_becomes_no_show(user, clock):
+    rid = user.jpost("/api/reservations", {"seat_no": 1}).json()["id"]
+    clock.advance(121 * 60)
+    user.get("/api/seats")
+    assert Reservation.objects.get(id=rid).status == "no_show"
 
 
 def test_item_approval_ends_with_reservation(admin, user, clock):

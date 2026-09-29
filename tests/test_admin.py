@@ -172,7 +172,7 @@ def test_demo_scenario(admin):
     seats = {s["label"]: s for s in admin.jget("/api/admin/seats")["seats"]}
     expect = {
         "A-1": "using", "A-2": "away", "A-3": "unauthorized", "A-4": "no_checkin", "A-5": "using",
-        "B-1": "seat_unavailable", "B-2": "hoarding", "B-3": "empty", "B-4": "item", "C-1": "waiting",
+        "B-1": "seat_unavailable", "B-2": "hoarding", "B-3": "no_show", "B-4": "item", "C-1": "waiting",
         "C-2": "unauthorized", "D-1": "maintenance", "E-3": "broken", "D-4": "empty",
     }
     assert {k: seats[k]["detail"] for k in expect} == expect

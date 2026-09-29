@@ -86,7 +86,7 @@
     const r = data.my_reservation, now = serverNow();
     panel.querySelectorAll("[data-cd]").forEach((el) => {
       const left = (el.dataset.cd === "checkin" ? parseTs(r.checkin_deadline) : parseTs(r.end_at)) - now;
-      el.textContent = el.dataset.cd === "end" ? fmtClock(left) : fmtRemain(left);
+      el.textContent = el.dataset.cd === "end" ? fmtClock(left) : (left > 0 ? fmtRemain(left) : "시간 지남 — 지금 체크인하세요");
       el.classList.toggle("low", left < 600);
     });
   }

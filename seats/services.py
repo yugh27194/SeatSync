@@ -58,23 +58,18 @@ def clear_marks(seat_nos):
 
 
 def _sweep(now, s):
-    limit = s.checkin_limit_min * 60
+    # 체크인 제한 시간이 지난 예약은 자동 취소하지 않는다 — 판정에서 '미입실'(확인 필요)로 표시하고 관리자가 판단한다.
+    # 예약 종료 시각까지 끝내 체크인하지 않으면 그때 미입실로 끝낸다.
     ended = set()
-    for r in Reservation.objects.filter(status="reserved", start_at__lt=now - limit).select_related("seat"):
-        r.status, r.ended_at = "no_show", now
-        r.save(update_fields=["status", "ended_at"])
-        ended.add(r.seat_id)
-        record_event(r, "no_show", now)
-        notify(r.user_id, "issue", "danger", f"{r.seat.label} 예약이 자동 취소됐어요",
-               f"체크인 제한 시간({s.checkin_limit_min}분) 안에 체크인하지 않아 미입실로 처리됐습니다.",
-               now, seat=r.seat, reservation=r, key=f"noshow:{r.id}")
-        if not Alert.objects.filter(seat_id=r.seat_id, type="no_show", resolved_at__isnull=True).exists():
-            Alert.objects.create(seat_id=r.seat_id, type="no_show", reservation=r, created_at=now)
     for r in Reservation.objects.filter(status__in=ACTIVE, end_at__lte=now).select_related("seat"):
-        r.status, r.ended_at = "expired", now
+        no_show = r.status == "reserved"
+        r.status, r.ended_at = ("no_show" if no_show else "expired"), now
         r.save(update_fields=["status", "ended_at"])
         ended.add(r.seat_id)
-        record_event(r, "expire", r.end_at)
+        record_event(r, "no_show" if no_show else "expire", r.end_at)
+        if no_show:
+            notify(r.user_id, "issue", "danger", f"{r.seat.label} 예약이 미입실로 끝났어요",
+                   "예약 시간이 끝날 때까지 체크인하지 않았습니다.", now, seat=r.seat, reservation=r, key=f"noshow:{r.id}")
     if ended:
         clear_marks(ended)
 
@@ -173,10 +168,14 @@ def _prewarn(results, now, s):
             notify(uid, "prewarn", "warn", f"{seat.label} 체크인해 주세요",
                    "예약 좌석에 착석(또는 짐)이 확인됐지만 아직 체크인 전이에요. 좌석 QR을 스캔해 체크인하세요.",
                    now, seat=seat, reservation=r, key=f"iss:nocheckin:{r.id}:{j.since}")
-        if r.status == "reserved" and left is not None and left <= pw:
+        if r.status == "reserved" and left is not None and 0 < left <= pw:
             notify(uid, "prewarn", "warn", f"{seat.label} 체크인 마감 {_mins(left)}분 전",
-                   f"{_mins(left)}분 안에 좌석 QR로 체크인하지 않으면 예약이 자동 취소돼요(미입실).",
+                   f"{_mins(left)}분 안에 좌석 QR로 체크인하지 않으면 '미입실'로 표시되고 관리자가 예약을 취소할 수 있어요.",
                    now, seat=seat, reservation=r, key=f"pre:checkin:{r.id}")
+        if d == "no_show":
+            notify(uid, "issue", "danger", f"{seat.label} 체크인 시간이 지났어요",
+                   "'미입실'로 표시됐어요. 좌석에 도착했다면 바로 QR로 체크인하고, 이용하지 않을 거면 예약을 취소해 주세요. "
+                   "관리자가 예약을 취소할 수 있어요.", now, seat=seat, reservation=r, key=f"iss:noshow:{r.id}")
 
 
 # ---------------------------------------------------------------- 빈자리 알림 대기

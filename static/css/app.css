@@ -515,3 +515,16 @@ ul.conf { margin: 0; padding-left: 18px; font-size: 14px; }
 .cam-seat.cs-OCCUPIED { background: #e3edff; color: #1f56b8; }
 .cam-seat.cs-EMPTY { background: #e2f5ea; color: #17733f; }
 .cam-seat.cs-UNKNOWN, .cam-seat.cs-NONE { background: #f4f4f4; color: #8a929c; }
+
+/* ---------- 관리자: 좌석 상태 지정 4버튼 · 예약 대조·카메라 ---------- */
+.assign-btns .assign-btn { flex: 1 1 0; min-width: 0; padding: 9px 4px; font-size: 14px; white-space: nowrap; }
+@media (max-width: 400px) { .assign-btns .assign-btn { font-size: 13px; } }
+.assign-btn.a-available.on { background: var(--v-available); border-color: var(--v-available); }
+.assign-btn.a-in_use.on { background: var(--v-taken); border-color: var(--v-taken); }
+.assign-btn.a-unavailable.on { background: var(--v-unavailable); border-color: var(--v-unavailable); }
+.cam-line { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: -2px 0 10px; }
+.cam-chip { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+table.recon td .cam-seat { margin-right: 4px; white-space: nowrap; }
+table.recon tr.mismatch td:first-child { box-shadow: inset 4px 0 0 var(--bang); }
+.admin-map .seat { font-size: 16px; }
+.assign-btn.on:disabled { opacity: 1; cursor: default; }

@@ -94,7 +94,7 @@ erDiagram
 
 ```mermaid
 flowchart LR
-  A["sweep<br/>미입실·만료 정리<br/>(이력·알림)"] --> B["전 좌석 judge()"]
+  A["sweep<br/>예약 종료 정리<br/>(만료·미입실)"] --> B["전 좌석 judge()"]
   B --> C["전이 기록<br/>StatusLog·SeatState"]
   C --> D["처리 필요 알림<br/>전이 시 생성·벗어나면 자동 해소"]
   D --> E["본인 사전 경고<br/>기준 n분 전·전환 시"]
@@ -134,7 +134,7 @@ flowchart LR
 | `/my` | 내 자리 — 남은 시간 카운트다운, 연장·반납·호출, 내 좌석 경고 | my.js |
 | `/history` | 내 이용 기록 | history.js |
 | `/congestion` | 혼잡도 히트맵 | congestion.js |
-| `/admin` | 관리자 대시보드 — 지도·세부 상태 지정·조치·처리 필요·예약 대조 표·카메라 상태·판정 정확도·이용자 관리·처리 이력·통계 | admin.js (3초) |
+| `/admin` | 관리자 대시보드 — 지도(좌석명만)·상태 지정(빈자리/예약/사용중/사용불가)·조치·조치 목록·예약 대조·카메라 한 표·처리 이력·통계 | admin.js (3초) |
 | `/admin/settings` | 기준값 설정 | settings.js |
 
 공통(`common.js`): API 호출(CSRF 헤더, 관리자 권한 필요 시 코드 입력 후 재시도), polling(탭이 숨겨지면 멈춤), 모달, 알림 벨·배너, 관리자 모드 스위치, 배치도 그리드.
