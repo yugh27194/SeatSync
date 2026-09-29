@@ -116,8 +116,9 @@ cd ~/SeatSync && git pull
    (처음에는 **Actions → pages → Run workflow**로 직접 실행).
 3. 서비스 주소가 바뀌면 `pages/config.js`의 `SEATSYNC_APP_URL`만 고친다.
 
-`seatsync.github.io`처럼 더 짧은 주소를 원하면 GitHub에서 `seatsync`라는 이름의 계정·조직(비어 있을 때)을 만들고
-`seatsync.github.io` 저장소에 `pages/` 내용을 올린다.
+**공식 소개 주소: https://seatsync-skku.github.io** (서비스 바로가기: `https://seatsync-skku.github.io/go/`)
+— [SeatSync-SKKU/SeatSync-SKKU.github.io](https://github.com/SeatSync-SKKU/SeatSync-SKKU.github.io) 저장소에 `pages/` 내용을 복사해 둔 것이다.
+`pages/`를 고치면 그 저장소에도 같은 파일을 올려야 반영된다.
 
 ---
 
