@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}회원가입{% endblock %}
+{% block container_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>회원가입</h1>
+  {% if error %}<div class="form-error">{{ error }}</div>{% endif %}
+  <form method="post" action="{{ url_for('auth.signup') }}">
+    <input type="hidden" name="next" value="{{ next_url }}">
+    <label for="student_no">학번</label>
+    <input id="student_no" name="student_no" type="text" inputmode="numeric" value="{{ form.student_no }}" required autofocus>
+    <label for="name">이름</label>
+    <input id="name" name="name" type="text" value="{{ form.name }}" required>
+    <label for="password">비밀번호 (4자 이상)</label>
+    <input id="password" name="password" type="password" minlength="4" autocomplete="new-password" required>
+    <div style="margin-top:16px"><button class="btn block" type="submit">가입하고 시작하기</button></div>
+  </form>
+  <p class="muted small" style="margin-top:14px">이미 계정이 있나요? <a href="{{ url_for('auth.login', next=next_url or None) }}">로그인</a></p>
+</div>
+{% endblock %}

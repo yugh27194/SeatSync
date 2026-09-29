@@ -1,0 +1,16 @@
+{
+  "grid": { "cols": 5, "rows": 3 },
+  "seats": [
+    { "no": 1, "label": "A-1", "x": 1, "y": 1, "zone": "책상 A", "camera_id": "cam1" },
+    { "no": 2, "label": "A-2", "x": 2, "y": 1, "zone": "책상 A", "camera_id": "cam1" },
+    { "no": 3, "label": "A-3", "x": 1, "y": 2, "zone": "책상 A", "camera_id": "cam1" },
+    { "no": 4, "label": "A-4", "x": 2, "y": 2, "zone": "책상 A", "camera_id": "cam1" },
+    { "no": 5, "label": "B-1", "x": 4, "y": 1, "zone": "책상 B", "camera_id": "cam1" },
+    { "no": 6, "label": "B-2", "x": 5, "y": 1, "zone": "책상 B", "camera_id": "cam1" },
+    { "no": 7, "label": "B-3", "x": 4, "y": 2, "zone": "책상 B", "camera_id": "cam1" },
+    { "no": 8, "label": "B-4", "x": 5, "y": 2, "zone": "책상 B", "camera_id": "cam1" }
+  ],
+  "fixtures": [
+    { "label": "출입문", "x": 3, "y": 3 }
+  ]
+}

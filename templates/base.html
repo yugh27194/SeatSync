@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}SeatSync{% endblock %} · SeatSync</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="logo" href="{{ url_for('pages.index') }}">Seat<span>Sync</span></a>
+    <nav>
+      {% if current_user %}
+        <a href="{{ url_for('pages.map_page') }}">좌석 지도</a>
+        <a href="{{ url_for('pages.my') }}">내 자리</a>
+        {% if current_user.role == 'admin' %}<a href="{{ url_for('pages.admin') }}">관리자 화면</a>{% endif %}
+        <span class="who">{{ current_user.name }}</span>
+        <a href="{{ url_for('auth.logout') }}">로그아웃</a>
+      {% else %}
+        <a href="{{ url_for('auth.login') }}">로그인</a>
+      {% endif %}
+    </nav>
+  </header>
+  <main class="container {% block container_class %}{% endblock %}">
+    {% block content %}{% endblock %}
+  </main>
+  <div id="toasts" aria-live="polite"></div>
+  <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
