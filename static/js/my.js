@@ -3,11 +3,12 @@
   "use strict";
   const { api, fmtRemain, fmtClock, fmtTime, syncClock, serverNow, parseTs, toast, modal, esc } = window.SS;
   const root = document.getElementById("my-root");
-  let r = null, lastKey = null;
+  let r = null, me = {}, lastKey = null;
 
   function render() {
     if (!r) {
       root.innerHTML = `<div class="card seat-hero"><h1>현재 예약이 없어요</h1>
+        ${me.suspended_until ? `<div class="notice danger">이용 정지 중입니다. ${me.suspended_until.slice(5, 10)} ${fmtTime(me.suspended_until)}까지 예약할 수 없어요.</div>` : ""}
         <p class="muted">좌석 지도에서 빈자리를 누르거나, 좌석의 QR을 스캔해 예약하세요.</p>
         <a class="btn" href="/map">좌석 지도로</a></div>`;
       return;
@@ -29,6 +30,7 @@
           <dt>종료</dt><dd>${fmtTime(r.end_at)}</dd>
           ${r.checked_in_at ? `<dt>체크인</dt><dd>${fmtTime(r.checked_in_at)}</dd>` : ""}
           <dt>연장</dt><dd>${r.extend_count} / ${r.max_extends}회</dd>
+          ${me.warnings ? `<dt>누적 경고</dt><dd style="color:var(--danger)">${me.warnings}회</dd>` : ""}
         </dl>
       </div>
       <div class="card">
@@ -86,8 +88,9 @@
       const d = await api("GET", "/api/seats", null, { quiet: true });
       syncClock(d.server_time);
       r = d.my_reservation;
+      me = d.me || {};
       // 남은 초만 바뀐 경우엔 다시 그리지 않는다(버튼·모달 깜빡임 방지)
-      const key = JSON.stringify(r && { ...r, remaining_sec: 0 });
+      const key = JSON.stringify([r && { ...r, remaining_sec: 0 }, me]);
       if (key !== lastKey) { lastKey = key; render(); }
     } catch (e) { /* 다음 주기 재시도 */ }
     finally { syncing = false; }

@@ -1,6 +1,6 @@
-"""판정 갱신 파이프라인(§5.4)과 예약 공통 로직."""
+"""판정 갱신 파이프라인과 예약·좌석·관리자 공통 로직."""
 from db import get_settings, tx
-from status import (OFFLINE, RETURN_DUE, STATE_ALERT_TYPES, STATE_META, Detection, Reservation, judge)
+from status import ACTUAL_STATES, ISSUES, OK, Actual, Reservation, judge
 from timeutil import to_iso
 
 ACTIVE = ("reserved", "in_use")
@@ -9,9 +9,10 @@ ACTIVE = ("reserved", "in_use")
 # ---------------------------------------------------------------- 조회 헬퍼
 
 def active_reservations(conn):
-    """seat_no → 활성 예약(dict, 예약자 이름·학번 포함)."""
+    """seat_no → 활성 예약(dict, 예약자 정보 포함)."""
     rows = conn.execute(
-        """SELECT r.*, u.name AS user_name, u.student_no AS student_no
+        """SELECT r.*, u.name AS user_name, u.student_no AS student_no, u.warnings AS user_warnings,
+                  u.suspended_until AS user_suspended_until
              FROM reservations r JOIN users u ON u.id = r.user_id
             WHERE r.status IN ('reserved','in_use')"""
     ).fetchall()
@@ -34,10 +35,8 @@ def to_res(row):
                        end_at=row["end_at"], checked_in_at=row["checked_in_at"])
 
 
-def to_det(row):
-    if row is None:
-        return None
-    return Detection(occupancy=row["occupancy"], since=row["since"], updated_at=row["updated_at"])
+def to_actual(seat):
+    return Actual(state=seat["state"], since=seat["state_since"])
 
 
 # ---------------------------------------------------------------- 파이프라인
@@ -49,7 +48,6 @@ def _sweep(conn, now, s):
     ).fetchall()
     for r in no_shows:
         conn.execute("UPDATE reservations SET status='no_show', ended_at=? WHERE id=?", (now, r["id"]))
-        # 정보성 알림. 같은 좌석의 미해결 no_show가 있으면 중복 생성하지 않는다.
         conn.execute(
             "INSERT OR IGNORE INTO alerts(seat_no, type, reservation_id, created_at) VALUES (?, 'no_show', ?, ?)",
             (r["seat_no"], r["id"], now),
@@ -60,81 +58,77 @@ def _sweep(conn, now, s):
     )
 
 
-def _judge_seats(conn, now, s, only=None):
+def _judge_seats(conn, now, s):
     seats = conn.execute("SELECT * FROM seats WHERE active = 1 ORDER BY no").fetchall()
     res_map = active_reservations(conn)
-    det_map = {r["seat_no"]: dict(r) for r in conn.execute("SELECT * FROM detections").fetchall()}
     out = []
     for seat in seats:
-        if only is not None and seat["no"] not in only:
-            continue
         res = res_map.get(seat["no"])
-        det = det_map.get(seat["no"])
-        out.append({"seat": dict(seat), "res": res, "det": det,
-                    "j": judge(to_res(res), to_det(det), now, s)})
+        out.append({"seat": dict(seat), "res": res, "j": judge(to_res(res), to_actual(seat), now, s)})
     return out
 
 
 def _record(conn, item, now):
-    """상태 전이 기록 + 알림 생성/자동 해소."""
-    seat_no, j, res, det = item["seat"]["no"], item["j"], item["res"], item["det"]
-    prev = conn.execute("SELECT state FROM seat_state WHERE seat_no = ?", (seat_no,)).fetchone()
-    prev_state = prev["state"] if prev else None
-    changed = prev_state != j.state
+    """상태·상황 전이 기록 + 확인 필요 알림 생성/자동 해소."""
+    seat, j, res = item["seat"], item["j"], item["res"]
+    seat_no = seat["no"]
+    prev = conn.execute("SELECT seat_state, situation FROM seat_state WHERE seat_no = ?", (seat_no,)).fetchone()
+    changed = prev is None or (prev["seat_state"], prev["situation"]) != (j.seat_state, j.situation)
     if changed:
         conn.execute(
-            "INSERT INTO status_log(seat_no, state, prev_state, reservation_id, occupancy, at) VALUES (?,?,?,?,?,?)",
-            (seat_no, j.state, prev_state, res["id"] if res else None, det["occupancy"] if det else None, now),
+            "INSERT INTO status_log(seat_no, seat_state, situation, prev_situation, reservation_id, actual, at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (seat_no, j.seat_state, j.situation, prev["situation"] if prev else None,
+             res["id"] if res else None, seat["state"], now),
         )
         conn.execute(
-            "INSERT INTO seat_state(seat_no, state, since) VALUES (?,?,?) "
-            "ON CONFLICT(seat_no) DO UPDATE SET state = excluded.state, since = excluded.since",
-            (seat_no, j.state, j.since),
+            "INSERT INTO seat_state(seat_no, seat_state, situation, since) VALUES (?,?,?,?) "
+            "ON CONFLICT(seat_no) DO UPDATE SET seat_state=excluded.seat_state, situation=excluded.situation, "
+            "since=excluded.since",
+            (seat_no, j.seat_state, j.situation, j.since),
         )
-
-    # SPEC-ASSUMPTION: 감지 끊김(OFFLINE)은 실제 상태를 모르는 것이므로 기존 알림을 자동 해소하지 않는다.
-    if j.state == OFFLINE:
-        return
-    atype = STATE_META[j.state]["alert"]
-    # 알림은 해당 상태로 '전이'할 때만 만든다 — 관리자가 처리 완료한 뒤 같은 상태가 이어져도 다시 뜨지 않게.
-    if atype and changed:
+    # 알림은 확인 필요 상황으로 '전이'할 때만 만든다 — 처리 완료 후 같은 상황이 이어져도 다시 뜨지 않게.
+    if j.situation != OK and (prev is None or prev["situation"] != j.situation):
         conn.execute(
             "INSERT OR IGNORE INTO alerts(seat_no, type, reservation_id, created_at) VALUES (?,?,?,?)",
-            (seat_no, atype, res["id"] if res else None, now),
+            (seat_no, j.situation, res["id"] if res else None, now),
         )
-    stale_types = [t for t in STATE_ALERT_TYPES if t != atype]
-    marks = ",".join("?" * len(stale_types))
+    stale = [t for t in ISSUES if t != j.situation]
     conn.execute(
-        f"UPDATE alerts SET resolved_at = ?, resolution = 'auto' "
-        f"WHERE seat_no = ? AND resolved_at IS NULL AND type IN ({marks})",
-        (now, seat_no, *stale_types),
+        f"UPDATE alerts SET resolved_at=?, resolution='auto' WHERE seat_no=? AND resolved_at IS NULL "
+        f"AND type IN ({','.join('?' * len(stale))})",
+        (now, seat_no, *stale),
     )
 
 
 def refresh(conn, now):
-    """sweep → 전 좌석 판정 → 전이 기록 → 알림 → (옵션) 자동 반납. 좌석별 판정 결과 목록을 돌려준다."""
+    """sweep → 전 좌석 판정·대조 → 전이 기록 → 알림. 좌석별 결과 목록을 돌려준다."""
     with tx(conn):
         s = get_settings(conn)
         _sweep(conn, now, s)
         results = _judge_seats(conn, now, s)
         for item in results:
             _record(conn, item, now)
-
-        if s.auto_return_empty:
-            returned = []
-            for item in results:
-                if item["j"].state == RETURN_DUE and item["res"]:
-                    conn.execute(
-                        "UPDATE reservations SET status='returned', ended_at=? WHERE id=? AND status IN ('reserved','in_use')",
-                        (now, item["res"]["id"]),
-                    )
-                    returned.append(item["seat"]["no"])
-            if returned:
-                redo = {i["seat"]["no"]: i for i in _judge_seats(conn, now, s, only=set(returned))}
-                for item in redo.values():
-                    _record(conn, item, now)
-                results = [redo.get(i["seat"]["no"], i) for i in results]
     return results
+
+
+# ---------------------------------------------------------------- 좌석 현장 상태
+
+def set_seat_state(conn, seat_no, state, source, now, note=None, keep_note=False):
+    """현장 상태 변경. 같은 상태면 시작 시각을 유지한다."""
+    row = conn.execute("SELECT state, state_note FROM seats WHERE no=?", (seat_no,)).fetchone()
+    if row is None:
+        return False
+    if state != "unavailable" and not keep_note:
+        note = None
+    elif keep_note and note is None:
+        note = row["state_note"]
+    if row["state"] == state:
+        conn.execute("UPDATE seats SET state_source=?, state_note=? WHERE no=?", (source, note, seat_no))
+        return False
+    conn.execute("UPDATE seats SET state=?, state_since=?, state_source=?, state_note=? WHERE no=?",
+                 (state, now, source, note, seat_no))
+    return True
 
 
 # ---------------------------------------------------------------- 예약 공통
@@ -169,3 +163,73 @@ def reservation_json(res, now, s, seat_label=None):
         "max_extends": s.max_extends,
         "remaining_sec": max(0, res["end_at"] - now),
     }
+
+
+def suspension(user_row, now):
+    """정지 중이면 종료 시각(epoch), 아니면 None."""
+    until = user_row["suspended_until"]
+    return until if until and until > now else None
+
+
+# ---------------------------------------------------------------- 관리자 이력
+
+def log_admin(conn, admin_id, action, now, seat_no=None, reservation_id=None, target_user_id=None,
+              alert_id=None, memo=None):
+    conn.execute(
+        "INSERT INTO admin_log(admin_id, action, seat_no, reservation_id, target_user_id, alert_id, memo, at) "
+        "VALUES (?,?,?,?,?,?,?,?)",
+        (admin_id, action, seat_no, reservation_id, target_user_id, alert_id, memo, now),
+    )
+
+
+# ---------------------------------------------------------------- 시연 상황 배치
+
+# (좌석 번호, 예약자 아이디 또는 None, 예약 상태, 예약 시작(분 전), 현장 상태, 현장 상태 시작(분 전), 메모)
+DEMO_LAYOUT = [
+    (1, "userA",    "in_use",   30, "occupied",    30, "정상 이용"),
+    (2, "userB",    "in_use",   50, "empty",       40, "장시간 자리 비움"),
+    (3, None,       None,        0, "occupied",    10, "미예약 사용"),
+    (4, "userC",    "reserved",  5, "occupied",     3, "체크인 누락"),
+    (5, None,       None,        0, "unavailable", 60, "사용불가(의자 파손)"),
+    (6, "20260001", "reserved",  3, "unavailable",  1, "예약 좌석 사용불가"),
+    (7, "20260002", "in_use",   20, "empty",        5, "잠시 자리 비움(정상)"),
+    (8, "20260003", "reserved", None, "empty",      30, "미입실 → 자동 취소"),
+]
+
+
+def setup_demo(conn, now):
+    """활성 예약·미해결 알림을 정리하고 DEMO_LAYOUT대로 다양한 상황을 만든다. 안내 문구 목록을 돌려준다."""
+    msgs = []
+    with tx(conn):
+        s = get_settings(conn)
+        conn.execute("UPDATE reservations SET status='cancelled', ended_at=? WHERE status IN ('reserved','in_use')",
+                     (now,))
+        conn.execute("UPDATE alerts SET resolved_at=?, resolution='reset' WHERE resolved_at IS NULL", (now,))
+        # 상황 캐시를 비워 같은 상황이라도 알림이 새로 생기게 한다
+        conn.execute("DELETE FROM seat_state")
+        valid = {r["no"]: r["label"] for r in conn.execute("SELECT no, label FROM seats WHERE active=1")}
+        for seat_no, sno, status, start_ago, state, state_ago, memo in DEMO_LAYOUT:
+            if seat_no not in valid:
+                continue
+            note = {5: "의자 파손", 6: "조명 고장"}.get(seat_no) if state == "unavailable" else None
+            conn.execute("UPDATE seats SET state=?, state_since=?, state_source='manual', state_note=? WHERE no=?",
+                         (state, now - state_ago * 60, note, seat_no))
+            if sno:
+                user = conn.execute("SELECT id, name FROM users WHERE student_no=?", (sno,)).fetchone()
+                if user is None:
+                    continue
+                if start_ago is None:  # 체크인 제한을 넘긴 예약 → 다음 refresh에서 미입실 처리
+                    start_ago = s.checkin_limit_min + 5
+                start = now - start_ago * 60
+                conn.execute(
+                    "INSERT INTO reservations(user_id, seat_no, status, start_at, end_at, checked_in_at, source) "
+                    "VALUES (?,?,?,?,?,?,'map')",
+                    (user["id"], seat_no, status, start, start + s.default_use_min * 60,
+                     start if status == "in_use" else None),
+                )
+                msgs.append(f"{valid[seat_no]}: {user['name']} {'이용 중' if status == 'in_use' else '예약'} · "
+                            f"현장 {ACTUAL_STATES[state]} → {memo}")
+            else:
+                msgs.append(f"{valid[seat_no]}: 예약 없음 · 현장 {ACTUAL_STATES[state]} → {memo}")
+        refresh(conn, now)
+    return msgs

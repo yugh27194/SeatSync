@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """가짜 감지 전송기 (개발용 — 시연에 쓰지 말 것).
 
+주의: 카메라처럼 모든 좌석의 현장 상태를 덮어쓴다(관리자가 '사용불가'로 지정한 좌석 제외).
+관리자 화면에서 현장 상태를 직접 배분해 쓰는 동안에는 실행하지 말 것.
+
     python tools/simulate.py --url http://localhost:5000 --key dev-key     # 대화형
       > set 3 person        # 3번 좌석 person (since=지금)
       > set 5 item -40m     # 5번 좌석 item, since=40분 전 (-90s, -2h 도 가능)
@@ -180,18 +183,18 @@ def run_demo(sim, url, db_path, step_sec):
     users[0].call("POST", "/api/reservations", {"seat_no": 1, "qr_token": tokens[1]})
     pause()
 
-    say("2번: 테스트2 착석·QR 예약 후 짐만 두고 이석 → 이석 중 → (사석화 기준 경과 후) 사석화")
+    say("2번: 테스트2 착석·QR 예약 후 자리를 비움 → (자리 비움 허용 시간 경과 후) 장시간 자리 비움")
     sim.set(2, "person")
     users[1].call("POST", "/api/reservations", {"seat_no": 2, "qr_token": tokens[2]})
     pause()
-    sim.set(2, "item")
+    sim.set(2, "empty")
     pause()
 
-    say("3번: 예약 없이 착석 → 임시 점유 → (유예 시간 경과 후) 무단 사용")
+    say("3번: 예약 없이 착석 → 미예약 사용")
     sim.set(3, "person")
     pause()
 
-    say("4번: 테스트4가 지도에서 예약만 하고 입실하지 않음 → 예약됨 → (체크인 제한 경과 후) 미입실")
+    say("4번: 테스트4가 지도에서 예약만 하고 입실하지 않음 → (체크인 제한 경과 후) 미입실")
     users[3].call("POST", "/api/reservations", {"seat_no": 4})
     pause()
 

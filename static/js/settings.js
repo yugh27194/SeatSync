@@ -2,7 +2,7 @@
 (function () {
   "use strict";
   const { api, toast, esc } = window.SS;
-  const DEMO = { grace_sec: 15, hoarding_min: 1, empty_return_min: 1, checkin_limit_min: 2 };
+  const DEMO = { checkin_limit_min: 2, away_limit_min: 1 };
   const rows = document.getElementById("rows");
   let meta = {}, defaults = {};
 

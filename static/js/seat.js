@@ -15,7 +15,10 @@
   function renderNotices() {
     const n = [];
     if (data.qr_ok === false) n.push(notice("좌석 QR을 다시 스캔해 주세요. (QR 정보가 올바르지 않습니다)", "danger"));
-    if (data.offline) n.push(notice("좌석 감지 일시 중단 — 예약 정보를 기준으로 표시합니다.", "warn"));
+    if (data.me && data.me.suspended_until && !data.my_reservation)
+      n.push(notice(`이용 정지 중입니다. ${data.me.suspended_until.slice(5, 10)} ${fmtTime(data.me.suspended_until)}까지 예약할 수 없어요.`, "danger"));
+    if (data.unavailable && data.page_mode !== "unavailable")
+      n.push(notice("이 좌석은 현재 사용불가 상태입니다. 관리자가 좌석을 옮겨 드릴 거예요.", "warn"));
     notices.innerHTML = n.join("");
   }
 
@@ -26,7 +29,7 @@
     const r = data.my_reservation;
     const mode = data.page_mode;
     // 같은 화면이면 버튼을 다시 그리지 않고 카운트다운만 갱신 (입력 중 깜빡임 방지)
-    const key = [mode, r && r.id, r && r.status, r && r.end_at, r && r.can_extend, data.occupied, data.qr_ok].join("|");
+    const key = [mode, r && r.id, r && r.status, r && r.end_at, r && r.can_extend, data.occupied, data.qr_ok, data.unavailable].join("|");
     if (key === lastKey) { tick(); return; }
     lastKey = key;
 
@@ -61,6 +64,11 @@
           ${data.occupied && !tokenOk() ? notice("현재 다른 이용자가 앉아 있는 좌석입니다. 본인이라면 좌석 QR을 스캔해 주세요.", "warn") : ""}
           <button class="btn big" id="btn-reserve" ${data.occupied && !tokenOk() ? "disabled" : ""}>바로 예약하기</button>`;
       }
+    } else if (mode === "unavailable") {
+      h = `<h2><span class="pill">사용불가</span></h2>
+        <p>지금은 사용할 수 없는 좌석입니다.${data.unavailable_note ? ` (사유: ${esc(data.unavailable_note)})` : ""}</p>
+        <p class="muted small">다른 빈자리를 이용해 주세요.</p>
+        <a class="btn block" href="/map">좌석 지도 보기</a>`;
     } else if (mode === "reserved_by_other") {
       h = `<h2>예약된 좌석입니다</h2>
         <p class="muted">예약자라면 본인 계정으로 로그인하세요.</p>

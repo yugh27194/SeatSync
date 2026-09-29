@@ -7,7 +7,7 @@
   let data = null;
   let busy = false;
 
-  const SUB = { available: "빈자리", taken: "사용 중", unavailable: "사용 불가", mine: "내 자리" };
+  const SUB = { available: "빈자리", taken: "예약(사용중)", unavailable: "사용불가", mine: "내 자리" };
 
   function fmtMinutes(min) {
     const h = Math.floor(min / 60), m = min % 60;
@@ -23,9 +23,9 @@
       html.push(`<div class="fixture" style="grid-column:${f.x};grid-row:${f.y}">${esc(f.label)}</div>`);
     }
     for (const s of data.seats) {
-      const sub = s.checking ? "확인 중" : SUB[s.view];
+      const sub = SUB[s.view];
       html.push(
-        `<button type="button" class="seat v-${s.view}${s.checking ? " checking" : ""}" data-no="${s.no}"
+        `<button type="button" class="seat v-${s.view}" data-no="${s.no}"
           style="grid-column:${s.x};grid-row:${s.y}" aria-label="${esc(s.label)} ${sub}">
           ${esc(s.label)}<span class="sub">${sub}</span></button>`
       );
@@ -35,6 +35,11 @@
 
   function renderBar() {
     const r = data.my_reservation;
+    const me = data.me || {};
+    if (!r && me.suspended_until) {
+      barEl.innerHTML = `<div class="txt"><span class="deadline">이용 정지 중</span> · ${me.suspended_until.slice(5, 10)} ${SS.fmtTime(me.suspended_until)}까지 예약할 수 없어요.</div>`;
+      return;
+    }
     if (!r) {
       barEl.innerHTML = `<div class="txt">빈 좌석을 눌러 예약하세요</div>`;
       return;
@@ -60,8 +65,7 @@
 
   async function reserve(seat) {
     const p = data.policy;
-    const body = `이용 시간 ${fmtMinutes(p.default_use_min)}, ${p.checkin_limit_min}분 안에 체크인 필요` +
-      (seat.checking ? "\n(현재 좌석 감지가 일시 중단된 좌석입니다)" : "");
+    const body = `이용 시간 ${fmtMinutes(p.default_use_min)}, ${p.checkin_limit_min}분 안에 체크인 필요`;
     const ok = await modal({ title: `${seat.label} 좌석을 예약할까요?`, body, ok: "예약하기" });
     if (!ok) return;
     busy = true;
@@ -78,12 +82,12 @@
     const seat = data.seats.find((s) => s.no === Number(btn.dataset.no));
     if (!seat) return;
     if (seat.view === "mine") { location.href = "/my"; return; }
-    if (seat.view === "available" || seat.checking) {
+    if (seat.view === "available") {
       if (data.my_reservation) { toast("이미 예약한 좌석이 있어요. 반납 후 다시 예약해 주세요.", "error"); return; }
       reserve(seat);
       return;
     }
-    toast(seat.view === "taken" ? "예약·사용 중인 좌석입니다" : "현재 사용할 수 없는 좌석입니다");
+    toast(seat.view === "taken" ? "예약(사용중)인 좌석입니다" : "현재 사용할 수 없는 좌석입니다");
   });
 
   const ticker = poll(load, 3000);

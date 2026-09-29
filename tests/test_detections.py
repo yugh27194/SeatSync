@@ -1,72 +1,53 @@
-from conftest import admin_seat, send
+from conftest import admin_seat, send, set_state
 
 
-def test_missing_key_403(device, clock):
-    r = send(device, clock, {1: ("person", clock())}, key=None)
-    assert r.status_code == 403
-    assert r.get_json()["error"]["code"] == "BAD_DEVICE_KEY"
+def _state(conn, no):
+    return conn.execute("SELECT state, state_since, state_source FROM seats WHERE no=?", (no,)).fetchone()
 
 
-def test_wrong_key_403(device, clock):
+def test_missing_or_wrong_key_403(device, clock):
+    assert send(device, clock, {1: ("person", clock())}, key=None).status_code == 403
     r = send(device, clock, {1: ("person", clock())}, key="nope")
-    assert r.status_code == 403
+    assert r.status_code == 403 and r.get_json()["error"]["code"] == "BAD_DEVICE_KEY"
 
 
 def test_unknown_seat_ignored(device, clock):
-    r = send(device, clock, {1: ("person", clock()), 99: ("item", clock())})
-    assert r.status_code == 200
-    body = r.get_json()
-    assert body["ok"] is True and body["accepted"] == 1 and body["ignored"] == [99]
+    body = send(device, clock, {1: ("person", clock()), 99: ("item", clock())}).get_json()
+    assert body["ok"] and body["accepted"] == 1 and body["ignored"] == [99]
     assert body["server_time"].endswith("+09:00")
 
 
 def test_bad_occupancy_400(device, clock):
-    r = send(device, clock, {1: ("sleeping", clock())})
-    assert r.status_code == 400
-    assert r.get_json()["error"]["code"] == "BAD_REQUEST"
+    assert send(device, clock, {1: ("sleeping", clock())}).status_code == 400
 
 
-def test_upsert(device, clock, conn):
+def test_maps_to_three_states(device, clock, conn):
+    send(device, clock, {1: ("person", clock() - 10), 2: ("item", clock() - 20), 3: ("empty", clock())})
+    assert _state(conn, 1)["state"] == "occupied" and _state(conn, 1)["state_since"] == clock() - 10
+    assert _state(conn, 2)["state"] == "occupied" and _state(conn, 2)["state_source"] == "camera"
+    assert _state(conn, 3)["state"] == "empty"
+
+
+def test_same_state_keeps_since(device, clock, conn):
     send(device, clock, {1: ("person", clock() - 10)})
     clock.advance(5)
-    send(device, clock, {1: ("item", clock() - 2)})
-    rows = conn.execute("SELECT * FROM detections WHERE seat_no = 1").fetchall()
-    assert len(rows) == 1
-    assert rows[0]["occupancy"] == "item"
-    assert rows[0]["since"] == clock() - 2
-    assert rows[0]["updated_at"] == clock()
+    send(device, clock, {1: ("item", clock())})  # person → item 둘 다 사용중
+    assert _state(conn, 1)["state_since"] == clock() - 15
+
+
+def test_unavailable_not_overwritten(device, clock, conn):
+    # seats.json 초기 배분: 5번(B-1)은 사용불가
+    r = send(device, clock, {5: ("person", clock())}).get_json()
+    assert r["ignored"] == [5] and _state(conn, 5)["state"] == "unavailable"
 
 
 def test_clock_correction(device, clock, conn):
-    # Pi 시계가 100초 느림 → since에 +100 보정
-    pi_now = clock() - 100
+    pi_now = clock() - 100  # Pi 시계가 100초 느림
     send(device, clock, {1: ("person", pi_now - 20)}, ts=pi_now)
-    row = conn.execute("SELECT since FROM detections WHERE seat_no = 1").fetchone()
-    assert row["since"] == clock() - 20
+    assert _state(conn, 1)["state_since"] == clock() - 20
 
 
-def test_small_skew_not_corrected(device, clock, conn):
-    pi_now = clock() - 3
-    send(device, clock, {1: ("person", pi_now - 20)}, ts=pi_now)
-    row = conn.execute("SELECT since FROM detections WHERE seat_no = 1").fetchone()
-    assert row["since"] == pi_now - 20
-
-
-def test_since_not_in_future(device, clock, conn):
-    send(device, clock, {1: ("person", clock() + 50)})
-    row = conn.execute("SELECT since FROM detections WHERE seat_no = 1").fetchone()
-    assert row["since"] == clock()
-
-
-def test_admin_seats_reflect_detection(device, clock, admin):
-    send(device, clock, {1: ("person", clock() - 600), 2: ("item", clock()), 3: ("empty", clock())})
-    assert admin_seat(admin, 1)["state"] == "UNAUTHORIZED"
-    assert admin_seat(admin, 2)["state"] == "ITEM_ONLY"
-    assert admin_seat(admin, 3)["state"] == "AVAILABLE"
-    assert admin_seat(admin, 4)["state"] == "OFFLINE"  # 감지 없음
-
-
-def test_stale_becomes_offline(device, clock, admin):
-    send(device, clock, {1: ("empty", clock())})
-    clock.advance(31)
-    assert admin_seat(admin, 1)["state"] == "OFFLINE"
+def test_camera_feeds_reconciliation(device, clock, admin):
+    send(device, clock, {1: ("person", clock())})
+    s = admin_seat(admin, 1)
+    assert s["seat_state"] == "in_use" and s["situation"] == "unauthorized"

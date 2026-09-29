@@ -60,7 +60,7 @@ h2 { font-size: 16px; margin: 0 0 10px; }
 
 /* ---------- 폼·버튼 ---------- */
 label { display: block; font-size: 14px; font-weight: 600; margin: 10px 0 4px; }
-input[type=text], input[type=password], input[type=number], input[type=date], textarea {
+input[type=text], input[type=password], input[type=number], input[type=date], textarea, select {
   width: 100%; padding: 11px 12px; font-size: 16px; border: 1px solid var(--line); border-radius: 10px;
   background: #fff; color: var(--text);
 }
@@ -241,3 +241,30 @@ table.recon tr.mismatch td:first-child { box-shadow: inset 4px 0 0 var(--danger)
   .seatmap { gap: 6px; padding: 8px; }
   .seat { font-size: 13px; }
 }
+
+/* ---------- 3상태 + 확인 필요 (관리자) ---------- */
+.st-available   { background: var(--v-available); color: #fff; }
+.st-in_use      { background: var(--v-taken); color: #fff; }
+.st-unavailable { background: var(--v-unavailable); color: #fff; }
+.chip.st-issue  { background: #fdecec; color: #a4262c; }
+.admin-map .seat.issue { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--danger); }
+.admin-map .seat .warn-tag { display: inline-block; margin-top: 3px; background: #fff; color: #b3141b; border-radius: 6px; padding: 0 5px; font-size: 11px; font-weight: 800; }
+.statetag.sit-issue { background: #fdecec; color: #a4262c; }
+.statetag.sit-ok { background: #e2f5ea; color: #17733f; }
+.badge.t-no_checkin { background: #2f6fdf; color: #fff; }
+.badge.t-away { background: #b3141b; color: #fff; }
+.badge.t-seat_unavailable { background: #6b7684; color: #fff; }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.seg button { border: 0; background: #fff; padding: 7px 12px; font-size: 14px; font-weight: 600; cursor: pointer; color: var(--text); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on.s-empty { background: var(--v-available); color: #fff; }
+.seg button.on.s-occupied { background: var(--v-taken); color: #fff; }
+.seg button.on.s-unavailable { background: var(--v-unavailable); color: #fff; }
+.section-title { font-size: 13px; font-weight: 700; color: var(--muted); margin: 14px 0 6px; }
+.situation-box { border-radius: 10px; padding: 10px 12px; margin: 10px 0; background: #fdecec; color: #7d1d21; font-size: 14px; }
+.situation-box b { font-size: 15px; }
+.situation-box.ok { background: #eef7f1; color: #17563a; }
+.warnings { font-weight: 700; }
+.warnings.hot { color: var(--danger); }
+table.recon td .btn-row { flex-wrap: nowrap; }

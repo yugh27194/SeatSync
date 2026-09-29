@@ -93,7 +93,13 @@
   function syncClock(serverIso) { const t = parseTs(serverIso); if (t) clockSkew = t - Date.now() / 1000; }
   function serverNow() { return Date.now() / 1000 + clockSkew; }
 
-  /** 확인 모달. opts: {title, body, ok, cancel, danger, input:{placeholder,value}} → Promise<false|true|string> */
+  /**
+   * 확인 모달. opts: {title, body, ok, cancel, danger, input:{placeholder,value}, fields:[...]}
+   *  - input만 있으면 → Promise<false | string>
+   *  - fields가 있으면 → Promise<false | {name: value}>
+   *    field: {name, label, type:'select'|'textarea'|'number', options:[{value,label,disabled}], value, placeholder, min, max}
+   *  - 둘 다 없으면 → Promise<boolean>
+   */
   function modal(opts) {
     return new Promise((resolve) => {
       const back = document.createElement("div");
@@ -102,29 +108,51 @@
       m.className = "modal";
       m.setAttribute("role", "dialog");
       const h = document.createElement("h3"); h.textContent = opts.title || "확인";
-      const b = document.createElement("div"); b.className = "body"; b.textContent = opts.body || "";
-      m.append(h, b);
-      let input = null;
-      if (opts.input) {
-        input = document.createElement("textarea");
-        input.placeholder = opts.input.placeholder || "";
-        input.value = opts.input.value || "";
-        input.maxLength = 200;
-        input.style.marginBottom = "12px";
-        m.append(input);
+      m.append(h);
+      if (opts.body) { const b = document.createElement("div"); b.className = "body"; b.textContent = opts.body; m.append(b); }
+      const fields = opts.fields || (opts.input ? [{ name: "_", type: "textarea", ...opts.input }] : []);
+      const els = {};
+      for (const f of fields) {
+        if (f.label) { const l = document.createElement("label"); l.textContent = f.label; m.append(l); }
+        let el;
+        if (f.type === "select") {
+          el = document.createElement("select");
+          for (const o of f.options || []) {
+            const op = document.createElement("option");
+            op.value = o.value; op.textContent = o.label; op.disabled = !!o.disabled;
+            el.append(op);
+          }
+          if (f.value != null) el.value = f.value;
+        } else if (f.type === "number") {
+          el = document.createElement("input"); el.type = "number"; el.inputMode = "numeric";
+          if (f.min != null) el.min = f.min; if (f.max != null) el.max = f.max;
+          el.value = f.value != null ? f.value : "";
+        } else {
+          el = document.createElement("textarea"); el.maxLength = 200; el.value = f.value || "";
+        }
+        el.placeholder = f.placeholder || "";
+        el.style.marginBottom = "10px";
+        els[f.name] = el;
+        m.append(el);
       }
-      const row = document.createElement("div"); row.className = "btn-row";
+      const row = document.createElement("div"); row.className = "btn-row"; row.style.marginTop = "6px";
       const no = document.createElement("button"); no.className = "btn secondary"; no.textContent = opts.cancel || "취소";
       const ok = document.createElement("button"); ok.className = "btn" + (opts.danger ? " danger" : ""); ok.textContent = opts.ok || "확인";
+      if (opts.okDisabled) ok.disabled = true;
       row.append(no, ok); m.append(row); back.append(m);
       document.body.append(back);
-      (input || ok).focus();
+      (Object.values(els)[0] || ok).focus();
       function close(v) { back.remove(); document.removeEventListener("keydown", onKey); resolve(v); }
       function onKey(e) { if (e.key === "Escape") close(false); }
       document.addEventListener("keydown", onKey);
       no.onclick = () => close(false);
       back.onclick = (e) => { if (e.target === back) close(false); };
-      ok.onclick = () => close(input ? input.value.trim() : true);
+      ok.onclick = () => {
+        if (!fields.length) return close(true);
+        const vals = {};
+        for (const [k, el] of Object.entries(els)) vals[k] = el.value.trim();
+        close(opts.fields ? vals : vals._);
+      };
     });
   }
 

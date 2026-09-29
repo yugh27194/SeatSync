@@ -65,6 +65,16 @@ def user2(app):
 
 
 @pytest.fixture
+def user_a(app):
+    return login(app.test_client(), "userA")
+
+
+@pytest.fixture
+def user_b(app):
+    return login(app.test_client(), "userB")
+
+
+@pytest.fixture
 def admin(app):
     return login(app.test_client(), "admin", "admin1234")
 
@@ -88,6 +98,19 @@ def send(device, clock, seats, ts=None, key=DEVICE_KEY):
 
 def qr_token(conn, seat_no):
     return conn.execute("SELECT qr_token FROM seats WHERE no=?", (seat_no,)).fetchone()["qr_token"]
+
+
+def set_state(admin, no, state, note=None):
+    body = {"state": state}
+    if note:
+        body["note"] = note
+    r = admin.post(f"/api/admin/seats/{no}/state", json=body)
+    assert r.status_code == 200, r.get_json()
+    return r
+
+
+def user_id(conn, student_no):
+    return conn.execute("SELECT id FROM users WHERE student_no=?", (student_no,)).fetchone()["id"]
 
 
 def admin_seat(admin, no):
