@@ -3,7 +3,7 @@
   "use strict";
   const { api, fmtRemain, fmtClock, fmtTime, syncClock, serverNow, parseTs, toast, modal, esc } = window.SS;
   const root = document.getElementById("my-root");
-  let r = null, me = {}, lastKey = null;
+  let r = null, me = {}, st = null, lastKey = null;
 
   function render() {
     if (!r) {
@@ -19,6 +19,7 @@
         <div class="label">${esc(r.seat_label)}</div>
         <span class="pill ${reserved ? "" : "blue"}">${reserved ? "예약됨 · 체크인 전" : "이용 중"}</span>
       </div>
+      ${st ? `<div class="own-status lv-${st.level} big">⚠ <b>${esc(st.label)}</b> · ${esc(st.message)}</div>` : ""}
       <div class="card">
         ${reserved
           ? `<p style="text-align:center;margin:0">체크인 마감까지</p>
@@ -42,6 +43,7 @@
         <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
         <button class="btn secondary block" id="btn-call">관리자 호출</button>
         <p class="muted small" style="margin:6px 0 0">예약한 좌석에 다른 분이 앉아 있는 등 문제가 있으면 알려 주세요.</p>
+        <p class="small" style="margin:10px 0 0"><a href="/history">내 이용 기록 보기 →</a></p>
       </div>`;
     bind();
     tick();
@@ -89,8 +91,9 @@
       syncClock(d.server_time);
       r = d.my_reservation;
       me = d.me || {};
+      st = d.my_status;
       // 남은 초만 바뀐 경우엔 다시 그리지 않는다(버튼·모달 깜빡임 방지)
-      const key = JSON.stringify([r && { ...r, remaining_sec: 0 }, me]);
+      const key = JSON.stringify([r && { ...r, remaining_sec: 0 }, me, st && st.detail]);
       if (key !== lastKey) { lastKey = key; render(); }
     } catch (e) { /* 다음 주기 재시도 */ }
     finally { syncing = false; }
@@ -98,6 +101,6 @@
 
   sync();
   setInterval(tick, 1000);
-  setInterval(() => { if (document.visibilityState !== "hidden") sync(); }, 30000);
+  setInterval(() => { if (document.visibilityState !== "hidden") sync(); }, 10000);
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") sync(); });
 })();

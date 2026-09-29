@@ -1,0 +1,29 @@
+{% extends "base.html" %}{% load static %}
+{% block title %}내 이용 기록{% endblock %}
+{% block container_class %}mid{% endblock %}
+{% block content %}
+<div class="toolbar">
+  <h1 style="margin:0">내 이용 기록</h1>
+  <span class="spacer"></span>
+  <div class="seg-tabs" role="tablist" id="period">
+    <button type="button" role="tab" data-period="day" class="on">일별</button>
+    <button type="button" role="tab" data-period="week">주별</button>
+    <button type="button" role="tab" data-period="month">월별</button>
+  </div>
+</div>
+<div class="stat-grid" id="summary"></div>
+<div class="card">
+  <h2 id="chart-title">일별 이용 시간</h2>
+  <div class="vbars" id="bars"></div>
+  <p class="muted small" style="margin:8px 0 0">체크인부터 반납(또는 종료)까지 실제로 이용한 시간입니다.</p>
+</div>
+<div class="card">
+  <h2>예약·연장·반납 이력</h2>
+  <ul class="res-list" id="res-list"><li class="muted small">불러오는 중…</li></ul>
+</div>
+<div class="card">
+  <h2>경고·알림 기록</h2>
+  <ul class="res-list" id="notice-list"><li class="muted small">불러오는 중…</li></ul>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/history.js' %}"></script>{% endblock %}

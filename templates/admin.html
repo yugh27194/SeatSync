@@ -12,6 +12,8 @@
   <span class="muted small" id="updated"></span>
   <button type="button" class="btn small secondary" id="sound-toggle">🔕 소리 켜기</button>
   <button type="button" class="btn small warn" id="btn-demo">시연 상황 배치</button>
+  <button type="button" class="btn small secondary" id="btn-sample">샘플 이력 생성</button>
+  <a class="btn small secondary" href="/congestion">혼잡도</a>
   <a class="btn small secondary" href="/admin/settings">설정</a>
 </div>
 
@@ -56,6 +58,12 @@
       <tbody id="recon"></tbody>
     </table>
   </div>
+</div>
+
+<div class="card">
+  <h2>판정 정확도 <span class="muted small">(관리자 판정 피드백 기준)</span></h2>
+  <p class="muted small" style="margin-top:-4px">좌석을 직접 확인한 뒤 좌석 상세의 [맞음]/[틀림]으로 기록하면 카메라·수동 판정의 정확도를 측정합니다.</p>
+  <div id="accuracy"><p class="muted small">불러오는 중…</p></div>
 </div>
 
 <div class="card">

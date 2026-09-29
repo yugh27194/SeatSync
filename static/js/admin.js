@@ -71,8 +71,11 @@
     const a = Object.entries(attrs || {}).map(([k, v]) => `data-${k}="${esc(v)}"`).join(" ");
     return `<button type="button" class="btn small ${cls || "secondary"}" data-act="${act}" ${a}>${label}</button>`;
   }
+  const SRC_LABEL = { camera: "카메라", manual: "관리자 지정", checkin: "QR 체크인", return: "반납", seed: "초기 배분" };
+
   function tileSub(s) {
     const r = s.reservation;
+    if (s.offer) return `🔔 ${esc(s.offer.user_name)} 안내 중`;
     if (s.needs_action) return `<span class="warn-tag">${esc(s.detail_label)}</span>`;
     if (r && s.detail === "using") return esc(r.user.name);
     return esc(s.detail_label);
@@ -109,7 +112,9 @@
       `<span class="chip st-available">빈자리 <b>${sm.available}</b></span>` +
       `<span class="chip st-in_use">사용중 <b>${sm.in_use}</b></span>` +
       `<span class="chip st-unavailable">사용불가 <b>${sm.unavailable}</b></span>` +
-      `<span class="chip st-issue${sm.issues ? "" : " zero"}">! 처리 필요 <b>${sm.issues}</b></span>`;
+      `<span class="chip st-issue${sm.issues ? "" : " zero"}">! 처리 필요 <b>${sm.issues}</b></span>` +
+      `<span class="chip plain">점유율 <b>${Math.round(data.live.occupancy * 100)}%</b> · 실사용 <b>${Math.round(data.live.actual_rate * 100)}%</b></span>` +
+      `<span class="chip plain${data.waiting ? "" : " zero"}">🔔 빈자리 대기 <b>${data.waiting}</b></span>`;
   }
 
   function renderMap() {
@@ -172,7 +177,8 @@
           ${r.status === "reserved" ? btn("checkin", "대리 체크인", { res: r.id, label: s.label }) : ""}
           ${btn("move", "좌석 이동", { res: r.id, label: s.label })}
           ${btn("extend", `연장 +${data.settings.extend_min}분`, { res: r.id, label: s.label })}
-          ${btn("warn", "경고", { user: r.user.id, name: r.user.name })}
+          ${btn("notice", "사전 경고", { user: r.user.id, name: r.user.name, seat: s.no, detail: s.detail })}
+          ${btn("warn", "경고(누적)", { user: r.user.id, name: r.user.name })}
           ${btn("force", r.status === "reserved" ? "예약 취소" : "강제 반납", { res: r.id, label: s.label }, "danger")}
         </div>`;
     } else {
@@ -183,6 +189,13 @@
     el.innerHTML = `<h2>${esc(s.label)} <span class="statetag st-${s.seat_state}">${esc(s.seat_state_label)}</span>
         <span class="muted small">${esc(s.zone || "")}</span></h2>
       ${sitHtml}
+      <div class="section-title">판정 확인</div>
+      <div class="feedback-row">
+        <span class="small">화면 판정 <b>${esc(s.seat_state_label)} · ${esc(s.detail_label)}</b>
+          <span class="muted">(${SRC_LABEL[s.actual_source] || s.actual_source})</span> — 실제와 같나요?</span>
+        <div class="btn-row">${btn("fb_ok", "✓ 맞음", { seat: s.no }, "ok-btn")}${btn("fb_wrong", "✗ 틀림", { seat: s.no }, "danger")}</div>
+      </div>
+      ${s.offer ? `<p class="small" style="margin:6px 0 0">🔔 빈자리 알림 대기자 <b>${esc(s.offer.user_name)}</b> 님에게 안내 중 (${fmtRemain(s.offer.left_sec)} 남음)</p>` : ""}
       <div class="section-title">좌석 상태 지정 (임시 배분)</div>
       ${assignPanel(s)}
       <p class="muted small" style="margin:6px 0 0">현장: ${esc(s.actual_label)}${s.mark ? ` · ${MARK[s.mark]}` : ""} · ${SOURCE[s.actual_source] || s.actual_source}
@@ -249,6 +262,7 @@
         <td><span class="warnings${u.warnings >= d.warning_limit ? " hot" : ""}">${u.warnings}</span></td>
         <td>${status}</td>
         <td><div class="btn-row">
+          ${btn("notice", "사전 경고", { user: u.id, name: u.name })}
           ${btn("warn", "경고", { user: u.id, name: u.name })}
           ${u.warnings ? btn("unwarn", "경고 취소", { user: u.id, name: u.name }) : ""}
           ${u.suspended_until ? btn("unsuspend", "정지 해제", { user: u.id, name: u.name })
@@ -404,6 +418,49 @@
       if (ok) run(() => api("POST", `/api/admin/users/${d.user}/unsuspend`), "정지를 해제했습니다.");
     },
 
+    async fb_ok(d) {
+      const s = seatByNo(d.seat);
+      run(() => api("POST", `/api/admin/seats/${d.seat}/feedback`, { verdict: "correct" }),
+        `${s.label} 판정 '맞음'을 기록했습니다.`).then(loadAccuracy);
+    },
+
+    async fb_wrong(d) {
+      const s = seatByNo(d.seat);
+      const inUse = s.reservation && s.reservation.status === "in_use";
+      const options = data.assign.groups.flatMap((g) => g.items.map((i) => ({
+        value: i.code, label: `${g.label} · ${i.label}`, disabled: i.needs === "in_use" && !inUse })));
+      const v = await modal({ title: `${s.label} 판정이 틀렸어요`,
+        body: `화면 판정: ${s.seat_state_label} · ${s.detail_label} (${SRC_LABEL[s.actual_source] || s.actual_source})\n실제 좌석 상태를 골라 주세요.`,
+        fields: [
+          { name: "correct", label: "실제 상태", type: "select", options, value: options.find((o) => !o.disabled && o.value !== s.detail)?.value },
+          { name: "apply", label: "좌석에 바로 반영", type: "select", value: "1",
+            options: [{ value: "1", label: "예 — 이 상태로 수정" }, { value: "0", label: "아니오 — 기록만" }] },
+          { name: "memo", label: "메모 (선택)", type: "textarea", placeholder: "예: 가방을 사람으로 인식함" },
+        ], ok: "피드백 기록", danger: true });
+      if (!v) return;
+      run(() => api("POST", `/api/admin/seats/${d.seat}/feedback`,
+        { verdict: "wrong", correct_detail: v.correct, apply: v.apply === "1", memo: v.memo }),
+        "판정 피드백을 기록했습니다.").then(loadAccuracy);
+    },
+
+    async notice(d) {
+      const PRESET = {
+        away_short: "자리를 오래 비우고 계세요. 곧 이탈로 처리될 수 있으니 돌아오시거나 반납해 주세요.",
+        item: "짐만 두고 자리를 비우셨어요. 곧 사석화로 처리될 수 있으니 돌아오시거나 반납해 주세요.",
+        away: "이탈 상태입니다. 바로 돌아오시지 않으면 반납 처리됩니다.",
+        hoarding: "사석화 상태입니다. 바로 돌아오시지 않으면 반납 처리됩니다.",
+        no_checkin: "좌석에 계시다면 좌석 QR로 체크인해 주세요.",
+        waiting: "체크인 마감 전에 좌석 QR로 체크인해 주세요.",
+      };
+      const msg = await modal({ title: `${d.name} 님에게 사전 경고`,
+        body: "본인 계정으로 주의 알림만 보냅니다. 누적 경고 횟수에는 포함되지 않아요.",
+        input: { value: PRESET[d.detail] || "좌석 이용 규정을 지켜 주세요. 계속되면 경고가 부여될 수 있어요." },
+        ok: "보내기" });
+      if (msg === false) return;
+      run(() => api("POST", `/api/admin/users/${d.user}/notice`, { message: msg, seat_no: d.seat ? Number(d.seat) : null }),
+        "사전 경고를 보냈습니다.");
+    },
+
     async resolve(d) {
       const memo = await modal({ title: "처리 완료", body: "처리 내용을 남겨 두면 처리 이력에 기록됩니다.", input: { placeholder: "예: 현장 확인 후 안내함 (선택)" }, ok: "처리 완료" });
       if (memo !== false) run(() => api("POST", `/api/admin/alerts/${d.alert}/resolve`, { memo }), "처리 완료했습니다.");
@@ -430,6 +487,42 @@
     const res = await run(() => api("POST", "/api/admin/demo"), "시연 상황을 배치했습니다.");
     if (res) console.info(res.messages.join("\n"));
   };
+
+  $("btn-sample").onclick = async () => {
+    const ok = await modal({ title: "샘플 이력 생성",
+      body: "지난 4주 동안의 예약·이용·상태 기록을 샘플로 만듭니다.\n'내 기록'과 '혼잡도' 화면을 시연할 때 쓰세요. (실제 데이터와 섞이니 시연용 DB에서만 사용)",
+      ok: "생성" });
+    if (!ok) return;
+    const res = await run(() => api("POST", "/api/admin/demo-history", { weeks: 4 }));
+    if (res) toast(`샘플 이력 생성 완료 · 예약 ${res.reservations}건`, "ok");
+  };
+
+  // ------------------------------------------------ 판정 정확도
+  async function loadAccuracy() {
+    let d;
+    try { d = await api("GET", "/api/admin/feedback", null, { quiet: true }); } catch (e) { return; }
+    const pctv = (a) => (a.accuracy == null ? "-" : Math.round(a.accuracy * 100) + "%");
+    if (!d.overall.total) {
+      $("accuracy").innerHTML = `<p class="muted small">아직 피드백이 없습니다. 좌석을 누르고 [✓ 맞음] / [✗ 틀림]을 기록해 보세요.</p>`;
+      return;
+    }
+    const src = Object.entries(d.by_source).map(([k, a]) => `<span class="chip plain">${SRC_LABEL[k] || k} <b>${pctv(a)}</b> <span class="muted">(${a.correct}/${a.total})</span></span>`).join("");
+    const st = Object.entries(d.by_state).map(([k, a]) => `<span class="chip plain">${esc(k)} <b>${pctv(a)}</b></span>`).join("");
+    const conf = d.confusion.map((c) => `<li>${esc(c.shown)} → 실제 ${esc(c.correct)} <b>${c.count}회</b></li>`).join("");
+    const recent = d.recent.map((f) => `<tr><td class="small">${f.at.slice(5, 10)} ${fmtTime(f.at)}</td><td>${esc(f.seat_label)}</td>
+      <td class="small">${esc(f.shown)} <span class="muted">(${SRC_LABEL[f.source] || f.source})</span></td>
+      <td>${f.verdict === "correct" ? '<span class="pill green">맞음</span>' : `<span class="pill red">틀림</span> ${esc(f.correct || "")}${f.applied ? ' <span class="muted small">수정함</span>' : ""}`}</td>
+      <td class="small">${esc(f.admin_name || "")}${f.memo ? " · " + esc(f.memo) : ""}</td></tr>`).join("");
+    $("accuracy").innerHTML = `<div class="acc-top"><div class="acc-big">${pctv(d.overall)}</div>
+        <div><b>전체 정확도</b> · ${d.overall.correct}/${d.overall.total}건 맞음<div class="chips" style="margin:6px 0 0">${src}</div>
+        <div class="chips" style="margin:4px 0 0">${st}</div></div></div>
+      ${conf ? `<div class="section-title">자주 틀리는 판정</div><ul class="conf">${conf}</ul>` : ""}
+      <div class="section-title">최근 피드백</div>
+      <div class="table-wrap"><table class="recon"><thead><tr><th>시각</th><th>좌석</th><th>화면 판정</th><th>결과</th><th>확인자·메모</th></tr></thead>
+      <tbody>${recent}</tbody></table></div>`;
+  }
+  loadAccuracy();
+  setInterval(() => { if (document.visibilityState !== "hidden") loadAccuracy(); }, 30000);
 
   const ticker = poll(load, 3000);
 

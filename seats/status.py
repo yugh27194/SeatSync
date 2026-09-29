@@ -17,6 +17,10 @@ DEFAULT_SETTINGS = {
     "max_extends": 2,
     "warning_limit": 3,
     "suspend_days": 3,
+    "prewarn_min": 10,
+    "waitlist_hold_min": 5,
+    "open_hour": 6,
+    "close_hour": 24,
 }
 
 # key: (라벨, 단위, 설명, 최소, 최대)
@@ -30,6 +34,10 @@ SETTINGS_META = {
     "max_extends": ("최대 연장 횟수", "회", "예약 1건당 이용자가 직접 연장할 수 있는 횟수", 0, 10),
     "warning_limit": ("정지 권장 경고 수", "회", "경고가 이 횟수 이상 쌓이면 이용 정지를 권장", 1, 20),
     "suspend_days": ("기본 정지 기간", "일", "이용 정지 시 기본으로 제안하는 기간", 1, 90),
+    "prewarn_min": ("사전 경고 시점", "분", "이탈·사석화·체크인 마감 기준 시간 이 분 전에 본인에게 사전 경고", 1, 60),
+    "waitlist_hold_min": ("빈자리 안내 유지", "분", "빈자리 알림 대기자에게 먼저 예약할 기회를 주는 시간", 1, 30),
+    "open_hour": ("운영 시작", "시", "혼잡도 통계에 쓰는 운영 시작 시각", 0, 23),
+    "close_hour": ("운영 종료", "시", "혼잡도 통계에 쓰는 운영 종료 시각 (24 = 자정)", 1, 24),
 }
 
 
@@ -44,6 +52,10 @@ class Settings:
     max_extends: int
     warning_limit: int
     suspend_days: int
+    prewarn_min: int
+    waitlist_hold_min: int
+    open_hour: int
+    close_hour: int
 
     @classmethod
     def from_dict(cls, d):

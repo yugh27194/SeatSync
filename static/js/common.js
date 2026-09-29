@@ -254,6 +254,69 @@
     return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
 
-  window.SS = { api, requireAdmin, layoutGrid, poll, fmtRemain, fmtClock, fmtTime, parseTs, syncClock, serverNow, toast, modal, esc, ApiError };
+  // ------------------------------------------------ 본인 알림 (사전 경고·빈자리 안내 등)
+  const BANNER_KINDS = new Set(["prewarn", "issue", "warning", "suspend", "offer"]);
+  let lastBannerKey = "", toasted = new Set(), notices = [];
+
+  async function markRead(ids) {
+    try { await apiOnce("POST", "/api/me/notifications/read", ids ? { ids } : {}, { quiet: true }); } catch (e) { /* 무시 */ }
+  }
+
+  function renderBanners(list) {
+    const stack = document.getElementById("notice-stack");
+    if (!stack) return;
+    const key = list.map((n) => n.id).join(",");
+    if (key === lastBannerKey) return;
+    lastBannerKey = key;
+    stack.innerHTML = list.map((n) => `<div class="notice-banner lv-${esc(n.level)}" data-id="${n.id}">
+      <div class="nb-text"><b>${esc(n.title)}</b>${n.body ? `<span>${esc(n.body)}</span>` : ""}</div>
+      <div class="nb-btns">
+        ${n.kind === "offer" && n.level === "ok" && location.pathname !== "/map" ? `<a class="btn small" href="/map">좌석 지도</a>` : ""}
+        <button type="button" class="btn small secondary" data-nb-ok="${n.id}">확인</button>
+      </div></div>`).join("");
+  }
+
+  async function pollNotices() {
+    if (!document.getElementById("bell")) return;
+    let d;
+    try { d = await apiOnce("GET", "/api/me/notifications", null, { quiet: true }); } catch (e) { return; }
+    notices = d.items;
+    const cnt = document.getElementById("bell-count");
+    cnt.textContent = d.unread > 9 ? "9+" : d.unread;
+    cnt.classList.toggle("hidden", !d.unread);
+    const unread = d.items.filter((n) => !n.read);
+    renderBanners(unread.filter((n) => BANNER_KINDS.has(n.kind)).slice(0, 3));
+    const infos = unread.filter((n) => !BANNER_KINDS.has(n.kind) && !toasted.has(n.id));
+    infos.forEach((n) => { toasted.add(n.id); toast(`${n.title}${n.body ? " · " + n.body : ""}`, n.level === "ok" ? "ok" : "", 5000); });
+    if (infos.length) markRead(infos.map((n) => n.id));
+  }
+
+  function openNoticeList() {
+    const back = document.createElement("div");
+    back.className = "modal-back";
+    const items = notices.length ? notices.map((n) => `<li class="nl-item lv-${esc(n.level)}${n.read ? "" : " unread"}">
+        <div class="nl-title">${esc(n.title)}</div>${n.body ? `<div class="nl-body">${esc(n.body)}</div>` : ""}
+        <div class="nl-time">${n.created_at.slice(5, 10).replace("-", "/")} ${fmtTime(n.created_at)}</div></li>`).join("")
+      : `<li class="muted small">알림이 없습니다.</li>`;
+    back.innerHTML = `<div class="modal notice-list" role="dialog"><h3>🔔 알림</h3><ul>${items}</ul>
+      <div class="btn-row"><button type="button" class="btn secondary" data-close>닫기</button></div></div>`;
+    document.body.append(back);
+    back.addEventListener("click", (e) => { if (e.target === back || e.target.closest("[data-close]")) back.remove(); });
+    markRead(null).then(() => { lastBannerKey = ""; pollNotices(); });
+  }
+
+  document.addEventListener("click", (e) => {
+    const ok = e.target.closest("[data-nb-ok]");
+    if (ok) {
+      const id = Number(ok.dataset.nbOk);
+      ok.closest(".notice-banner").remove();
+      markRead([id]).then(pollNotices);
+      return;
+    }
+    if (e.target.closest("#bell")) openNoticeList();
+  });
+  document.addEventListener("DOMContentLoaded", () => { if (document.getElementById("bell")) poll(pollNotices, 10000); });
+
+  window.SS = { api, requireAdmin, layoutGrid, poll, refreshNotices: pollNotices, fmtRemain, fmtClock, fmtTime, parseTs, syncClock, serverNow, toast, modal, esc, ApiError };
   window.api = api; window.poll = poll; window.fmtRemain = fmtRemain;
 })();

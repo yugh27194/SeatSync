@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% load static %}
+{% block title %}혼잡도{% endblock %}
+{% block container_class %}mid{% endblock %}
+{% block content %}
+<div class="toolbar"><h1 style="margin:0">혼잡도</h1><span class="spacer"></span><span class="muted small" id="updated"></span></div>
+<div class="card live-card" id="live-card"><p class="muted">불러오는 중…</p></div>
+<div class="card">
+  <h2>오늘 시간대별</h2>
+  <div class="vbars today" id="today"></div>
+  <div class="legend" id="today-legend"></div>
+</div>
+<div class="card">
+  <div class="toolbar" style="margin-bottom:8px">
+    <h2 style="margin:0" id="hm-title">요일·시간대별 혼잡도 (최근 4주 평균)</h2>
+    <span class="spacer"></span>
+    <div class="seg-tabs hidden" id="metric"></div>
+  </div>
+  <div class="heatmap-wrap"><table class="heatmap" id="heatmap"></table></div>
+  <div class="hm-scale"><span>한산</span><i></i><span>혼잡</span></div>
+  <ul class="insights" id="insights"></ul>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/congestion.js' %}"></script>{% endblock %}

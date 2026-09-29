@@ -142,3 +142,72 @@ class AdminLog(models.Model):
 class Setting(models.Model):
     key = models.CharField(max_length=40, primary_key=True)
     value = models.CharField(max_length=40)
+
+
+class ReservationEvent(models.Model):
+    """예약별 이력: 예약·체크인·연장·반납·취소·미입실·만료·강제 반납·이동 (내 이용 기록용)."""
+    KINDS = {
+        "reserve": "예약", "checkin": "체크인", "extend": "연장", "return": "반납", "cancel": "예약 취소",
+        "no_show": "미입실(자동 취소)", "expire": "이용 종료(시간 만료)", "force_return": "강제 반납(관리자)",
+        "move": "좌석 이동(관리자)", "admin_extend": "연장(관리자)", "admin_checkin": "체크인(관리자)",
+        "admin_assign": "배정(관리자)",
+    }
+    reservation = models.ForeignKey(Reservation, on_delete=models.CASCADE, related_name="events")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
+    kind = models.CharField(max_length=16)
+    at = models.BigIntegerField()
+    memo = models.CharField(max_length=200, null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["user", "at"])]
+
+
+class WaitEntry(models.Model):
+    """빈자리 알림 대기. 빈자리가 나면 먼저 등록한 순서대로 일정 시간 우선 예약 기회를 준다."""
+    STATUS = ["waiting", "offered", "fulfilled", "expired", "declined", "cancelled"]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="wait_entries")
+    zone = models.CharField(max_length=50, blank=True, default="")  # "" = 아무 자리
+    status = models.CharField(max_length=10, default="waiting")
+    created_at = models.BigIntegerField()
+    offered_seat = models.ForeignKey(Seat, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    offered_at = models.BigIntegerField(null=True, blank=True)
+    expires_at = models.BigIntegerField(null=True, blank=True)
+    ended_at = models.BigIntegerField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user"], condition=Q(status__in=("waiting", "offered")), name="ux_wait_active_user"),
+            models.UniqueConstraint(fields=["offered_seat"], condition=Q(status="offered"), name="ux_wait_offer_seat"),
+        ]
+
+
+class Notification(models.Model):
+    """본인 계정 알림: 사전 경고, 처리 필요 전환, 관리자 경고·정지, 빈자리 안내."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
+    kind = models.CharField(max_length=20)       # prewarn | issue | warning | suspend | notice | offer | info
+    level = models.CharField(max_length=8, default="info")  # info | warn | danger | ok
+    title = models.CharField(max_length=100)
+    body = models.CharField(max_length=300, blank=True, default="")
+    seat = models.ForeignKey(Seat, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    reservation = models.ForeignKey(Reservation, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    dedup_key = models.CharField(max_length=80, null=True, blank=True, unique=True)  # 같은 사안 중복 알림 방지
+    created_at = models.BigIntegerField()
+    read_at = models.BigIntegerField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["user", "created_at"])]
+
+
+class JudgmentFeedback(models.Model):
+    """판정 피드백: 관리자가 좌석을 직접 확인해 화면의 판정이 맞는지 기록한다 (카메라 판정 정확도 측정)."""
+    seat = models.ForeignKey(Seat, on_delete=models.CASCADE, related_name="feedback")
+    admin = models.ForeignKey(User, null=True, on_delete=models.SET_NULL, related_name="+")
+    at = models.BigIntegerField(db_index=True)
+    shown_state = models.CharField(max_length=12)    # 판정된 좌석 상태 (available|in_use|unavailable)
+    shown_detail = models.CharField(max_length=20)   # 판정된 세부 상태
+    source = models.CharField(max_length=10)         # 판정 근거 출처: camera | manual | checkin | return | seed
+    verdict = models.CharField(max_length=8)         # correct | wrong
+    correct_detail = models.CharField(max_length=20, null=True, blank=True)
+    memo = models.CharField(max_length=200, null=True, blank=True)
+    applied = models.BooleanField(default=False)     # 올바른 상태로 바로 수정했는지

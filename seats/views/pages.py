@@ -41,3 +41,15 @@ def admin_page(request):
 @admin_required
 def admin_settings_page(request):
     return render(request, "admin_settings.html")
+
+
+@ensure_csrf_cookie
+@login_required
+def history_page(request):
+    return render(request, "history.html")
+
+
+@ensure_csrf_cookie
+@login_required
+def congestion_page(request):
+    return render(request, "congestion.html")

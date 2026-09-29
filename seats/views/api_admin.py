@@ -7,9 +7,10 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 from .. import clock
 from ..auth import admin_required
 from ..http import ApiError, int_field, jres, json_body, str_field
-from ..models import AdminLog, Alert, Reservation, Seat, Setting, User
-from ..services import (clear_marks, compute_hourly_stats, get_settings, log_admin, refresh, set_seat_state,
-                        setup_demo)
+from .. import analytics
+from ..models import AdminLog, Alert, JudgmentFeedback, Reservation, Seat, Setting, User, WaitEntry
+from ..services import (clear_marks, compute_hourly_stats, get_settings, log_admin, notify, record_event, refresh,
+                        set_seat_state, setup_demo)
 from ..status import (ACTUAL_STATES, ALERT_TYPE_LABELS, ASSIGN_GROUPS, ASSIGNABLE, DEFAULT_SETTINGS, DETAILS,
                       SEAT_STATES, SETTINGS_META)
 from ..timeutil import to_iso, tz
@@ -21,6 +22,7 @@ ACTION_LABELS = {
     "move": "좌석 이동", "extend": "관리자 연장", "force_return": "강제 반납", "warn": "경고 부여",
     "unwarn": "경고 취소", "suspend": "이용 정지", "unsuspend": "정지 해제", "demo": "시연 상황 배치",
     "settings": "설정 변경", "admin_on": "관리자 모드 켬", "admin_off": "관리자 모드 끔", "admin_locked": "관리자 코드 잠금",
+    "notice": "사전 경고 발송", "feedback": "판정 피드백", "demo_history": "샘플 이력 생성",
 }
 RES_STATUS = {"reserved": "예약(입실 전)", "in_use": "이용 중"}
 
@@ -64,6 +66,10 @@ def _get_seat(no):
     return seat
 
 
+def seat_id_or_none(no):
+    return {"seat": Seat.objects.filter(no=no).first()} if no else {}
+
+
 def _active_on(seat_no):
     return Reservation.objects.filter(seat_id=seat_no, status__in=("reserved", "in_use")).first()
 
@@ -103,10 +109,13 @@ def seats(request):
             "actual_source": seat.state_source, "note": seat.note,
             "reservation": _res_summary(res, now, s),
             "alert_id": open_alerts.get(seat.no, {}).get(j.detail),
+            "offer": {"user_name": it["offer"].user.name, "expires_at": to_iso(it["offer"].expires_at),
+                      "left_sec": max(0, it["offer"].expires_at - now)} if it.get("offer") else None,
         })
     return jres({
         "server_time": to_iso(now), "grid": layout["grid"], "fixtures": layout["fixtures"], "zones": layout["zones"],
-        "summary": summary, "seats": out, "settings": s.as_dict(),
+        "summary": summary, "seats": out, "settings": s.as_dict(), "live": analytics.live_usage(results),
+        "waiting": WaitEntry.objects.filter(status="waiting").count(),
         "assign": {"groups": [{"state": g, "label": SEAT_STATES[g], "items": [
             {"code": c, "label": DETAILS[c][1], "needs": ASSIGNABLE[c][3], "issue": DETAILS[c][2]} for c in codes]}
             for g, codes in ASSIGN_GROUPS]},
@@ -214,8 +223,13 @@ def assign(request):
                                                checked_in_at=now if checkin else None, source="admin")
         except IntegrityError:
             raise ApiError(409, "SEAT_TAKEN", "방금 다른 예약이 생겼습니다.")
+        record_event(r, "admin_assign", now)
         if checkin:
+            record_event(r, "admin_checkin", now)
             set_seat_state(seat, "occupied", "manual", now)
+        WaitEntry.objects.filter(user=u, status__in=("waiting", "offered")).update(status="fulfilled", ended_at=now)
+        notify(u.id, "info", "ok", f"{seat.label} 좌석이 배정됐어요",
+               "관리자가 좌석을 배정했습니다." + ("" if checkin else " 좌석 QR로 체크인해 주세요."), now, seat=seat, reservation=r)
         memo = str_field(body, "memo")
         log_admin(request.user.id, "assign", now, seat_no=seat_no, reservation_id=r.id, target_user_id=u.id,
                   memo=("바로 이용 시작" if checkin else "입실 전 예약") + (f" · {memo}" if memo else ""))
@@ -236,6 +250,7 @@ def admin_checkin(request, res_id):
             raise ApiError(409, "SEAT_UNAVAILABLE", "사용불가 좌석입니다. 좌석을 먼저 이동하세요.")
         r.status, r.checked_in_at = "in_use", now
         r.save(update_fields=["status", "checked_in_at"])
+        record_event(r, "admin_checkin", now)
         set_seat_state(r.seat, "occupied", "manual", now)
         log_admin(request.user.id, "checkin", now, seat_no=r.seat_id, reservation_id=r.id, target_user_id=r.user_id)
         refresh(now)
@@ -268,6 +283,10 @@ def move(request, res_id):
             if old.state == "occupied":
                 set_seat_state(old, "empty", "manual", now)
         memo = str_field(body, "memo")
+        record_event(r, "move", now, memo=f"{old.label} → {target.label}")
+        notify(r.user_id, "info", "info", f"좌석이 {target.label}(으)로 옮겨졌어요",
+               f"관리자가 {old.label} → {target.label}(으)로 좌석을 옮겼습니다." + (f" ({memo})" if memo else ""),
+               now, seat=target, reservation=r)
         log_admin(request.user.id, "move", now, seat_no=to_no, reservation_id=r.id, target_user_id=r.user_id,
                   memo=f"{old.label} → {target.label}" + (f" · {memo}" if memo else ""))
         refresh(now)
@@ -283,8 +302,10 @@ def admin_extend(request, res_id):
         r = _get_reservation(res_id)
         s = get_settings()
         # 관리자 연장은 연장 가능 시점·횟수 제한을 적용하지 않고, 이용자 연장 횟수에도 포함하지 않는다.
+        old_end = r.end_at
         r.end_at += s.extend_min * 60
         r.save(update_fields=["end_at"])
+        record_event(r, "admin_extend", now, memo=f"종료 {to_iso(old_end)[11:16]} → {to_iso(r.end_at)[11:16]}")
         log_admin(request.user.id, "extend", now, seat_no=r.seat_id, reservation_id=r.id, target_user_id=r.user_id,
                   memo=f"+{s.extend_min}분")
         refresh(now)
@@ -304,8 +325,12 @@ def force_return(request, res_id):
             resolved_at=now, resolved_by_id=request.user.id, resolution="force_returned")
         # 관리자 지정 의도는 예약과 함께 정리한다(남은 짐·사람은 예약 없는 좌석으로 다시 판정됨)
         clear_marks([r.seat_id])
+        memo = str_field(body, "memo")
+        record_event(r, "force_return", now, memo=memo)
+        notify(r.user_id, "issue", "danger", f"{r.seat.label} 예약이 관리자에 의해 반납됐어요",
+               memo or "좌석 이용 규정 위반으로 관리자가 반납 처리했습니다.", now, seat=r.seat, reservation=r)
         log_admin(request.user.id, "force_return", now, seat_no=r.seat_id, reservation_id=r.id,
-                  target_user_id=r.user_id, memo=str_field(body, "memo"))
+                  target_user_id=r.user_id, memo=memo)
         refresh(now)
     return _ok()
 
@@ -349,8 +374,11 @@ def warn(request, user_id):
                 a.save(update_fields=["resolved_at", "resolved_by", "resolution"])
         u.warnings += 1
         u.save(update_fields=["warnings"])
+        s = get_settings()
+        notify(u.id, "warning", "danger", f"경고가 부여됐어요 (누적 {u.warnings}회)",
+               (f"사유: {reason}. " if reason else "") + f"경고가 {s.warning_limit}회 이상 쌓이면 이용이 정지될 수 있어요.",
+               now, **seat_id_or_none(seat_no))
         log_admin(request.user.id, "warn", now, seat_no=seat_no, target_user_id=u.id, alert_id=alert_id, memo=reason)
-    s = get_settings()
     return _ok(warnings=u.warnings, suspend_suggested=u.warnings >= s.warning_limit and not u.suspended(now))
 
 
@@ -365,6 +393,7 @@ def unwarn(request, user_id):
             raise ApiError(409, "INVALID_STATE", "취소할 경고가 없습니다.")
         u.warnings -= 1
         u.save(update_fields=["warnings"])
+        notify(u.id, "info", "ok", f"경고 1회가 취소됐어요 (누적 {u.warnings}회)", "", now)
         log_admin(request.user.id, "unwarn", now, target_user_id=u.id, memo=str_field(body, "reason"))
     return _ok(warnings=u.warnings)
 
@@ -383,6 +412,8 @@ def suspend(request, user_id):
         u.suspended_until = now + days * 86400
         u.save(update_fields=["suspended_until"])
         reason = str_field(body, "reason")
+        notify(u.id, "suspend", "danger", f"이용이 {days}일 정지됐어요",
+               f"{to_iso(u.suspended_until)[5:16].replace('T', ' ')}까지 새 예약을 할 수 없어요." + (f" 사유: {reason}" if reason else ""), now)
         log_admin(request.user.id, "suspend", now, target_user_id=u.id, memo=f"{days}일" + (f" · {reason}" if reason else ""))
     return _ok(suspended_until=to_iso(u.suspended_until))
 
@@ -397,6 +428,7 @@ def unsuspend(request, user_id):
             raise ApiError(409, "INVALID_STATE", "정지 중인 이용자가 아닙니다.")
         u.suspended_until = None
         u.save(update_fields=["suspended_until"])
+        notify(u.id, "info", "ok", "이용 정지가 해제됐어요", "다시 좌석을 예약할 수 있어요.", now)
         log_admin(request.user.id, "unsuspend", now, target_user_id=u.id)
     return _ok()
 
@@ -481,3 +513,83 @@ def stats(request):
     start = datetime(day.year, day.month, day.day, tzinfo=zone)
     return jres({"date": day.isoformat(), "hours": compute_hourly_stats(
         int(start.timestamp()), int((start + timedelta(days=1)).timestamp()), now)})
+
+
+# ---------------------------------------------------------------- 사전 경고 직접 보내기
+
+@require_POST
+@admin_required
+def notice(request, user_id):
+    """누적 경고와 별개로, 본인 계정에 사전 경고(주의) 알림만 보낸다."""
+    body = json_body(request)
+    message = str_field(body, "message", 300)
+    seat_no = int_field(body, "seat_no", required=False)
+    now = clock.now()
+    with transaction.atomic():
+        u = _get_user(user_id)
+        seat = Seat.objects.filter(no=seat_no).first() if seat_no else None
+        title = f"{seat.label} 좌석 관련 사전 경고" if seat else "관리자 사전 경고"
+        notify(u.id, "prewarn", "warn", title,
+               message or "좌석 이용 규정을 지켜 주세요. 계속되면 경고가 부여될 수 있어요.", now, seat=seat)
+        log_admin(request.user.id, "notice", now, seat_no=seat.no if seat else None, target_user_id=u.id, memo=message)
+    return _ok()
+
+
+# ---------------------------------------------------------------- 판정 피드백
+
+@require_POST
+@admin_required
+def feedback(request, no):
+    """관리자가 좌석을 직접 확인해 현재 판정이 맞는지 기록. 틀렸으면 올바른 상태로 바로 수정할 수 있다."""
+    body = json_body(request)
+    verdict = body.get("verdict")
+    if verdict not in ("correct", "wrong"):
+        raise ApiError(400, "BAD_REQUEST", "verdict는 correct 또는 wrong이어야 합니다.")
+    correct = body.get("correct_detail") or None
+    if verdict == "wrong" and correct not in ASSIGNABLE:
+        raise ApiError(400, "BAD_REQUEST", "틀림이면 올바른 상태(correct_detail)를 골라 주세요.")
+    apply = verdict == "wrong" and bool(body.get("apply", True))
+    memo = str_field(body, "memo")
+    now = clock.now()
+    with transaction.atomic():
+        it = next((x for x in refresh(now) if x["seat"].no == no), None)
+        if it is None:
+            raise ApiError(404, "NOT_FOUND", "좌석을 찾을 수 없습니다.")
+        seat, j = it["seat"], it["j"]
+        if apply and ASSIGNABLE[correct][3] == "in_use" and not (it["res"] and it["res"].status == "in_use"):
+            raise ApiError(409, "INVALID_STATE", f"'{DETAILS[correct][1]}'은(는) 이용 중인 예약이 있는 좌석에만 지정할 수 있습니다.")
+        fb = JudgmentFeedback.objects.create(
+            seat=seat, admin_id=request.user.id, at=now, shown_state=j.seat_state, shown_detail=j.detail,
+            source=seat.state_source, verdict=verdict, correct_detail=correct if verdict == "wrong" else None,
+            memo=memo, applied=apply)
+        if apply:
+            state, mark, reason, _ = ASSIGNABLE[correct]
+            set_seat_state(seat, state, "manual", now, mark=mark, reason=reason, note=seat.note if state == "unavailable" else None)
+            refresh(now)
+        shown = f"{SEAT_STATES[j.seat_state]} · {DETAILS[j.detail][1]}"
+        log_admin(request.user.id, "feedback", now, seat_no=no,
+                  memo=f"{shown} → " + ("맞음" if verdict == "correct" else f"틀림(실제: {DETAILS[correct][1]})"
+                                        + (" · 수정함" if apply else "")))
+    return _ok(id=fb.id)
+
+
+@require_GET
+@admin_required
+def feedback_list(request):
+    return jres(analytics.feedback_stats())
+
+
+# ---------------------------------------------------------------- 샘플 이력 생성
+
+@require_POST
+@admin_required
+def demo_history(request):
+    from ..sample import generate_history
+    now = clock.now()
+    body = json_body(request)
+    weeks = int_field(body, "weeks", required=False) or 4
+    if not 1 <= weeks <= 8:
+        raise ApiError(400, "BAD_REQUEST", "weeks는 1~8이어야 합니다.")
+    n = generate_history(now, weeks=weeks)
+    log_admin(request.user.id, "demo_history", now, memo=f"{weeks}주 · 예약 {n}건")
+    return _ok(reservations=n)

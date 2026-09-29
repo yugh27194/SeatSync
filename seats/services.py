@@ -1,8 +1,11 @@
 """판정 갱신 파이프라인과 예약·좌석·관리자 공통 로직."""
 from django.db import transaction
 
-from .models import AdminLog, Alert, Reservation, Seat, SeatState, Setting, StatusLog, User
-from .status import (DEFAULT_SETTINGS, DETAILS, ISSUES, OK, Actual, Settings, judge)
+import math
+
+from .models import (AdminLog, Alert, Notification, Reservation, ReservationEvent, Seat, SeatState, Setting,
+                     StatusLog, User, WaitEntry)
+from .status import (AVAILABLE, DEFAULT_SETTINGS, DETAILS, ISSUES, OK, Actual, Settings, judge)
 from .status import Reservation as ResView
 from .timeutil import to_iso
 
@@ -45,15 +48,21 @@ def clear_marks(seat_nos):
 def _sweep(now, s):
     limit = s.checkin_limit_min * 60
     ended = set()
-    for r in Reservation.objects.filter(status="reserved", start_at__lt=now - limit):
+    for r in Reservation.objects.filter(status="reserved", start_at__lt=now - limit).select_related("seat"):
         r.status, r.ended_at = "no_show", now
         r.save(update_fields=["status", "ended_at"])
         ended.add(r.seat_id)
+        record_event(r, "no_show", now)
+        notify(r.user_id, "issue", "danger", f"{r.seat.label} 예약이 자동 취소됐어요",
+               f"체크인 제한 시간({s.checkin_limit_min}분) 안에 체크인하지 않아 미입실로 처리됐습니다.",
+               now, seat=r.seat, reservation=r, key=f"noshow:{r.id}")
         if not Alert.objects.filter(seat_id=r.seat_id, type="no_show", resolved_at__isnull=True).exists():
             Alert.objects.create(seat_id=r.seat_id, type="no_show", reservation=r, created_at=now)
-    expired = Reservation.objects.filter(status__in=ACTIVE, end_at__lte=now)
-    ended.update(expired.values_list("seat_id", flat=True))
-    expired.update(status="expired", ended_at=now)
+    for r in Reservation.objects.filter(status__in=ACTIVE, end_at__lte=now).select_related("seat"):
+        r.status, r.ended_at = "expired", now
+        r.save(update_fields=["status", "ended_at"])
+        ended.add(r.seat_id)
+        record_event(r, "expire", r.end_at)
     if ended:
         clear_marks(ended)
 
@@ -85,14 +94,123 @@ def _record(item, now):
 
 
 def refresh(now):
-    """sweep → 전 좌석 판정·대조 → 전이 기록 → 알림. 좌석별 결과 목록을 돌려준다."""
+    """sweep → 전 좌석 판정·대조 → 전이 기록 → 처리 필요 알림 → 본인 사전 경고 → 빈자리 안내.
+    좌석별 결과 목록을 돌려준다(item["offer"]: 그 좌석을 안내받은 대기 항목)."""
     with transaction.atomic():
         s = get_settings()
         _sweep(now, s)
         results = _judge_seats(now, s)
         for item in results:
             _record(item, now)
+        _prewarn(results, now, s)
+        offers = _waitlist(results, now, s)
+        for item in results:
+            item["offer"] = offers.get(item["seat"].no)
     return results
+
+
+# ---------------------------------------------------------------- 예약 이력·본인 알림
+
+def record_event(res, kind, at, memo=None):
+    ReservationEvent.objects.create(reservation=res, user_id=res.user_id, kind=kind, at=at, memo=memo)
+
+
+def notify(user_id, kind, level, title, body, now, seat=None, reservation=None, key=None):
+    """본인 계정 알림. key가 같으면 한 번만 보낸다(같은 사안의 중복 경고 방지)."""
+    if key and Notification.objects.filter(dedup_key=key).exists():
+        return None
+    return Notification.objects.create(user_id=user_id, kind=kind, level=level, title=title, body=body,
+                                       seat=seat, reservation=reservation, dedup_key=key, created_at=now)
+
+
+def _mins(sec):
+    return max(1, math.ceil(sec / 60))
+
+
+def _prewarn(results, now, s):
+    """이석·짐만 두고 비움·체크인 마감이 기준 시간 prewarn_min 전이면 본인에게 사전 경고,
+    처리 필요로 넘어가면 다시 알림. 같은 사안(예약·상태 시작 시각)마다 한 번씩만 보낸다."""
+    pw = s.prewarn_min * 60
+    for it in results:
+        r, j, seat = it["res"], it["j"], it["seat"]
+        if r is None:
+            continue
+        d, left = j.detail, (j.deadline - now) if j.deadline else None
+        uid = r.user_id
+        if d in ("away_short", "item") and left is not None and left <= pw:
+            target = "이탈" if d == "away_short" else "사석화"
+            what = "자리를 비운" if d == "away_short" else "짐만 두고 자리를 비운"
+            notify(uid, "prewarn", "warn", f"{seat.label} 좌석 사전 경고",
+                   f"{what} 지 {_mins(now - j.since)}분이 지났어요. {_mins(left)}분 안에 돌아오지 않으면 "
+                   f"'{target}'(으)로 처리되어 관리자가 반납 처리할 수 있어요.",
+                   now, seat=seat, reservation=r, key=f"pre:{d}:{r.id}:{j.since}")
+        elif d in ("away", "hoarding"):
+            notify(uid, "issue", "danger", f"{seat.label} 좌석이 '{DETAILS[d][1]}'(으)로 표시됐어요",
+                   "기준 시간이 지나 처리 필요 좌석이 되었습니다. 바로 좌석으로 돌아가거나 반납해 주세요. "
+                   "관리자가 강제 반납하거나 경고를 줄 수 있어요.",
+                   now, seat=seat, reservation=r, key=f"iss:{d}:{r.id}:{j.since}")
+        elif d == "unauthorized":  # 내 예약 좌석을 다른 사람이 점유(관리자 확인)
+            notify(uid, "issue", "warn", f"{seat.label} 내 예약 좌석에 다른 이용이 확인됐어요",
+                   "관리자가 확인 중입니다. 필요하면 [관리자 호출]로 알려 주세요.",
+                   now, seat=seat, reservation=r, key=f"iss:unauth:{r.id}:{j.since}")
+        elif d == "seat_unavailable":
+            notify(uid, "issue", "danger", f"{seat.label} 예약 좌석을 사용할 수 없게 됐어요",
+                   "좌석 고장·점검으로 사용불가입니다. 관리자가 다른 좌석으로 옮겨 드리거나, 반납 후 다른 좌석을 예약해 주세요.",
+                   now, seat=seat, reservation=r, key=f"iss:unav:{r.id}:{j.since}")
+        if d == "no_checkin":
+            notify(uid, "prewarn", "warn", f"{seat.label} 체크인해 주세요",
+                   "예약 좌석에 착석(또는 짐)이 확인됐지만 아직 체크인 전이에요. 좌석 QR을 스캔해 체크인하세요.",
+                   now, seat=seat, reservation=r, key=f"iss:nocheckin:{r.id}:{j.since}")
+        if r.status == "reserved" and left is not None and left <= pw:
+            notify(uid, "prewarn", "warn", f"{seat.label} 체크인 마감 {_mins(left)}분 전",
+                   f"{_mins(left)}분 안에 좌석 QR로 체크인하지 않으면 예약이 자동 취소돼요(미입실).",
+                   now, seat=seat, reservation=r, key=f"pre:checkin:{r.id}")
+
+
+# ---------------------------------------------------------------- 빈자리 알림 대기
+
+def _waitlist(results, now, s):
+    """안내 만료 처리 → 쓸 수 없게 된 안내 되돌리기 → 빈자리를 대기 순서대로 안내. {seat_no: 안내 중인 WaitEntry}"""
+    free = {it["seat"].no: it["seat"] for it in results if it["j"].seat_state == AVAILABLE and it["res"] is None}
+    active_users = set(Reservation.objects.filter(status__in=ACTIVE).values_list("user_id", flat=True))
+    offers = {}
+    for e in WaitEntry.objects.filter(status__in=("waiting", "offered")).select_related("offered_seat"):
+        if e.user_id in active_users:  # 다른 경로로 이미 예약함
+            e.status, e.ended_at = "fulfilled", now
+            e.save(update_fields=["status", "ended_at"])
+            continue
+        if e.status != "offered":
+            continue
+        if e.expires_at <= now:
+            e.status, e.ended_at = "expired", now
+            e.save(update_fields=["status", "ended_at"])
+            notify(e.user_id, "offer", "info", "빈자리 안내 시간이 지났어요",
+                   f"{e.offered_seat.label} 좌석 안내가 만료되어 대기가 끝났어요. 다시 기다리려면 [빈자리 알림]을 눌러 주세요.",
+                   now, seat=e.offered_seat, key=f"offer-exp:{e.id}")
+        elif e.offered_seat_id not in free:  # 안내한 좌석을 더 쓸 수 없음(관리자 배정·사용불가 등) → 다시 대기
+            e.status, e.offered_seat, e.offered_at, e.expires_at = "waiting", None, None, None
+            e.save(update_fields=["status", "offered_seat", "offered_at", "expires_at"])
+        else:
+            offers[e.offered_seat_id] = e
+    for e in WaitEntry.objects.filter(status="waiting").order_by("created_at", "id"):
+        cand = [no for no, st in sorted(free.items()) if no not in offers and (not e.zone or st.zone == e.zone)]
+        if not cand:
+            continue
+        seat = free[cand[0]]
+        e.status, e.offered_seat, e.offered_at, e.expires_at = "offered", seat, now, now + s.waitlist_hold_min * 60
+        e.save(update_fields=["status", "offered_seat", "offered_at", "expires_at"])
+        offers[seat.no] = e
+        notify(e.user_id, "offer", "ok", f"{seat.label} 빈자리가 생겼어요",
+               f"{s.waitlist_hold_min}분 동안 먼저 예약할 수 있어요. 좌석 지도에서 [바로 예약]을 눌러 주세요.",
+               now, seat=seat, key=f"offer:{e.id}:{now}")
+    return offers
+
+
+def wait_position(entry):
+    """대기 순번(1부터): 나보다 먼저 등록한 대기자 수 + 1."""
+    from django.db.models import Q
+    return WaitEntry.objects.filter(status="waiting").filter(
+        Q(created_at__lt=entry.created_at) | Q(created_at=entry.created_at, id__lte=entry.id)).count()
 
 
 # ---------------------------------------------------------------- 좌석 현장 상태
@@ -219,6 +337,7 @@ def setup_demo(now):
     with transaction.atomic():
         s = get_settings()
         Reservation.objects.filter(status__in=ACTIVE).update(status="cancelled", ended_at=now)
+        WaitEntry.objects.filter(status__in=("waiting", "offered")).update(status="cancelled", ended_at=now)
         Alert.objects.filter(resolved_at__isnull=True).update(resolved_at=now, resolution="reset")
         SeatState.objects.all().delete()  # 같은 상태라도 알림이 새로 생기게 캐시를 비운다
         seats = {st.label: st for st in Seat.objects.filter(active=True)}
@@ -241,9 +360,12 @@ def setup_demo(now):
                 if start_ago is None:  # 체크인 제한을 넘긴 예약 → 다음 refresh에서 미입실 처리
                     start_ago = s.checkin_limit_min + 5
                 start = now - start_ago * 60
-                Reservation.objects.create(user=user, seat=seat, status=status, start_at=start,
-                                           end_at=start + s.default_use_min * 60,
-                                           checked_in_at=start if status == "in_use" else None)
+                res = Reservation.objects.create(user=user, seat=seat, status=status, start_at=start,
+                                                 end_at=start + s.default_use_min * 60,
+                                                 checked_in_at=start if status == "in_use" else None)
+                record_event(res, "reserve", start)
+                if status == "in_use":
+                    record_event(res, "checkin", start)
                 who = f"{user.name} {'이용 중' if status == 'in_use' else '예약'}"
             msgs.append(f"{label}: {who} → {memo}")
         refresh(now)
