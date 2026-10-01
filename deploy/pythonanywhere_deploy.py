@@ -17,7 +17,9 @@ import json
 import os
 import secrets
 import shutil
+import socket
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -60,7 +62,7 @@ class PA:
         self.base = f"https://{api_host()}/api/v0/user/{username}"
         self.token, self.dry = token, dry
 
-    def call(self, method, path, data=None, ok=(200, 201, 204)):
+    def call(self, method, path, data=None, ok=(200, 201, 204), timeout=60):
         if self.dry:
             print(f"  [dry-run] {method} {path} {data or ''}")
             return {} if method != "GET" else []
@@ -68,13 +70,37 @@ class PA:
         req = urllib.request.Request(self.base + path, data=body, method=method,
                                      headers={"Authorization": f"Token {self.token}"})
         try:
-            with urllib.request.urlopen(req, timeout=60) as r:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
                 raw = r.read()
                 return json.loads(raw) if raw else {}
         except urllib.error.HTTPError as e:
             if e.code in ok:
                 return {}
             raise SystemExit(f"[API 오류] {method} {path} → HTTP {e.code}: {e.read().decode(errors='replace')[:300]}")
+
+
+def reload_app(pa, app_domain):
+    """웹 앱 재시작. PythonAnywhere의 reload API는 재시작이 끝날 때까지 응답을 붙잡고 있어
+    가끔 시간 초과가 난다(재시작 자체는 진행 중인 경우가 많음). 한 번 더 기다려 보고,
+    그래도 안 되면 WSGI 파일을 touch 한다 — PythonAnywhere는 WSGI 파일이 바뀌면 웹 앱을 다시 불러온다."""
+    for attempt in (1, 2):
+        try:
+            pa.call("POST", f"/webapps/{app_domain}/reload/", timeout=180)
+            return True
+        except (TimeoutError, socket.timeout, urllib.error.URLError) as e:
+            print(f"  재시작 요청 응답 지연({attempt}/2): {e}")
+            if attempt == 1:
+                time.sleep(10)
+    touched = []
+    for path in wsgi_paths(app_domain):
+        if os.path.exists(path):
+            os.utime(path, None)
+            touched.append(path)
+    if touched:
+        print(f"  대신 WSGI 파일을 갱신해 재시작했습니다: {', '.join(touched)}")
+        return True
+    print("  재시작을 확인하지 못했습니다. Web 탭에서 [Reload] 버튼을 눌러 주세요.")
+    return False
 
 
 def load_env():
@@ -129,8 +155,8 @@ def main():
 
     if args.reload_only:
         app_domain, _ = resolve_domain(pa, domain)
-        pa.call("POST", f"/webapps/{app_domain}/reload/")
-        print("재시작 완료.")
+        if reload_app(pa, app_domain):
+            print("재시작 완료. (1~2분 걸릴 수 있어요)")
         return 0
 
     if not os.path.isdir(PROJECT) and not args.dry_run:
@@ -156,7 +182,7 @@ def main():
         pa.call("POST", f"/webapps/{app_domain}/static_files/", {"url": "/static/", "path": os.path.join(PROJECT, "static")})
     print("  정적 파일: /static/ 연결")
 
-    pa.call("POST", f"/webapps/{app_domain}/reload/")
+    reload_app(pa, app_domain)
     print("\n배포 완료!")
     print(f"  사이트        : https://{domain}")
     print(f"  관리자 코드   : {env['SEATSYNC_ADMIN_CODE']}  (바꾸려면: python deploy/pythonanywhere_deploy.py --admin-code 새코드)")
