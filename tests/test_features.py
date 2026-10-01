@@ -183,6 +183,8 @@ def test_waitlist_immediate_offer_when_free(user_a):
 
 def test_feedback_correct_and_wrong(admin, device, clock):
     from conftest import send
+    from seats.services import set_item_detection
+    set_item_detection(True, clock())
     send(device, clock, {1: ("item", clock())})  # 카메라가 짐으로 판정(실제로는 사람)
     assert admin.jpost("/api/admin/seats/2/feedback", {"verdict": "correct"}).status_code == 200
     assert admin.jpost("/api/admin/seats/1/feedback", {"verdict": "wrong"}).status_code == 400

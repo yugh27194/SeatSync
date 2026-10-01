@@ -65,6 +65,9 @@ class Seat(models.Model):
     cam_seen_at = models.BigIntegerField(null=True, blank=True)              # 서버가 마지막으로 받은 시각
     cam_valid_until = models.BigIntegerField(null=True, blank=True)          # 이 시각이 지나면 감지 확인 불가
     cam_unknown_since = models.BigIntegerField(null=True, blank=True)        # UNKNOWN(확인 불가) 시작 시각
+    # 짐 감지(카메라 items_run): 사람 유무와 별개로 책상 위 개인 짐이 있는지. None = 모름(짐 감지 안 하는 카메라·확인 불가)
+    cam_item = models.BooleanField(null=True, blank=True)
+    cam_item_confidence = models.FloatField(null=True, blank=True)
 
     class Meta:
         ordering = ["no"]
@@ -75,6 +78,7 @@ class Camera(models.Model):
     camera_id = models.CharField(max_length=50, primary_key=True)
     health = models.CharField(max_length=30, default="")        # ok | starting | inference_too_slow | stopped | error ...
     meaning = models.CharField(max_length=40, default="")       # person_presence_only 등 (감지 범위)
+    item_meaning = models.CharField(max_length=40, default="")  # selected_personal_items = 짐 감지도 보냄
     schema_version = models.IntegerField(null=True)
     observed_at = models.BigIntegerField(null=True)              # 촬영 시각(서버 시계로 보정)
     valid_until = models.BigIntegerField(null=True)

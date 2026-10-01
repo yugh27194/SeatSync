@@ -9,8 +9,8 @@ from ..auth import admin_required
 from ..http import ApiError, int_field, jres, json_body, str_field
 from .. import analytics
 from ..models import AdminLog, Alert, Camera, JudgmentFeedback, Reservation, Seat, Setting, User, WaitEntry
-from ..services import (clear_marks, compute_hourly_stats, get_settings, log_admin, notify, record_event, refresh,
-                        set_seat_state)
+from ..services import (clear_marks, compute_hourly_stats, get_settings, item_detection_on, log_admin, notify,
+                        record_event, refresh, seat_has_item, set_item_detection, set_seat_state)
 from ..status import (ACTUAL_STATES, ALERT_TYPE_LABELS, ASSIGN_GROUPS, ASSIGNABLE, AWAY_LONG, CATEGORIES,
                       DEFAULT_SETTINGS, DETAILS, SEAT_STATES, SETTINGS_META, TIME_KEYS, TIME_STEP, category, fmt_min)
 from ..timeutil import to_iso, tz
@@ -24,6 +24,7 @@ ACTION_LABELS = {
     "settings": "설정 변경", "admin_on": "관리자 탭 입장(코드 확인)", "admin_off": "관리자 모드 끔", "admin_locked": "관리자 코드 잠금",
     "notice": "사전 경고 발송", "feedback": "판정 피드백", "demo_history": "샘플 이력 생성", "auto_return": "자동 강제 반납",
     "qr_build": "좌석 QR 파일 생성", "sample_init": "시연용 샘플 생성(서버 초기화)",
+    "item_detection": "짐 감지 설정",
 }
 RES_STATUS = {"reserved": "예약(입실 전)", "in_use": "이용 중"}
 
@@ -96,6 +97,7 @@ def seats(request):
     summary["checks"] = 0
     cats = {k: 0 for k in CATEGORIES}
     cats["away_short"] = cats["away_long"] = 0
+    items_on = item_detection_on()
     out = []
     for it in results:
         seat, j, res = it["seat"], it["j"], it["res"]
@@ -121,9 +123,11 @@ def seats(request):
             "reservation": _res_summary(res, now, s),
             "alert_id": open_alerts.get(seat.no, {}).get(j.detail),
             "stale": j.stale,
+            "has_item": seat_has_item(seat, items_on, now),  # 짐 감지가 켜졌을 때만 True (지도 노란 점)
             "camera": {"camera_id": seat.camera_id, "camera_seat": seat.camera_seat, "state": seat.cam_state,
                        "confidence": seat.cam_confidence, "seen_at": to_iso(seat.cam_seen_at),
                        "valid_until": to_iso(seat.cam_valid_until),
+                       "item": seat.cam_item, "item_confidence": seat.cam_item_confidence,
                        "fresh": seat.cam_state in ("OCCUPIED", "EMPTY") and (seat.cam_valid_until or 0) >= now}
                       if seat.camera_seat else None,
             "offer": {"user_name": it["offer"].user.name, "expires_at": to_iso(it["offer"].expires_at),
@@ -132,6 +136,7 @@ def seats(request):
     return jres({
         "server_time": to_iso(now), "grid": layout["grid"], "fixtures": layout["fixtures"], "zones": layout["zones"],
         "summary": summary, "categories": cats, "seats": out, "settings": s.as_dict(), "live": analytics.live_usage(results),
+        "item_detection": items_on,
         "waiting": WaitEntry.objects.filter(status="waiting").count(),
         "assign": {"groups": [{"state": g, "label": SEAT_STATES[g], "items": [
             {"code": c, "label": DETAILS[c][1], "needs": ASSIGNABLE[c][3], "issue": DETAILS[c][2]} for c in codes]}
@@ -530,6 +535,32 @@ def settings_api(request):
         log_admin(request.user.id, "settings", now, memo=", ".join(
             f"{SETTINGS_META[k][0]}={fmt_min(v) if k in TIME_KEYS else v}" for k, v in clean.items()))
     return jres(_settings_json(get_settings()))
+
+
+# ---------------------------------------------------------------- 짐 감지 on/off (판정 기준 화면 상단)
+
+ITEM_CAMERA_FRESH_SEC = 60  # 이 시간 안에 짐 정보를 보낸 카메라가 있으면 '받고 있음'
+
+
+def _item_detection_json(now):
+    cams = Camera.objects.exclude(item_meaning="").filter(last_seen_at__gte=now - ITEM_CAMERA_FRESH_SEC)
+    return {"enabled": item_detection_on(), "receiving": cams.exists(),
+            "cameras": sorted(cams.values_list("camera_id", flat=True))}
+
+
+@require_http_methods(["GET", "PUT"])
+@admin_required
+def item_detection(request):
+    now = clock.now()
+    if request.method == "PUT":
+        enabled = json_body(request).get("enabled")
+        if not isinstance(enabled, bool):
+            raise ApiError(400, "BAD_REQUEST", "enabled는 true 또는 false여야 합니다.")
+        with transaction.atomic():
+            set_item_detection(enabled, now)
+            log_admin(request.user.id, "item_detection", now, memo="짐 감지 켬" if enabled else "짐 감지 끔")
+            refresh(now)
+    return jres(_item_detection_json(now))
 
 
 # ---------------------------------------------------------------- 통계

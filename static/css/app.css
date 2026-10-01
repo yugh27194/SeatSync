@@ -12,6 +12,8 @@
   --ok: #23a05a;
 
   /* 이용자 좌석 지도 색: 옅은 회색 빈자리 · 초록 사용중 · 회색 빗금 사용불가 */
+  --mine: #38bdf8;       /* 내 자리 테두리: 하늘색 */
+  --item-dot: #ffd23f;   /* 짐 있음 점: 노란색 */
   --v-available: #bebebe;  /* 빈자리: 옅은 회색 */
   --v-taken: #23a05a;  /* 사람이 사용 중: 초록 */
   --v-unavailable: #9aa2ac;  /* 사용불가: 회색 빗금 */
@@ -142,8 +144,15 @@ input:focus, textarea:focus { outline: 2px solid #b8d0ff; border-color: var(--pr
 .seat.v-unavailable { background: var(--v-unavailable); background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.25) 0 6px, transparent 6px 12px); }
 /* 사용중 좌석이 이석·짐만 있음·무단 점유 등이면 조금 더 붉게 (사용불가 좌석은 회색 유지, !만 붙음) */
 .seat.v-taken.check, .seat.v-mine.check, .seat.st-in_use.check { background: var(--v-check); }
-.seat.v-mine { background: var(--v-taken); border: 4px solid #0d2a66; box-shadow: 0 0 0 2px #fff inset; }
-.seat.v-mine::after { content: "★"; position: absolute; top: 2px; right: 6px; color: #ffd84a; font-size: 14px; }
+/* 내 자리: 하늘색 테두리 + 옅은 바깥 광채 (★ 없음) */
+.seat.v-mine { background: var(--v-taken); border: 4px solid var(--mine); box-shadow: 0 0 0 3px rgba(56,189,248,.35); }
+.lg-mine { background: #fff; outline: 3px solid var(--mine); outline-offset: -3px; }
+/* 짐 있음: 좌석 좌측 상단 노란 점 (짐 감지 ON일 때만) */
+.seat .item-dot { position: absolute; top: 6px; left: 6px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--item-dot); box-shadow: 0 0 0 2px #fff; pointer-events: none; }
+.seat.v-available .item-dot, .seat.cat-empty .item-dot { box-shadow: 0 0 0 2px #fff, 0 0 0 3px rgba(0,0,0,.15); }
+.lg-dot { width: 10px !important; height: 10px !important; border-radius: 50% !important; background: var(--item-dot); box-shadow: 0 0 0 1px rgba(0,0,0,.2); vertical-align: 0 !important; }
+.legend [hidden] { display: none; }
 .seat.checking { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.18) 0 6px, transparent 6px 12px); }
 .fixture { display: flex; align-items: center; justify-content: center; border: 2px dashed var(--line); border-radius: 10px; color: var(--muted); font-size: 13px; min-height: 56px; }
 
@@ -203,6 +212,19 @@ input:focus, textarea:focus { outline: 2px solid #b8d0ff; border-color: var(--pr
 
 .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .toolbar .spacer { flex: 1; }
+/* 판정 기준 상단: 짐 감지 on/off */
+.item-toggle { display: flex; align-items: center; gap: 12px; background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 8px 12px; }
+.item-toggle .it-name { font-weight: 700; font-size: 14px; }
+.item-toggle .it-sub { font-size: 12px; color: var(--muted); }
+.item-toggle .it-sub.warn-text { color: #b45309; }
+.toggle { position: relative; width: 68px; height: 32px; border-radius: 99px; border: 0; background: #c3c9d1; cursor: pointer; padding: 0; flex: none; transition: background .15s; }
+.toggle .knob { position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: left .15s; }
+.toggle .tlabel { position: absolute; top: 0; right: 10px; line-height: 32px; font-size: 12px; font-weight: 800; color: #fff; }
+.toggle.on { background: #23a05a; }
+.toggle.on .knob { left: 39px; }
+.toggle.on .tlabel { right: auto; left: 10px; }
+.toggle:disabled { opacity: .5; cursor: default; }
+@media (max-width: 560px) { .item-toggle { width: 100%; justify-content: space-between; } }
 .switch { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; margin: 0; font-weight: 500; }
 
 .alert-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
@@ -304,8 +326,8 @@ table.recon td .btn-row { flex-wrap: nowrap; }
   --i-seat_unavailable: var(--bang);
   --i-generic: var(--bang);
 }
-.seat .bang {
-  position: absolute; top: -8px; left: -8px; z-index: 2;
+.seat .bang {  /* 우측 상단 — 좌측 상단은 짐 있음(노란 점) 자리 */
+  position: absolute; top: -8px; right: -8px; z-index: 2;
   width: 24px; height: 24px; border-radius: 50%;
   background: var(--ic, var(--i-generic)); color: #fff; border: 2px solid #fff;
   font-size: 15px; font-weight: 900; line-height: 20px; text-align: center;

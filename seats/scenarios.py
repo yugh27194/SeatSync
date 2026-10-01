@@ -43,7 +43,8 @@ def _reset(now):
     Alert.objects.filter(resolved_at__isnull=True).update(resolved_at=now, resolution="reset")
     SeatState.objects.all().delete()
     Seat.objects.filter(active=True).update(state="empty", mark=None, reason=None, note=None, state_since=now,
-                                            state_source="manual", cam_state=None, cam_unknown_since=None)
+                                            state_source="manual", cam_state=None, cam_unknown_since=None,
+                                            cam_item=None, cam_item_confidence=None)
 
 
 def _reserve(student_no, label, now, checked_in=False):

@@ -61,6 +61,7 @@ urlpatterns = [
     path("api/admin/users/<int:user_id>/notice", api_admin.notice),
     path("api/admin/log", api_admin.admin_log),
     path("api/admin/settings", api_admin.settings_api),
+    path("api/admin/item-detection", api_admin.item_detection),
     path("api/admin/stats", api_admin.stats),
 
     # 디바이스(Pi)

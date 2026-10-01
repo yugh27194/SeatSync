@@ -23,7 +23,7 @@ from django.views.decorators.http import require_GET, require_POST
 from .. import clock
 from ..http import ApiError, int_field, jres, json_body
 from ..models import Camera, Seat
-from ..services import refresh
+from ..services import item_detection_on, refresh
 from ..timeutil import parse_iso, to_iso
 
 OCCUPANCY_TO_STATE = {"person": "occupied", "item": "item", "empty": "empty"}
@@ -90,14 +90,17 @@ def _ingest_snapshot(request, body, now):
     valid_until = min(valid_until, now + MAX_TTL_SEC)
     fresh = health == "ok" and valid_until >= now
 
+    item_meaning = str(body.get("item_meaning") or "")
     Camera.objects.update_or_create(camera_id=camera_id, defaults={
-        "health": health, "meaning": meaning, "schema_version": 1, "observed_at": observed,
+        "health": health, "meaning": meaning, "item_meaning": item_meaning, "schema_version": 1, "observed_at": observed,
         "valid_until": valid_until, "last_seen_at": now, "clock_offset": offset,
         "seats_reported": len(body["seats"])})
 
     mapped = {s.camera_seat: s for s in Seat.objects.filter(active=True, camera_id=camera_id).exclude(camera_seat="")}
     # 사람만 감지하는 카메라(person_presence_only)는 'EMPTY'가 '짐만 있음'일 수도 있다.
     person_only = meaning in ("", "person_presence_only")
+    # 짐 감지(items_run): 좌석마다 has_item(true/false/null)을 따로 보낸다. 관리자가 [짐 감지]를 켰을 때만 판정에 쓴다.
+    items_on = item_detection_on()
     accepted, ignored, unknown = 0, [], []
     seen = set()
     for it in body["seats"]:
@@ -116,6 +119,13 @@ def _ingest_snapshot(request, body, now):
         conf = it.get("current_person_confidence")
         seat.cam_confidence = float(conf) if isinstance(conf, (int, float)) and not isinstance(conf, bool) else None
         seat.cam_seen_at, seat.cam_valid_until = now, valid_until
+        has_item = it.get("has_item") if fresh else None
+        has_item = has_item if isinstance(has_item, bool) else None
+        iconf = it.get("current_item_confidence")
+        seat.cam_item = has_item
+        seat.cam_item_confidence = float(iconf) if isinstance(iconf, (int, float)) and not isinstance(iconf, bool) else None
+        cam_fields = ["cam_state", "cam_confidence", "cam_seen_at", "cam_valid_until", "cam_unknown_since",
+                      "cam_item", "cam_item_confidence"]
         if not fresh:
             state = "UNKNOWN"  # health가 ok가 아니거나 이미 유효 시간이 지난 스냅샷
         if state == "UNKNOWN":
@@ -123,19 +133,27 @@ def _ingest_snapshot(request, body, now):
             if seat.cam_state != "UNKNOWN":
                 seat.cam_unknown_since = now
             seat.cam_state = state
-            seat.save(update_fields=["cam_state", "cam_confidence", "cam_seen_at", "cam_valid_until", "cam_unknown_since"])
+            seat.save(update_fields=cam_fields)
             continue  # 확인 불가: 마지막으로 확인된 좌석 상태를 유지한다
         seat.cam_state, seat.cam_unknown_since = state, None
-        fields = ["cam_state", "cam_confidence", "cam_seen_at", "cam_valid_until", "cam_unknown_since"]
+        fields = list(cam_fields)
         if seat.state != "unavailable":  # 관리자가 사용불가로 지정한 좌석은 덮어쓰지 않는다
             target = "occupied" if state == "OCCUPIED" else "empty"
-            if target == "empty" and person_only and seat.state == "item":
-                target = "item"  # 사람만 보는 카메라의 EMPTY는 짐이 남아 있을 수 있으므로 '짐만 있음'을 유지
-            kept_item = target == "item"
+            item_known = items_on and has_item is not None
+            if target == "empty" and item_known:
+                target = "item" if has_item else "empty"  # 짐 감지 켬: 사람 없음 + 짐 있음 = 짐만 있음
+            elif target == "empty" and person_only and seat.state == "item":
+                target = "item"  # 짐을 모르면(사람만 감지) EMPTY에도 짐이 남아 있을 수 있으므로 '짐만 있음'을 유지
+            kept_item = target == "item" and not item_known
             if target != seat.state:
                 dur = it.get("state_duration_seconds")
                 dur = dur if isinstance(dur, (int, float)) and not isinstance(dur, bool) and dur >= 0 else 0
-                seat.state, seat.state_since = target, max(0, min(now, round(observed - dur)))
+                since = max(0, min(now, round(observed - dur)))  # 사람이 마지막으로 바뀐 시각
+                if {seat.state, target} == {"empty", "item"}:
+                    # 사람 없는 채로 짐만 놓이거나 치워짐: 짐을 놓은 때부터 새로 세고(empty→item),
+                    # 짐을 치운 경우(item→empty)는 사람이 떠난 시각을 그대로 써 이석 시간을 이어 간다.
+                    since = now if target == "item" else seat.state_since
+                seat.state, seat.state_since = target, since
                 seat.mark = seat.reason = seat.note = None
                 seat.state_source = "camera"
                 fields += ["state", "state_since", "mark", "reason", "note", "state_source"]
@@ -148,8 +166,8 @@ def _ingest_snapshot(request, body, now):
     for sid in missing:
         seat = mapped[sid]
         if seat.cam_state != "UNKNOWN":
-            seat.cam_state, seat.cam_unknown_since = "UNKNOWN", now
-            seat.save(update_fields=["cam_state", "cam_unknown_since"])
+            seat.cam_state, seat.cam_unknown_since, seat.cam_item = "UNKNOWN", now, None
+            seat.save(update_fields=["cam_state", "cam_unknown_since", "cam_item"])
     return {"format": "snapshot_v1", "camera_id": camera_id, "health": health, "fresh": fresh,
             "accepted": accepted, "ignored": ignored, "unknown": unknown, "missing": missing,
             "clock_offset": offset}
@@ -164,6 +182,7 @@ def _ingest_occupancy(body, now):
         if abs(offset) <= CLOCK_SKEW_TOLERANCE_SEC:
             offset = 0
     seats = {st.no: st for st in Seat.objects.filter(active=True)}
+    items_on = item_detection_on()
     accepted, ignored = 0, []
     for it in body["seats"]:
         if not isinstance(it, dict):
@@ -177,10 +196,13 @@ def _ingest_occupancy(body, now):
             ignored.append(seat_no)
             continue
         state = OCCUPANCY_TO_STATE[occ]
+        if state == "item" and not items_on:
+            state = "empty"  # 짐 감지를 끈 동안은 사람 기준으로만 판정
         accepted += 1
-        seat.cam_state = "EMPTY" if occ == "empty" else "OCCUPIED"
+        seat.cam_state = "EMPTY" if occ in ("empty", "item") else "OCCUPIED"
+        seat.cam_item = occ == "item" if occ != "person" else None
         seat.cam_seen_at, seat.cam_valid_until, seat.cam_unknown_since = now, now + DEFAULT_TTL_SEC * 3, None
-        fields = ["cam_state", "cam_seen_at", "cam_valid_until", "cam_unknown_since"]
+        fields = ["cam_state", "cam_item", "cam_seen_at", "cam_valid_until", "cam_unknown_since"]
         if seat.state != state:  # 같은 상태면 시작 시각과 관리자 지정 의도(mark)를 유지
             since = now
             if it.get("since"):

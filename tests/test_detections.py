@@ -24,10 +24,17 @@ def test_bad_occupancy_400(device, clock):
 
 
 def test_maps_states(device, clock):
+    from seats.services import set_item_detection
+    set_item_detection(True, clock())  # 짐 구분은 [짐 감지]를 켰을 때만
     send(device, clock, {1: ("person", clock() - 10), 2: ("item", clock() - 20), 3: ("empty", clock())})
     assert _seat(1).state == "occupied" and _seat(1).state_since == clock() - 10
     assert _seat(2).state == "item" and _seat(2).state_source == "camera"
     assert _seat(3).state == "empty" and _seat(3).mark is None
+
+
+def test_item_ignored_when_item_detection_off(device, clock):
+    send(device, clock, {2: ("item", clock())})
+    assert _seat(2).state == "empty" and _seat(2).cam_item is True
 
 
 def test_same_state_keeps_since_and_mark(device, clock, admin):

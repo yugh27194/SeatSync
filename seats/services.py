@@ -43,6 +43,35 @@ def camera_stale_since(seat, now):
     return None
 
 
+# ---------------------------------------------------------------- 짐 감지 (관리자 탭 > 판정 기준 상단 on/off)
+
+ITEM_DETECTION_KEY = "item_detection"
+
+
+def item_detection_on():
+    """짐 감지 사용 여부. 기본은 꺼짐 — 켜면 카메라의 has_item으로 '짐만 있음'을 판정하고 지도에 노란 점을 찍는다."""
+    v = Setting.objects.filter(key=ITEM_DETECTION_KEY).values_list("value", flat=True).first()
+    return v == "1"
+
+
+def set_item_detection(enabled, now):
+    """짐 감지를 켜고 끈다. 끌 때는 카메라가 정한 '짐만 있음'을 '비어 있음'으로 되돌린다
+    (사람 감지만으로 판정하던 원래 방식으로. 관리자가 직접 지정한 '짐만 있음'은 그대로 둔다).
+    시작 시각은 유지해 체크인한 사람의 이석 시간이 처음부터 다시 세어지지 않게 한다."""
+    Setting.objects.update_or_create(key=ITEM_DETECTION_KEY, defaults={"value": "1" if enabled else "0"})
+    if not enabled:
+        Seat.objects.filter(active=True, state="item", state_source="camera").update(state="empty", mark=None)
+
+
+def seat_has_item(seat, on, now):
+    """지도에 노란 점(짐 있음)을 찍을지. 짐 감지가 켜져 있을 때만 — 카메라가 지금 짐을 보고 있거나 '짐만 있음' 상태."""
+    if not on:
+        return False
+    if seat.state == "item":
+        return True
+    return bool(seat.cam_item) and seat.cam_state in ("OCCUPIED", "EMPTY") and (seat.cam_valid_until or 0) >= now
+
+
 def to_actual(seat, now):
     return Actual(state=seat.state, since=seat.state_since, mark=seat.mark, reason=seat.reason,
                   stale_since=camera_stale_since(seat, now))

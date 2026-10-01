@@ -25,11 +25,12 @@
       html.push(
         `<button type="button" class="seat v-${s.view}${s.booth ? " booth" : ""}" data-no="${s.no}"
           style="grid-column:${s.x};grid-row:${s.y}" title="${esc(s.zone || "")}"
-          aria-label="${esc(s.label)} ${esc(sub)}">
-          ${esc(s.label)}</button>`
+          aria-label="${esc(s.label)} ${esc(sub)}${s.item ? " · 짐 있음" : ""}">
+          ${s.item ? '<span class="item-dot"></span>' : ""}${esc(s.label)}</button>`
       );
     }
     mapEl.innerHTML = html.join("");
+    document.getElementById("lg-item").hidden = !data.item_detection;
   }
 
   function statusLine() {

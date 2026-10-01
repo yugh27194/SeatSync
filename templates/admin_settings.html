@@ -2,7 +2,13 @@
 {% block title %}판정 기준{% endblock %}
 {% block container_class %}mid{% endblock %}
 {% block content %}
-<div class="toolbar"><h1 style="margin:0">판정 기준</h1></div>
+<div class="toolbar"><h1 style="margin:0">판정 기준</h1><span class="spacer"></span>
+  <div class="item-toggle" id="item-toggle">
+    <div class="it-text"><div class="it-name">🎒 짐 감지</div><div class="it-sub" id="item-sub">불러오는 중…</div></div>
+    <button type="button" class="toggle" id="item-switch" role="switch" aria-checked="false" aria-label="짐 감지" disabled>
+      <span class="knob"></span><span class="tlabel">OFF</span></button>
+  </div>
+</div>
 <form class="card" id="settings-form" novalidate>
   <h2>판정·운영 기준값</h2>
   <p class="muted small" style="margin:-4px 0 6px">저장하면 바로 적용돼요. [시연 모드]는 값만 채우니 [저장]까지 눌러 주세요.</p>

@@ -115,12 +115,15 @@
 
   function renderMap() {
     const el = $("admin-map");
+    const lg = $("lg-item");
+    if (lg) lg.hidden = !data.item_detection;
     const html = [layoutGrid(el, data, 52)];
     for (const s of data.seats) {
       const bang = s.needs_action;  // ! = 관리자 확인 필요
       html.push(`<button type="button" class="seat cat-${s.category}${s.booth ? " booth" : ""}${bang ? " check" : ""}${selected === s.no ? " selected" : ""}"
-        data-no="${s.no}" style="grid-column:${s.x};grid-row:${s.y}" title="${esc(s.label)} · ${esc(s.category_label)} · ${esc(s.detail_label)}" aria-label="${esc(s.label)} ${esc(s.category_label)}${bang ? " · 관리자 확인 필요" : ""}">
+        data-no="${s.no}" style="grid-column:${s.x};grid-row:${s.y}" title="${esc(s.label)} · ${esc(s.category_label)} · ${esc(s.detail_label)}" aria-label="${esc(s.label)} ${esc(s.category_label)}${s.has_item ? " · 짐 있음" : ""}${bang ? " · 관리자 확인 필요" : ""}">
         ${bang ? '<span class="bang" aria-hidden="true">!</span>' : ""}
+        ${s.has_item ? '<span class="item-dot" title="짐 있음"></span>' : ""}
         ${s.stale && s.category !== "unknown" ? '<span class="cam-off" title="카메라 끊김 · 마지막 상태 표시 중">📷?</span>' : ""}
         <span class="sl">${esc(s.label)}</span><span class="sub">${esc(s.category_label)}</span></button>`);
     }
@@ -241,7 +244,9 @@
     const st = c.state ? CAM_STATE[c.state] : "수신 없음";
     const ago = c.seen_at ? ` · ${fmtRemain(Math.max(0, (Date.parse(data.server_time) - Date.parse(c.seen_at)) / 1000))} 전` : "";
     const cls = !c.state ? "cs-NONE" : (c.fresh ? `cs-${c.state}` : "cs-UNKNOWN");
-    return `<span class="cam-seat ${cls}">${esc(c.camera_seat)} ${st}</span><span class="muted small">${ago}${!c.fresh && c.state ? " · 끊김" : ""}</span>`;
+    const item = data.item_detection && c.fresh && c.item !== null && c.item !== undefined
+      ? ` · 짐 ${c.item ? "있음" : "없음"}` : "";
+    return `<span class="cam-seat ${cls}">${esc(c.camera_seat)} ${st}${item}</span><span class="muted small">${ago}${!c.fresh && c.state ? " · 끊김" : ""}</span>`;
   }
 
   function renderRecon() {

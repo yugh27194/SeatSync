@@ -66,6 +66,7 @@
 | POST | `/api/admin/users/{id}/warn` · `/unwarn` · `/suspend` · `/unsuspend` | 경고(누적)·취소·`{days}` 이용 정지·해제 |
 | GET | `/api/admin/log` | 처리 이력 |
 | GET/PUT | `/api/admin/settings` | 판정·운영 기준값 |
+| GET/PUT | `/api/admin/item-detection` | 짐 감지 on/off. PUT `{"enabled": true}` → `{"enabled", "receiving"(짐 정보 받는 중), "cameras"}` |
 | GET | `/api/admin/stats?date=YYYY-MM-DD` | 시간대별 이용·장기 이석·사석화·무단 점유 누적 |
 
 ## 디바이스 API (`X-Device-Key`)
