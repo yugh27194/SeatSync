@@ -12,6 +12,8 @@
     no_checkin: "예약자 본인이면 대리 체크인, 다른 사람이면 퇴실을 안내하세요.",
     away: "돌아오지 않으면 강제 반납하고, 반복되면 경고하세요.",
     hoarding: "짐을 보관하고 강제 반납하거나 경고하세요.",
+    unowned_item: "예약 없는 좌석에 방치된 짐이에요. 수거하거나 짐 주인에게 좌석을 배정하세요.",
+    item_left: "예약 없는 좌석이라 이용자에게는 빈자리로 보여요. 오래 방치되면 확인 목록에 올라와요.",
     seat_unavailable: "예약자를 다른 좌석으로 옮기거나 예약을 취소하세요.",
     no_show: "오지 않으면 예약을 취소하고, 늦게 왔다면 대리 체크인하세요.",
     away_short: "곧 돌아오는지 지켜보세요. 필요하면 [사전 경고]를 보내세요.",
@@ -82,6 +84,10 @@
           btn("warn", "예약자 경고", { user: r.user.id, name: r.user.name, alert: alertId || "" }) : "";
       case "away_short":
         return r ? btn("notice", "사전 경고", { user: r.user.id, name: r.user.name, seat: s.no, detail: s.detail }, "") : "";
+      case "unowned_item":
+      case "item_left":
+        return btn("leave", "짐 수거 완료", { seat: s.no, label: lbl, item: 1 }, detail === "unowned_item" ? "" : "secondary") +
+          btn("assign", "짐 주인에게 배정", { seat: s.no, checkin: 1 });
       case "item":
         if (r) return btn("notice", "사전 경고", { user: r.user.id, name: r.user.name, seat: s.no, detail: s.detail }, "");
         return btn("assign", "짐 주인에게 배정", { seat: s.no, checkin: 1 }, "") + btn("leave", "짐 수거 완료", { seat: s.no, label: lbl, item: 1 });
@@ -258,7 +264,7 @@
         <td class="hide-sm">${camCell(s)}</td>
         <td class="hide-sm">${esc(s.actual_label)}</td>
         <td><span class="statetag cat-${s.category}">${esc(s.category_label)}</span>${s.needs_action ? ' <b class="warn-text">!</b>' : ""}
-          <div class="small muted">${esc(s.detail_label)}</div></td></tr>`;
+          <div class="small muted">${esc(s.full_label)}</div></td></tr>`;
     }).join("");
   }
 

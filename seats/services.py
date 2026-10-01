@@ -4,7 +4,8 @@ from django.db import transaction
 
 from .models import (AdminLog, Alert, Notification, Reservation, ReservationEvent, Seat, SeatState, Setting,
                      StatusLog, User, WaitEntry)
-from .status import (AVAILABLE, DEFAULT_SETTINGS, DETAILS, ISSUES, OK, Actual, Settings, fmt_min, fmt_sec, judge)
+from .status import (AVAILABLE, DEFAULT_SETTINGS, DETAILS, ISSUES, OK, Actual, Settings, fmt_min, fmt_sec, full_label,
+                     judge)
 from .status import Reservation as ResView
 from .timeutil import to_iso
 
@@ -148,7 +149,7 @@ def _auto_return(results, now, s):
         if r is None or j.detail not in AUTO_RETURN or j.stale or now - j.since < limit:
             continue
         no_show = r.status == "reserved"
-        label = DETAILS[j.detail][1]
+        label = full_label(j.detail)
         r.status, r.ended_at = ("no_show" if no_show else "force_returned"), now
         r.save(update_fields=["status", "ended_at"])
         memo = f"자동 반납 ({label} {fmt_min(s.auto_return_min)} 경과)"
@@ -208,12 +209,11 @@ def _prewarn(results, now, s):
         d, left = j.detail, (j.deadline - now) if j.deadline else None
         uid = r.user_id
         if d in ("away_short", "item") and j.next_detail in ("away", "hoarding") and left is not None and left <= pw:
-            target = "장기 이석" if d == "away_short" else "사석화"
             notify(uid, "prewarn", "warn", f"{seat.label} 좌석 사전 경고",
-                   f"{fmt_sec(left)} 안에 자리로 돌아와 주세요. 늦으면 '{target}'(으)로 처리돼요.",
+                   f"{fmt_sec(left)} 안에 자리로 돌아와 주세요. 늦으면 '장기 이석'으로 처리돼요.",
                    now, seat=seat, reservation=r, key=f"pre:{d}:{r.id}:{j.since}")
         elif d in ("away", "hoarding"):
-            notify(uid, "issue", "danger", f"{seat.label} 좌석이 '{DETAILS[d][1]}'(으)로 표시됐어요",
+            notify(uid, "issue", "danger", f"{seat.label} 좌석이 '장기 이석'으로 표시됐어요",
                    "자리로 돌아가거나 반납해 주세요. 그대로 두면 반납될 수 있어요.",
                    now, seat=seat, reservation=r, key=f"iss:{d}:{r.id}:{j.since}")
         elif d == "unauthorized":  # 내 예약 좌석을 다른 사람이 점유(관리자 확인)

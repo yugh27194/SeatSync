@@ -216,7 +216,8 @@ def create_reservation(request):
         if offer is not None and offer.user_id != request.user.id:
             raise ApiError(409, "SEAT_HELD", "다른 대기자에게 먼저 안내 중인 좌석이에요.")
         ok = token_ok(qr_token, seat)
-        if seat.state in ("occupied", "item") and not ok:
+        # 짐만 있는 좌석(예약 없음)은 이용자에게 빈자리로 보이므로 예약할 수 있다(짐은 관리자가 수거)
+        if seat.state == "occupied" and not ok:
             raise ApiError(409, "SEAT_OCCUPIED", "다른 사용자가 사용 중인 좌석입니다.")
         if qr_token and not ok:
             raise ApiError(403, "BAD_QR_TOKEN", "QR을 인식하지 못했어요. 좌석 QR을 다시 찍어 주세요.")

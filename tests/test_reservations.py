@@ -50,13 +50,13 @@ def test_check_marks_away_and_item(admin):
     Reservation.objects.create(user=User.objects.get(student_no="userC"), seat_id=1, status="in_use",
                                start_at=T0, end_at=T0 + 7200, checked_in_at=T0)
     Seat.objects.filter(no=1).update(state="empty")    # 이용 중 예약자가 잠시 자리 비움
-    set_state(admin, 2, "item")                        # 예약 없이 짐만 있음(관리자 확인) → 무단 점유 아님
+    set_state(admin, 2, "item")                        # 예약 없이 짐만 있음 → 이용자에게는 빈자리, 강조 없음
     seats = {s["no"]: s for s in admin.jget("/api/admin/seats")["seats"]}
     assert seats[1]["detail"] == "away_short" and seats[1]["check"] and not seats[1]["needs_action"]
-    assert seats[2]["detail"] == "item" and seats[2]["check"] and not seats[2]["needs_action"]
+    assert seats[2]["detail"] == "item_left" and not seats[2]["check"] and not seats[2]["needs_action"]
     assert seats[1]["detail_desc"] and seats[2]["detail_desc"]
     assert not seats[5]["check"]                       # 정상 이용 중
-    assert seats[1]["category_label"] == "이석(일시)" and seats[2]["category"] == "away"
+    assert seats[1]["category_label"] == "이석(일시)" and seats[2]["category"] == "empty"
 
 
 def test_layout_in_user_api(user):

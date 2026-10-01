@@ -117,7 +117,7 @@ def _session(rnd, s, seat, user, start, end, logs, events):
         if rnd.random() < 0.55:
             detail, issue_detail, limit = "away_short", "away", s.sec("away_limit_min")
         else:
-            detail, issue_detail, limit = "item", "hoarding", s.sec("hoarding_min")
+            detail, issue_detail, limit = "item", "hoarding", s.sec("away_limit_min")
         brk = rnd.randint(5, 25) * 60 if rnd.random() < 0.8 else limit + rnd.randint(10, 40) * 60
         log.append((t, "in_use", detail))
         if brk > limit:

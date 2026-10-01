@@ -33,7 +33,7 @@ def test_log_only_on_transition(admin):
     assert _logs(1) == ["empty"]
     set_state(admin, 1, "using")
     set_state(admin, 1, "item")
-    assert _logs(1) == ["empty", "using", "item"]
+    assert _logs(1) == ["empty", "using", "item_left"]
 
 
 def test_admin_using_does_not_need_action(admin):
@@ -121,16 +121,16 @@ def test_reserved_until_end_becomes_no_show(user, clock):
 
 
 def test_item_approval_ends_with_reservation(admin, user, clock):
-    """예약 중 '짐만 있음'으로 확인한 짐이 예약 종료 뒤에도 남으면(무단 점유 기준 시간 경과) 무단 점유."""
+    """예약 중 '짐만 있음'으로 확인한 짐이 예약 종료 뒤에도 남으면(장기 이석 기준 경과) 이석(장기) · 주인 없는 짐."""
     from conftest import qr_token
     rid = user.jpost("/api/reservations", {"seat_no": 7, "qr_token": qr_token(7)}).json()["id"]
     clock.advance(60)
     set_state(admin, 7, "item")
     user.jpost(f"/api/reservations/{rid}/return")
     s = admin_seat(admin, 7)
-    assert s["detail"] == "item" and s["check"] and not s["needs_action"]
-    clock.advance(10 * 60)
-    assert admin_seat(admin, 7)["detail"] == "unauthorized"
+    assert s["detail"] == "item_left" and s["seat_state"] == "available" and not s["needs_action"]
+    clock.advance(30 * 60)
+    assert admin_seat(admin, 7)["detail"] == "unowned_item"
 
 
 def test_mark_cleared_on_expiry(admin, clock):
@@ -141,10 +141,12 @@ def test_mark_cleared_on_expiry(admin, clock):
         clock.advance(2400)
         admin.get("/api/admin/seats")
     clock.advance(2400)
-    assert admin_seat(admin, 8)["detail"] == "item"  # 예약이 끝난 시점부터 무단 점유 기준 시간을 센다
+    assert admin_seat(admin, 8)["detail"] == "item_left"  # 예약이 끝난 시점부터 장기 이석 기준 시간을 센다
     assert Reservation.objects.get(id=r.id).status == "expired"
+    clock.advance(20 * 60)
+    admin.get("/api/admin/seats")
     clock.advance(10 * 60)
-    assert admin_seat(admin, 8)["detail"] == "unauthorized"
+    assert admin_seat(admin, 8)["detail"] == "unowned_item"
 
 
 # ---------------------------------------------------------------- 자동 강제 반납
@@ -162,7 +164,7 @@ def test_auto_return_after_away(admin, clock):
     assert Reservation.objects.get(id=r.id).status == "force_returned" and s["detail"] == "empty"
     assert _open(1) == []
     log = admin.jget("/api/admin/log?limit=5")["log"]
-    assert log[0]["action"] == "auto_return" and "장기 이석" in log[0]["memo"]
+    assert log[0]["action"] == "auto_return" and "이석(장기)" in log[0]["memo"]
 
 
 def test_auto_return_no_show(user, clock):

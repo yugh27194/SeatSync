@@ -12,7 +12,8 @@ from ..models import AdminLog, Alert, Camera, JudgmentFeedback, Reservation, Sea
 from ..services import (clear_marks, compute_hourly_stats, get_settings, item_detection_on, log_admin, notify,
                         record_event, refresh, seat_has_item, set_item_detection, set_seat_state)
 from ..status import (ACTUAL_STATES, ALERT_TYPE_LABELS, ASSIGN_GROUPS, ASSIGNABLE, AWAY_LONG, CATEGORIES,
-                      DEFAULT_SETTINGS, DETAILS, SEAT_STATES, SETTINGS_META, TIME_KEYS, TIME_STEP, category, fmt_min)
+                      DEFAULT_SETTINGS, DETAILS, SEAT_STATES, SETTINGS_META, TIME_KEYS, TIME_STEP, category, fmt_min,
+                      full_label)
 from ..timeutil import to_iso, tz
 from .api_user import CALL_KINDS, layout_json
 
@@ -112,11 +113,12 @@ def seats(request):
             "no": seat.no, "label": seat.label, "x": seat.x, "y": seat.y, "zone": seat.zone, "booth": seat.no in booths,
             "seat_state": j.seat_state, "seat_state_label": SEAT_STATES[j.seat_state],
             "detail": j.detail, "detail_label": DETAILS[j.detail][1], "detail_desc": DETAILS[j.detail][3],
+            "full_label": full_label(j.detail),  # 이석(장기) · 예약 후 미입실
             "needs_action": j.needs_action, "check": j.check,
             "category": cat, "category_label": cat_label,  # 정상 · 이석(일시/장기) · 무단 점유 · 판단 불가 · 사용불가
             "since": to_iso(j.since), "elapsed_sec": max(0, now - j.since),
             "deadline": to_iso(j.deadline), "deadline_sec": (j.deadline - now) if j.deadline else None,
-            "next_label": DETAILS[j.next_detail][1] if j.next_detail else None,
+            "next_label": full_label(j.next_detail) if j.next_detail else None,
             "actual": seat.state, "actual_label": ACTUAL_STATES[seat.state], "mark": seat.mark, "reason": seat.reason,
             "actual_since": to_iso(seat.state_since), "actual_elapsed_sec": max(0, now - seat.state_since),
             "actual_source": seat.state_source, "note": seat.note,
@@ -139,7 +141,7 @@ def seats(request):
         "item_detection": items_on,
         "waiting": WaitEntry.objects.filter(status="waiting").count(),
         "assign": {"groups": [{"state": g, "label": SEAT_STATES[g], "items": [
-            {"code": c, "label": DETAILS[c][1], "needs": ASSIGNABLE[c][3], "issue": DETAILS[c][2]} for c in codes]}
+            {"code": c, "label": "짐만 있음" if c == "item" else full_label(c), "needs": ASSIGNABLE[c][3], "issue": DETAILS[c][2]} for c in codes]}
             for g, codes in ASSIGN_GROUPS]},
     })
 
@@ -212,7 +214,7 @@ def change_seat_state(request, no):
                 raise ApiError(409, "INVALID_STATE", f"'{DETAILS[code][1]}'은(는) 이용 중인 예약이 있는 좌석에만 지정할 수 있습니다.")
         set_seat_state(seat, state, "manual", now, mark=mark, reason=reason, note=note if state == "unavailable" else None)
         log_admin(request.user.id, "seat_state", now, seat_no=no,
-                  memo=f"{SEAT_STATES[DETAILS[code][0]]} · {DETAILS[code][1]}" + (f" ({note})" if note else ""))
+                  memo=f"{SEAT_STATES[DETAILS[code][0]]} · {full_label(code)}" + (f" ({note})" if note else ""))
         refresh(now)
     return _ok()
 

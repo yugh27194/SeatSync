@@ -223,7 +223,7 @@ def test_prewarn_before_away(user, admin, clock):
     assert len(notes("20260001", "prewarn")) == 1  # 같은 사안은 한 번만
     clock.advance(10 * 60)
     user.get("/api/seats")
-    assert notes("20260001", "issue") == ["A-4 좌석이 '장기 이석'(으)로 표시됐어요"]
+    assert notes("20260001", "issue") == ["A-4 좌석이 '장기 이석'으로 표시됐어요"]
 
 
 def test_prewarn_hoarding_and_new_episode(user, admin, clock):

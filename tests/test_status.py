@@ -22,13 +22,13 @@ def res(status, start_ago=0, checked_in_ago=None):
     (None, "occupied", None, IN_USE, "detected"),            # QR 체크인 없이 착석 → 기준 시간 전엔 착석 감지
     (None, "occupied", "ok", IN_USE, "using"),               # 관리자가 확인한 이용 → 처리 필요 아님
     (None, "occupied", "issue", IN_USE, "unauthorized"),     # 관리자가 무단 점유로 지정 → 즉시
-    (None, "item", None, IN_USE, "item"),
-    (None, "item", "ok", IN_USE, "item"),                    # 짐만 있음은 사용중의 하위 상태
+    (None, "item", None, AVAILABLE, "item_left"),            # 예약 없는 좌석의 짐: 이용자에게는 빈자리
+    (None, "item", "ok", AVAILABLE, "item_left"),
     (None, "unavailable", None, UNAVAILABLE, "blocked"),
     ("reserved", "empty", None, IN_USE, "waiting"),
     ("reserved", "occupied", None, IN_USE, "seated_unchecked"),  # 앉고 QR을 찍기까지 기다림
     ("reserved", "occupied", "ok", IN_USE, "seated_unchecked"),
-    ("reserved", "item", None, IN_USE, "seated_unchecked"),
+    ("reserved", "item", None, IN_USE, "waiting"),          # 짐만 두고 체크인 안 함 = 입실 대기 → 미입실
     ("reserved", "unavailable", None, UNAVAILABLE, "seat_unavailable"),
     ("in_use", "occupied", None, IN_USE, "using"),
     ("in_use", "occupied", "ok", IN_USE, "using"),
@@ -77,7 +77,7 @@ def test_away_boundary():
 
 
 def test_hoarding_boundary():
-    limit = S.hoarding_min * 60
+    limit = S.away_limit_min * 60  # 사석화 기준은 장기 이석 기준과 통합
     r = res("in_use", checked_in_ago=99999)
     assert judge(r, act("item", limit - 1), NOW, S).detail == "item"
     assert judge(r, act("item", limit), NOW, S).detail == "hoarding"
@@ -109,8 +109,30 @@ def test_unauthorized_boundary():
     assert j.deadline == NOW + 1 and j.next_detail == "unauthorized"
     j = judge(None, act("occupied", limit + 30), NOW, S)
     assert j.detail == "unauthorized" and j.since == NOW - 30
-    assert judge(None, act("item", limit - 1), NOW, S).detail == "item"
-    assert judge(None, act("item", limit), NOW, S).detail == "unauthorized"
+
+
+
+def test_unowned_item_boundary():
+    """예약 없는 좌석의 짐만: 이용자에게는 빈자리, 장기 이석 기준이 지나면 관리자에게 '이석(장기) · 주인 없는 짐'."""
+    from seats.status import category, full_label
+    limit = S.away_limit_min * 60
+    j = judge(None, act("item", limit - 1), NOW, S)
+    assert (j.seat_state, j.detail, j.needs_action) == (AVAILABLE, "item_left", False)
+    assert category("item_left") == ("empty", "빈자리")
+    j = judge(None, act("item", limit), NOW, S)
+    assert (j.seat_state, j.detail, j.needs_action) == (AVAILABLE, "unowned_item", True)
+    assert full_label("unowned_item") == "이석(장기) · 주인 없는 짐"
+    assert judge(None, act("item", 10, mark="issue"), NOW, S).detail == "unowned_item"
+
+
+def test_long_away_labels_merged():
+    """사석화·미입실·주인 없는 짐·장기 이석은 관리자 화면에서 모두 이석(장기) + 사유."""
+    from seats.status import category, full_label
+    for d in ("away", "hoarding", "no_show", "unowned_item"):
+        assert category(d) == ("away", "이석(장기)")
+    assert full_label("no_show") == "이석(장기) · 예약 후 미입실"
+    assert full_label("hoarding") == "이석(장기) · 짐만 두고 자리 비움"
+    assert full_label("item") == "이석(일시) · 짐만 두고 자리 비움"
 
 
 def test_no_checkin_boundary():

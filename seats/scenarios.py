@@ -19,7 +19,7 @@ from .models import Alert, Reservation, Seat, SeatState, Setting, User, WaitEntr
 from .services import ACTIVE, get_settings, record_event, refresh, set_seat_state
 
 # 시연용 판정 기준(설정 화면 [시연 모드]와 같은 값): 상황마다 1분 안팎으로 상태가 바뀐다.
-DEMO_SETTINGS = {"checkin_limit_min": 2, "away_limit_min": 1, "hoarding_min": 1, "unauthorized_min": 1,
+DEMO_SETTINGS = {"checkin_limit_min": 2, "away_limit_min": 1, "unauthorized_min": 1,
                  "unknown_min": 0.5, "auto_return_min": 2, "prewarn_min": 0.25, "waitlist_hold_min": 1}
 
 SCENARIOS = {

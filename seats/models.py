@@ -131,7 +131,8 @@ class StatusLog(models.Model):
 
 
 class Alert(models.Model):
-    TYPES = ["unauthorized", "no_checkin", "away", "hoarding", "unknown", "seat_unavailable", "no_show", "call"]
+    TYPES = ["unauthorized", "no_checkin", "away", "hoarding", "unknown", "seat_unavailable", "no_show", "unowned_item",
+             "call"]
 
     seat = models.ForeignKey(Seat, on_delete=models.PROTECT, related_name="alerts")
     type = models.CharField(max_length=20, choices=[(t, t) for t in TYPES])

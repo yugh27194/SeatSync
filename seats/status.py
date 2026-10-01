@@ -6,6 +6,7 @@
   - 정상 이용   : QR 체크인 + 사람 감지
   - 일시 이석   : QR 체크인했는데 사람 미감지 (장기 이석 기준 전)
   - 장기 이석   : 사람 미감지가 기준 시간 이상 → ! 관리자 확인
+                  관리자 화면에서는 사석화·미입실·주인 없는 짐도 모두 '이석(장기)'로 묶고 사유만 붙인다
   - 무단 점유   : QR 체크인 없이 사람(또는 짐)이 기준 시간 이상 감지 → ! 관리자 확인
   - 판단 불가   : 가림·인식 실패·카메라 오류(UNKNOWN)가 기준 시간 이상 → ! 관리자 확인
 명확한 경우는 자동으로 좌석 상태에 반영하고, 애매하거나 QR과 카메라가 어긋나는 경우만 '처리 필요'(관리자 확인)로 넘긴다.
@@ -17,7 +18,6 @@ from dataclasses import dataclass, fields
 DEFAULT_SETTINGS = {
     "checkin_limit_min": 15,
     "away_limit_min": 30,
-    "hoarding_min": 30,
     "unauthorized_min": 10,
     "unknown_min": 3,
     "auto_return_min": 15,
@@ -37,8 +37,7 @@ DEFAULT_SETTINGS = {
 SETTINGS_META = {
     "checkin_limit_min": ("체크인 제한", "분", "예약 후 이 시간 안에 체크인하지 않으면 미입실", 0.25, 120),
     "away_limit_min": ("장기 이석 기준", "분",
-                       "체크인 후 이 시간 넘게 자리를 비우면 장기 이석", 0.25, 240),
-    "hoarding_min": ("사석화 기준", "분", "짐만 두고 이 시간 넘게 자리를 비우면 사석화", 0.25, 240),
+                       "이 시간 넘게 자리를 비우면 이석(장기) — 짐만 두고 비움·주인 없는 짐 포함", 0.25, 240),
     "unauthorized_min": ("무단 점유 기준", "분",
                          "체크인 없이 이 시간 넘게 앉아 있으면 무단 점유(예약석은 체크인 누락)", 0.25, 120),
     "unknown_min": ("판단 불가 기준", "분",
@@ -82,7 +81,6 @@ def fmt_sec(sec):
 class Settings:
     checkin_limit_min: float
     away_limit_min: float
-    hoarding_min: float
     unauthorized_min: float
     unknown_min: float
     auto_return_min: float
@@ -130,15 +128,19 @@ DETAILS = {
                          "예약 없이 사람이 앉았어요. 체크인하지 않으면 '무단 점유'가 돼요."),
     "seated_unchecked": (IN_USE,      "착석(체크인 전)",  False,
                          "예약 좌석에 앉았지만 체크인 전이에요. 시간이 지나면 '체크인 누락'이 돼요."),
-    "away_short":       (IN_USE,      "일시 이석",        False,
-                         "체크인한 사람이 자리를 비웠어요. 시간이 지나면 '장기 이석'이 돼요."),
-    "item":             (IN_USE,      "짐만 있음",        False,
-                         "사람은 없고 짐만 있어요."),
+    "away_short":       (IN_USE,      "자리 비움",        False,
+                         "체크인한 사람이 자리를 비웠어요. 시간이 지나면 이석(장기)가 돼요."),
+    "item":             (IN_USE,      "짐만 두고 자리 비움", False,
+                         "사람은 없고 짐만 있어요. 시간이 지나면 이석(장기)가 돼요."),
+    "item_left":        (AVAILABLE,   "짐만 있음",        False,
+                         "예약 없는 좌석에 짐만 있어요. 이용자에게는 빈자리로 보여요."),
     "unauthorized":     (IN_USE,      "무단 점유",        True,  "체크인 없이 자리를 오래 쓰고 있어요."),
     "no_checkin":       (IN_USE,      "체크인 누락",      True,  "예약 좌석에 앉았지만 오래 체크인하지 않았어요."),
-    "no_show":          (IN_USE,      "미입실",           True,  "예약자가 체크인 시간 안에 오지 않았어요."),
-    "away":             (IN_USE,      "장기 이석",        True,  "체크인한 사람이 오래 자리를 비웠어요."),
-    "hoarding":         (IN_USE,      "사석화",           True,  "짐만 두고 오래 자리를 비웠어요."),
+    "no_show":          (IN_USE,      "예약 후 미입실",   True,  "예약자가 체크인 시간 안에 오지 않았어요."),
+    "away":             (IN_USE,      "자리 비움",        True,  "체크인한 사람이 오래 자리를 비웠어요."),
+    "hoarding":         (IN_USE,      "짐만 두고 자리 비움", True, "짐만 두고 오래 자리를 비웠어요."),
+    "unowned_item":     (AVAILABLE,   "주인 없는 짐",     True,
+                         "예약 없는 좌석에 짐이 오래 방치됐어요. 이용자에게는 빈자리로 보여요. 수거해 주세요."),
     # 판단 불가의 상위 상태는 마지막으로 확인된 판정을 따른다(빈자리였으면 빈자리 그대로). 여기 값은 기본값일 뿐.
     "unknown":          (IN_USE,      "판단 불가",        True,
                          "카메라가 좌석을 확인하지 못해요(가림·인식 오류). 현장 확인이 필요해요."),
@@ -158,14 +160,15 @@ UNAVAILABLE_REASONS = ("broken", "maintenance", "blocked")
 CATEGORIES = {"normal": "정상", "away": "이석", "unauthorized": "무단 점유", "unknown": "판단 불가",
               "empty": "빈자리", "unavailable": "사용불가"}
 _CATEGORY_OF = {
-    "empty": "empty", "waiting": "empty",
+    "empty": "empty", "waiting": "empty", "item_left": "empty",
     "using": "normal", "detected": "normal", "seated_unchecked": "normal",
-    "away_short": "away", "item": "away", "away": "away", "hoarding": "away", "no_show": "away",
+    "away_short": "away", "item": "away", "away": "away", "hoarding": "away", "no_show": "away", "unowned_item": "away",
     "unauthorized": "unauthorized", "no_checkin": "unauthorized",
     "unknown": "unknown",
     "broken": "unavailable", "maintenance": "unavailable", "blocked": "unavailable", "seat_unavailable": "unavailable",
 }
-AWAY_LONG = frozenset({"away", "hoarding", "no_show"})  # 장기 이석 (나머지 이석은 일시 이석)
+# 이석(장기): 장기 이석·사석화·미입실·주인 없는 짐을 관리자 화면에서 하나로 묶는다(사유는 세부 상태 라벨). 나머지 이석은 이석(일시)
+AWAY_LONG = frozenset({"away", "hoarding", "no_show", "unowned_item"})
 
 
 def category(detail):
@@ -178,7 +181,13 @@ def category(detail):
     return cat, CATEGORIES[cat]
 
 
-ALERT_TYPE_LABELS = {**{k: DETAILS[k][1] for k in ISSUES}, "no_show": "미입실", "call": "이용자 호출"}
+def full_label(detail):
+    """관리자 목록용 이름: 이석은 '이석(장기) · 예약 후 미입실'처럼 분류 + 사유, 나머지는 세부 상태 이름."""
+    cat, cat_label = category(detail)
+    return f"{cat_label} · {DETAILS[detail][1]}" if cat == "away" else DETAILS[detail][1]
+
+
+ALERT_TYPE_LABELS = {**{k: full_label(k) for k in ISSUES}, "call": "이용자 호출"}
 
 # 관리자가 좌석에 직접 부여할 수 있는 세부 상태 → (현장 상태, 표시, 사용불가 사유, 조건)
 #   mark 'ok'    : 관리자가 확인한 정상 이용 — 예약이 없어도 '처리 필요'로 빠지지 않는다
@@ -288,20 +297,27 @@ def _judge(res, actual, now, s):
         return _j(actual.reason if actual.reason in UNAVAILABLE_REASONS else "blocked", since)
 
     if res is None:
-        if a in ("occupied", "item"):
+        if a == "occupied":
             if mark == "ok":  # 관리자가 확인한 이용(현장 허가 등)
-                return _j("using" if a == "occupied" else "item", since)
+                return _j("using", since)
             if mark == "issue":  # 관리자가 무단 점유로 지정 → 기준 시간을 기다리지 않음
                 return _j("unauthorized", since)
-            # QR 체크인 없이 사람(또는 짐)이 감지됨 → 기준 시간이 지나면 무단 점유
-            return _timed("detected" if a == "occupied" else "item", "unauthorized", since,
-                          s.sec("unauthorized_min"), now, actual)
+            # QR 체크인 없이 사람이 감지됨 → 기준 시간이 지나면 무단 점유
+            return _timed("detected", "unauthorized", since, s.sec("unauthorized_min"), now, actual)
+        if a == "item":
+            # 예약 없는 좌석에 짐만: 이용자에게는 빈자리(예약 가능) — 짐 오탐이어도 다른 이용자가 피해 보지 않게.
+            # 장기 이석 기준이 지나면 관리자에게 '이석(장기) · 주인 없는 짐'
+            if mark == "ok":
+                return _j("item_left", since)
+            if mark == "issue":
+                return _j("unowned_item", since)
+            return _timed("item_left", "unowned_item", since, s.sec("away_limit_min"), now, actual)
         return _j("empty", since)
 
     if res.status == "reserved":
         checkin_deadline = res.start_at + s.sec("checkin_limit_min")
         start = max(since, res.start_at)
-        if a in ("occupied", "item"):
+        if a == "occupied":  # 짐만 있으면 사람이 없으므로 아래 입실 대기 → 미입실로 본다
             if mark == "ok":
                 return _j("seated_unchecked", start)
             if mark == "issue":
@@ -317,7 +333,7 @@ def _judge(res, actual, now, s):
     if a == "occupied":
         return _j("unauthorized" if mark == "issue" else "using", start)
     if a == "item":
-        limit, short, issue = s.sec("hoarding_min"), "item", "hoarding"
+        limit, short, issue = s.sec("away_limit_min"), "item", "hoarding"
     else:
         limit, short, issue = s.sec("away_limit_min"), "away_short", "away"
     if mark == "issue":

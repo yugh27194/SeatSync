@@ -2,9 +2,9 @@
 (function () {
   "use strict";
   const { api, toast, esc, fmtMin, modal } = window.SS;
-  // 시연용(상황별 1분 기준): 장기 이석·사석화·무단 점유(체크인 누락) 1분 · 판단 불가 30초 · 체크인 제한 2분
+  // 시연용(상황별 1분 기준): 장기 이석(짐만 두고 비움 포함)·무단 점유(체크인 누락) 1분 · 판단 불가 30초 · 체크인 제한 2분
   // · 확인 필요 후 자동 반납 2분(관리자가 먼저 처리해 볼 시간) · 사전 경고 15초 전
-  const DEMO = { checkin_limit_min: 2, away_limit_min: 1, hoarding_min: 1, unauthorized_min: 1, unknown_min: 0.5, auto_return_min: 2,
+  const DEMO = { checkin_limit_min: 2, away_limit_min: 1, unauthorized_min: 1, unknown_min: 0.5, auto_return_min: 2,
     prewarn_min: 0.25, waitlist_hold_min: 1 };
   const rows = document.getElementById("rows");
   let meta = {}, defaults = {};
