@@ -356,7 +356,7 @@ def force_return(request, res_id):
         Alert.objects.filter(seat_id=r.seat_id, resolved_at__isnull=True).update(
             resolved_at=now, resolved_by_id=request.user.id, resolution="force_returned")
         # 관리자 지정 의도는 예약과 함께 정리한다(남은 짐·사람은 예약 없는 좌석으로 다시 판정됨)
-        clear_marks([r.seat_id])
+        clear_marks([r.seat_id], now)
         memo = str_field(body, "memo")
         record_event(r, "no_show" if no_show else "force_return", now, memo=memo)
         if no_show:

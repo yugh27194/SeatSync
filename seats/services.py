@@ -50,10 +50,14 @@ def to_actual(seat, now):
 
 # ---------------------------------------------------------------- 파이프라인
 
-def clear_marks(seat_nos):
+def clear_marks(seat_nos, now=None):
     """예약이 끝난 좌석의 관리자 지정 의도(mark)를 지운다.
-    예약 중 '짐만 있음'으로 확인해 둔 짐이 반납 뒤에도 정상으로 남지 않게 한다."""
+    예약 중 '짐만 있음'으로 확인해 둔 짐이 반납 뒤에도 정상으로 남지 않게 한다.
+    now를 주면 아직 사람(짐)이 있는 좌석의 시작 시각을 예약 종료 시점으로 맞춘다 — 방금까지 예약해 쓰던 사람이
+    곧바로 무단 점유가 되지 않고, 무단 점유 기준 시간만큼 정리할 시간을 갖게 한다."""
     Seat.objects.filter(no__in=list(seat_nos), mark__isnull=False).update(mark=None)
+    if now is not None:
+        Seat.objects.filter(no__in=list(seat_nos), state__in=("occupied", "item")).update(state_since=now)
 
 
 def _sweep(now, s):
@@ -70,7 +74,7 @@ def _sweep(now, s):
             notify(r.user_id, "issue", "danger", f"{r.seat.label} 예약이 미입실로 끝났어요",
                    "예약 시간 안에 체크인하지 않았어요.", now, seat=r.seat, reservation=r, key=f"noshow:{r.id}")
     if ended:
-        clear_marks(ended)
+        clear_marks(ended, now)
 
 
 def _judge_seats(now, s):
@@ -120,8 +124,8 @@ def _auto_return(results, now, s):
         record_event(r, "no_show" if no_show else "force_return", now, memo=memo)
         Alert.objects.filter(seat=seat, resolved_at__isnull=True).exclude(type="call").update(
             resolved_at=now, resolution="auto_return")
-        clear_marks([seat.no])
-        seat.refresh_from_db(fields=["mark"])
+        clear_marks([seat.no], now)
+        seat.refresh_from_db(fields=["mark", "state_since"])
         notify(r.user_id, "issue", "danger",
                f"{seat.label} 예약이 자동으로 {'취소' if no_show else '반납'}됐어요",
                f"'{label}' 상태가 {fmt_min(s.auto_return_min)} 동안 이어졌어요.", now, seat=seat, reservation=r, key=f"auto:{r.id}")

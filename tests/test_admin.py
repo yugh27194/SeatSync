@@ -125,7 +125,10 @@ def test_hoarding_force_return_then_collect(admin, user_b, clock):
     assert admin.jpost(f"/api/admin/reservations/{rid}/force-return", {"memo": "사석화"}).status_code == 200
     assert Reservation.objects.get(id=rid).status == "force_returned"
     assert Alert.objects.get(id=a["id"]).resolution == "force_returned"
-    # 짐이 남아 있으면 무단 점유 → 짐 수거 후 빈자리
+    # 남은 짐: 반납 직후엔 '짐만 있음'(확인 표시), 무단 점유 기준 시간이 지나면 무단 점유 → 짐 수거 후 빈자리
+    s = admin_seat(admin, 2)
+    assert s["detail"] == "item" and s["check"]
+    clock.advance(10 * 60)
     assert admin_seat(admin, 2)["detail"] == "unauthorized"
     set_state(admin, 2, "empty")
     assert admin_seat(admin, 2)["seat_state"] == "available"

@@ -141,8 +141,10 @@ def test_mark_cleared_on_expiry(admin, clock):
         clock.advance(2400)
         admin.get("/api/admin/seats")
     clock.advance(2400)
-    assert admin_seat(admin, 8)["detail"] == "unauthorized"
+    assert admin_seat(admin, 8)["detail"] == "item"  # 예약이 끝난 시점부터 무단 점유 기준 시간을 센다
     assert Reservation.objects.get(id=r.id).status == "expired"
+    clock.advance(10 * 60)
+    assert admin_seat(admin, 8)["detail"] == "unauthorized"
 
 
 # ---------------------------------------------------------------- 자동 강제 반납

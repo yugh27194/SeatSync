@@ -157,7 +157,7 @@ flowchart LR
 - 동시 예약은 SQLite `BEGIN IMMEDIATE` + 활성 예약 유일 제약으로 하나만 성공.
 - 보안: Django 인증·CSRF, 좌석 QR 토큰 상수 시간 비교, 관리자 코드 5회 실패 시 잠금, 디바이스 키.
 - 라즈베리파이 감지 프로토타입의 `status.json`(schema_version 1)을 그대로 받는 수신기와 Pi용 브리지(`tools/pi_bridge.py`).
-- 테스트 175개(pytest), GitHub Actions에서 실행.
+- 테스트 188개(pytest), GitHub Actions에서 실행.
 
 | 문서 | 내용 |
 |---|---|
@@ -166,7 +166,7 @@ flowchart LR
 | [docs/API.md](docs/API.md) | API 목록과 에러 코드 |
 | [docs/DATA_FLOW.md](docs/DATA_FLOW.md) | 라즈베리파이 감지 프로토타입 연동 데이터 플로우 |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | 외부 링크 공유(Cloudflare 터널)·상시 배포(PythonAnywhere) |
-| [docs/SCENARIOS.md](docs/SCENARIOS.md) | 상황별 처리 흐름 (시연 시나리오 1·2·3) |
+| [docs/SCENARIOS.md](docs/SCENARIOS.md) | 상황별 처리 흐름 (시나리오 1~16) |
 
 ---
 
