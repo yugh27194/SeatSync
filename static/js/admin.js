@@ -6,16 +6,16 @@
 
   const SOURCE = { manual: "관리자 지정", camera: "카메라", checkin: "QR 체크인", return: "반납", seed: "초기 배분" };
   const MARK = { ok: "관리자 확인", issue: "관리자가 문제로 지정" };
-  const NEXT = { waiting: "미입실", away_short: "이탈", item: "사석화" };
   // 확인 필요(!) 좌석을 처리할 때 보여 주는 안내: 지금 어떤 상태인지 + 무엇을 하면 되는지
   const GUIDE = {
-    unauthorized: "현장에서 이용자를 확인해 좌석을 배정하거나 퇴실을 안내하세요. 짐만 있다면 짐 주인에게 배정하거나 짐을 수거하세요.",
+    unauthorized: "QR 체크인 없이 사람(또는 짐)이 기준 시간보다 오래 감지됐습니다. 현장에서 이용자를 확인해 좌석을 배정하거나 퇴실을 안내하세요. 짐만 있다면 짐 주인에게 배정하거나 짐을 수거하세요.",
     no_checkin: "앉아 있는 사람이 예약자면 대리 체크인, 다른 사람이면 예약자를 다른 좌석으로 옮기세요.",
-    away: "예약자가 기준 시간보다 오래 자리를 비웠습니다. 돌아오지 않으면 강제 반납하고, 반복되면 경고하세요.",
+    away: "QR 체크인했지만 사람이 기준 시간보다 오래 감지되지 않았습니다(장기 이석). 돌아오지 않으면 강제 반납하고, 반복되면 경고하세요.",
     hoarding: "짐만 두고 기준 시간보다 오래 비웠습니다. 짐을 보관 처리하고 강제 반납하거나 예약자에게 경고하세요.",
     seat_unavailable: "예약자를 다른 좌석으로 옮기거나 예약을 취소하세요.",
     no_show: "예약자가 체크인 시간 안에 오지 않았습니다. 연락이 없으면 예약을 취소하고, 늦게 도착했다면 대리 체크인하세요.",
-    away_short: "아직 기준 시간 전입니다. 곧 돌아오는지 지켜보고, 필요하면 [사전 경고]로 예약자에게 알리세요.",
+    away_short: "일시 이석입니다. 아직 장기 이석 기준 시간 전이니 곧 돌아오는지 지켜보고, 필요하면 [사전 경고]로 예약자에게 알리세요.",
+    unknown: "현장을 보고 실제 상태를 아래 버튼으로 지정하세요. 카메라가 회복되면 다시 자동 판정합니다. 여러 좌석이 함께 판단 불가라면 카메라 연결을 점검하세요.",
     item_res: "예약자가 짐만 두고 자리를 비웠습니다. 기준 시간 전에 돌아오는지 확인하고, 필요하면 [사전 경고]를 보내세요.",
     item_nores: "예약 없이 짐만 있습니다. 짐 주인을 찾아 좌석을 배정하거나 짐을 수거하세요.",
   };
@@ -79,6 +79,10 @@
       case "item":
         if (r) return btn("notice", "사전 경고", { user: r.user.id, name: r.user.name, seat: s.no, detail: s.detail }, "");
         return btn("assign", "짐 주인에게 배정", { seat: s.no, checkin: 1 }, "") + btn("leave", "짐 수거 완료", { seat: s.no, label: lbl, item: 1 });
+      case "unknown": // 현장 확인 결과를 관리자가 지정 → 카메라가 회복될 때까지 그 상태로 판정
+        return btn("state", "현장 확인: 사람 있음", { seat: s.no, detail: "using", label: "사람 있음(확인)" }, "") +
+          btn("state", "현장 확인: 짐만 있음", { seat: s.no, detail: "item", label: "짐만 있음(확인)" }) +
+          btn("state", "현장 확인: 비어 있음", { seat: s.no, detail: "empty", label: "비어 있음(확인)" });
       case "seat_unavailable":
         return r ? btn("move", "다른 좌석으로 이동", { res: r.id, label: lbl }, "") +
           btn("force", "예약 취소", { res: r.id, label: lbl }, "danger") : "";
@@ -137,7 +141,7 @@
     let sitHtml;
     if (s.check) {
       let when = `${fmtRemain(s.elapsed_sec)}째`;
-      if (s.deadline_sec != null && NEXT[s.detail]) when += ` · ${fmtRemain(s.deadline_sec)} 뒤 '${NEXT[s.detail]}'`;
+      if (s.deadline_sec != null && s.next_label) when += ` · ${fmtRemain(s.deadline_sec)} 뒤 '${s.next_label}'`;
       const guide = s.detail === "item" ? GUIDE[r ? "item_res" : "item_nores"] : GUIDE[s.detail];
       sitHtml = `<div class="situation-box i-${s.detail}"><b>! ${esc(s.seat_state_label)} · ${esc(s.detail_label)}</b> · 확인 필요 · ${when}
         <p class="sit-desc">${esc(s.detail_desc)}</p>
@@ -146,7 +150,7 @@
         ${s.alert_id ? btn("resolve", "처리 완료", { alert: s.alert_id }) : ""}</div></div>`;
     } else {
       let msg = s.detail_desc || "";
-      if (s.deadline_sec != null && NEXT[s.detail]) msg = `${fmtRemain(s.deadline_sec)} 뒤 '${NEXT[s.detail]}'`;
+      if (s.deadline_sec != null && s.next_label) msg = `${fmtRemain(s.deadline_sec)} 뒤 '${s.next_label}'`;
       sitHtml = `<div class="situation-box ok"><b>${esc(s.seat_state_label)} · ${esc(s.detail_label)}</b>${msg ? " — " + esc(msg) : ""}</div>`;
     }
 
@@ -177,7 +181,7 @@
         · ${s.camera.state ? { OCCUPIED: "사람 있음", EMPTY: "사람 없음", UNKNOWN: "확인 불가" }[s.camera.state] : "수신 없음"}
         ${s.camera.confidence ? ` (점수 ${s.camera.confidence.toFixed(2)})` : ""}
         ${s.camera.seen_at ? ` · ${fmtTime(s.camera.seen_at)} 수신` : ""}
-        ${s.stale ? ' · <b class="warn-text">감지 끊김 — 마지막 상태 유지, 이탈·사석화 판정 보류</b>' : ""}</p>` : ""}
+        ${s.stale ? ` · <b class="warn-text">${s.detail === "unknown" ? "판단 불가 — 현장 확인 필요" : "감지 끊김 — 마지막 상태 유지, 장기 이석·무단 점유 판정 보류"}</b>` : ""}</p>` : ""}
       ${s.offer ? `<p class="small" style="margin:6px 0 0">🔔 빈자리 알림 대기자 <b>${esc(s.offer.user_name)}</b> 님에게 안내 중 (${fmtRemain(s.offer.left_sec)} 남음)</p>` : ""}
       <div class="section-title">좌석 상태 지정</div>
       ${assignPanel(s)}
@@ -227,7 +231,7 @@
       const r = s.reservation;
       return `<tr class="${s.check ? "mismatch" : ""}" data-act="select" data-seat="${s.no}" style="cursor:pointer">
         <td><b>${esc(s.label)}</b></td>
-        <td>${r ? `${userLine(r.user)}<br><span class="muted small">${r.status === "reserved" ? "예약" : "이용 중"} · ${fmtTime(r.start_at)}~${fmtTime(r.end_at)}</span>` : '<span class="muted">없음</span>'}</td>
+        <td>${r ? `${userLine(r.user)}<br><span class="muted small">${r.status === "reserved" ? "예약(체크인 전)" : "QR 체크인"} · ${fmtTime(r.start_at)}~${fmtTime(r.end_at)}</span>` : '<span class="muted">없음</span>'}</td>
         <td>${camCell(s)}</td>
         <td>${esc(s.actual_label)}</td>
         <td><span class="statetag st-${s.seat_state}">${esc(s.seat_state_label)}</span>${s.check ? ` <b class="warn-text">! ${esc(s.detail_label)}</b>` : ""}</td></tr>`;
@@ -407,9 +411,9 @@
 
     async notice(d) {
       const PRESET = {
-        away_short: "자리를 오래 비우고 계세요. 곧 이탈로 처리될 수 있으니 돌아오시거나 반납해 주세요.",
+        away_short: "자리를 오래 비우고 계세요. 곧 장기 이석으로 처리될 수 있으니 돌아오시거나 반납해 주세요.",
         item: "짐만 두고 자리를 비우셨어요. 곧 사석화로 처리될 수 있으니 돌아오시거나 반납해 주세요.",
-        away: "이탈 상태입니다. 바로 돌아오시지 않으면 반납 처리됩니다.",
+        away: "장기 이석 상태입니다. 바로 돌아오시지 않으면 반납 처리됩니다.",
         hoarding: "사석화 상태입니다. 바로 돌아오시지 않으면 반납 처리됩니다.",
         no_checkin: "좌석에 계시다면 좌석 QR로 체크인해 주세요.",
         waiting: "체크인 마감 전에 좌석 QR로 체크인해 주세요.",
@@ -442,7 +446,7 @@
 
   $("btn-demo").onclick = async () => {
     const ok = await modal({ title: "시연 상황 배치",
-      body: "현재 예약을 모두 취소하고 미해결 알림을 정리한 뒤,\n사용자A·B·C·테스트 계정으로 좌석에 다양한 상황을 만듭니다.\n(config/seats.json의 demo 목록: 정상 이용, 이탈, 무단 점유, 짐만 있음, 사석화, 고장 등)",
+      body: "현재 예약을 모두 취소하고 미해결 알림을 정리한 뒤,\n사용자A·B·C·테스트 계정으로 좌석에 다양한 상황을 만듭니다.\n(config/seats.json의 demo 목록: 정상 이용, 장기 이석, 무단 점유, 착석 감지, 짐만 있음, 사석화, 판단 불가, 고장 등)",
       ok: "배치", danger: true });
     if (!ok) return;
     seen = null; // 배치로 생긴 알림은 배너로 띄우지 않는다
@@ -484,13 +488,13 @@
     const max = Math.max(0.0001, ...d.hours.map((h) => h.issue_rate));
     $("chart").innerHTML = d.hours.map((h) => {
       const pct = Math.round(h.issue_rate * 100);
-      const title = `${h.hour}시 · 이탈·사석화 비율 ${pct}% · 정상 이용 ${h.in_use_min}분 · 이탈 ${h.away_min}분 · 사석화 ${h.hoarding_min}분 · 무단 점유 ${h.unauthorized_min}분`;
+      const title = `${h.hour}시 · 장기 이석·사석화 비율 ${pct}% · 정상 이용 ${h.in_use_min}분 · 장기 이석 ${h.away_min}분 · 사석화 ${h.hoarding_min}분 · 무단 점유 ${h.unauthorized_min}분`;
       return `<div class="col" title="${title}"><span class="val">${pct ? pct + "%" : ""}</span>
         <div class="bar${pct ? "" : " zero"}" style="height:${Math.max(1, (h.issue_rate / max) * 85)}%"></div></div>`;
     }).join("");
     $("chart-x").innerHTML = d.hours.map((h) => `<span>${h.hour}</span>`).join("");
     const t = d.hours.reduce((a, h) => ({ u: a.u + h.in_use_min, w: a.w + h.away_min, o: a.o + h.hoarding_min, x: a.x + h.unauthorized_min }), { u: 0, w: 0, o: 0, x: 0 });
-    $("stats-note").textContent = `${d.date} 합계 — 정상 이용 ${Math.round(t.u)}분 · 이탈 ${Math.round(t.w)}분 · 사석화 ${Math.round(t.o)}분 · 무단 점유 ${Math.round(t.x)}분 (좌석·분 기준)`;
+    $("stats-note").textContent = `${d.date} 합계 — 정상 이용 ${Math.round(t.u)}분 · 장기 이석 ${Math.round(t.w)}분 · 사석화 ${Math.round(t.o)}분 · 무단 점유 ${Math.round(t.x)}분 (좌석·분 기준)`;
   }
   dateEl.onchange = loadStats;
   loadStats();

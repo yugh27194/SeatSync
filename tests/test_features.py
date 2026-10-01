@@ -190,7 +190,7 @@ def test_feedback_correct_and_wrong(admin, device, clock):
     st = admin.jget("/api/admin/feedback")
     assert st["overall"] == {"total": 2, "correct": 1, "accuracy": 0.5}
     assert st["by_source"]["camera"]["accuracy"] == 0.0
-    assert st["confusion"][0] == {"shown": "무단 점유", "correct": "이용 중", "count": 1}
+    assert st["confusion"][0] == {"shown": "짐만 있음", "correct": "정상 이용", "count": 1}
     assert st["recent"][0]["applied"] is True
 
 
@@ -209,17 +209,17 @@ def test_prewarn_before_away(user, admin, clock):
     clock.advance(19 * 60)
     user.get("/api/seats")
     assert notes("20260001", "prewarn") == []
-    clock.advance(60)  # 이탈 기준(30분) 10분 전
+    clock.advance(60)  # 장기 이석 기준(30분) 10분 전
     d = user.jget("/api/seats")
     assert notes("20260001", "prewarn") == ["A-4 좌석 사전 경고"]
-    assert d["my_status"]["detail"] == "away_short" and "이탈" in d["my_status"]["message"]
+    assert d["my_status"]["detail"] == "away_short" and "장기 이석" in d["my_status"]["message"]
     for _ in range(3):
         clock.advance(60)
         user.get("/api/seats")
     assert len(notes("20260001", "prewarn")) == 1  # 같은 사안은 한 번만
     clock.advance(10 * 60)
     user.get("/api/seats")
-    assert notes("20260001", "issue") == ["A-4 좌석이 '이탈'(으)로 표시됐어요"]
+    assert notes("20260001", "issue") == ["A-4 좌석이 '장기 이석'(으)로 표시됐어요"]
 
 
 def test_prewarn_hoarding_and_new_episode(user, admin, clock):

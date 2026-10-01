@@ -25,11 +25,13 @@
     {"label": "안내데스크", "x": 4, "y": 5, "w": 2, "kind": "desk"}
   ],
   "demo": [
-    {"seat": "A-1", "user": "userA", "reservation": "in_use", "start_ago_min": 30, "state": "occupied", "state_ago_min": 30, "memo": "정상 이용"},
-    {"seat": "A-2", "user": "userB", "reservation": "in_use", "start_ago_min": 50, "state": "empty", "state_ago_min": 40, "memo": "이탈"},
-    {"seat": "A-3", "state": "occupied", "state_ago_min": 10, "memo": "무단 점유"},
-    {"seat": "B-1", "user": "20260004", "reservation": "in_use", "start_ago_min": 40, "state": "item", "state_ago_min": 5, "memo": "짐만 있음(잠시 자리 비움)"},
+    {"seat": "A-1", "user": "userA", "reservation": "in_use", "start_ago_min": 30, "state": "occupied", "state_ago_min": 30, "memo": "정상 이용 (QR 체크인 + 사람 감지)"},
+    {"seat": "A-2", "user": "userB", "reservation": "in_use", "start_ago_min": 50, "state": "empty", "state_ago_min": 40, "memo": "장기 이석 (QR 체크인했지만 사람 미감지)"},
+    {"seat": "A-3", "state": "occupied", "state_ago_min": 15, "memo": "무단 점유 (QR 체크인 없이 사람 감지)"},
+    {"seat": "A-4", "state": "occupied", "state_ago_min": 2, "memo": "착석 감지 (체크인 전, 무단 점유 기준 시간 전)"},
+    {"seat": "B-1", "user": "20260004", "reservation": "in_use", "start_ago_min": 40, "state": "item", "state_ago_min": 5, "memo": "짐만 있음 (일시 이석)"},
     {"seat": "B-2", "user": "20260002", "reservation": "in_use", "start_ago_min": 60, "state": "item", "state_ago_min": 40, "memo": "사석화"},
+    {"seat": "B-3", "user": "20260003", "reservation": "in_use", "start_ago_min": 20, "state": "occupied", "state_ago_min": 20, "camera_unknown_ago_min": 5, "memo": "판단 불가 (카메라 가림·인식 실패)"},
     {"seat": "B-4", "state": "unavailable", "reason": "broken", "state_ago_min": 90, "note": "콘센트 고장", "memo": "고장(콘센트)"}
   ]
 }

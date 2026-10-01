@@ -18,15 +18,22 @@ from ..timeutil import to_iso
 # 본인 좌석 상태 안내(사전 경고용). 내 예약 좌석에 한해서만 세부 상태를 알려 준다.
 OWN_STATUS = {
     "waiting": ("info", "체크인 대기 중이에요. 좌석 QR로 체크인해 주세요."),
-    "seated_unchecked": ("warn", "착석이 확인됐어요. 좌석 QR로 체크인해 주세요."),
+    "seated_unchecked": ("warn", "착석이 확인됐어요. {left} 안에 좌석 QR로 체크인해 주세요."),
     "no_checkin": ("warn", "착석(또는 짐)이 확인됐지만 체크인 전이에요. 좌석 QR로 체크인해 주세요."),
-    "away_short": ("warn", "자리를 비운 상태예요. {left} 뒤 '이탈'로 처리됩니다."),
+    "away_short": ("warn", "자리를 비운 상태예요(일시 이석). {left} 뒤 '장기 이석'으로 처리됩니다."),
     "item": ("warn", "짐만 두고 자리를 비운 상태예요. {left} 뒤 '사석화'로 처리됩니다."),
-    "away": ("danger", "'이탈'로 표시됐어요. {auto}"),
+    "away": ("danger", "'장기 이석'으로 표시됐어요. {auto}"),
     "hoarding": ("danger", "'사석화'로 표시됐어요. {auto}"),
     "unauthorized": ("warn", "내 예약 좌석에 다른 이용이 확인되어 관리자가 확인 중이에요."),
     "no_show": ("danger", "체크인 시간이 지나 '미입실'로 표시됐어요. 도착했다면 바로 QR로 체크인해 주세요. {auto}"),
     "seat_unavailable": ("danger", "예약 좌석이 사용불가 상태예요. 관리자가 좌석을 옮겨 드리거나, 반납 후 다시 예약해 주세요."),
+    "unknown": ("info", "카메라가 좌석을 확인하지 못하고 있어 관리자가 확인 중이에요. 계속 이용하셔도 돼요."),
+}
+# 카메라 판단 불가 중에는 기준 시간을 세지 않으므로 남은 시간({left}) 없는 문장을 쓴다.
+OWN_STATUS_PAUSED = {
+    "seated_unchecked": "착석이 확인됐어요. 좌석 QR로 체크인해 주세요.",
+    "away_short": "자리를 비운 상태예요(일시 이석). 자리로 돌아오시거나 반납해 주세요.",
+    "item": "짐만 두고 자리를 비운 상태예요. 자리로 돌아오시거나 반납해 주세요.",
 }
 
 CALL_DEDUP_SEC = 60  # 같은 사용자 60초 내 중복 호출은 기존 알림 반환
@@ -65,6 +72,8 @@ def own_status(results, my, now):
     j = it["j"]
     level, msg = OWN_STATUS[j.detail]
     left = (j.deadline - now) if j.deadline else None
+    if j.detail in OWN_STATUS_PAUSED and (left is None or j.next_detail == "unknown"):
+        msg, left = OWN_STATUS_PAUSED[j.detail], None
     auto_sec = get_settings().sec("auto_return_min")
     if auto_sec > 0:
         auto_left = j.since + auto_sec - now

@@ -23,6 +23,7 @@ ACTION_LABELS = {
     "unwarn": "경고 취소", "suspend": "이용 정지", "unsuspend": "정지 해제", "demo": "시연 상황 배치",
     "settings": "설정 변경", "admin_on": "관리자 모드 켬", "admin_off": "관리자 모드 끔", "admin_locked": "관리자 코드 잠금",
     "notice": "사전 경고 발송", "feedback": "판정 피드백", "demo_history": "샘플 이력 생성", "auto_return": "자동 강제 반납",
+    "qr_build": "좌석 QR 파일 생성",
 }
 RES_STATUS = {"reserved": "예약(입실 전)", "in_use": "이용 중"}
 
@@ -106,6 +107,7 @@ def seats(request):
             "needs_action": j.needs_action, "check": j.check,
             "since": to_iso(j.since), "elapsed_sec": max(0, now - j.since),
             "deadline": to_iso(j.deadline), "deadline_sec": (j.deadline - now) if j.deadline else None,
+            "next_label": DETAILS[j.next_detail][1] if j.next_detail else None,
             "actual": seat.state, "actual_label": ACTUAL_STATES[seat.state], "mark": seat.mark, "reason": seat.reason,
             "actual_since": to_iso(seat.state_since), "actual_elapsed_sec": max(0, now - seat.state_since),
             "actual_source": seat.state_source, "note": seat.note,

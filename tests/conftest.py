@@ -46,10 +46,11 @@ def clock():
 
 
 @pytest.fixture(autouse=True)
-def seeded(db, settings, clock):
+def seeded(db, settings, clock, tmp_path):
     settings.PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]  # 테스트 속도용
     # 테스트는 20석 배치(tests/seats20.json)로 돌린다. 실제 배치(config/seats.json)는 test_layout8.py에서 따로 확인
-    settings.SEATSYNC = {**settings.SEATSYNC, "DEVICE_KEY": DEVICE_KEY, "ADMIN_CODE": ADMIN_CODE, "SEATS_FILE": SEATS20}
+    settings.SEATSYNC = {**settings.SEATSYNC, "DEVICE_KEY": DEVICE_KEY, "ADMIN_CODE": ADMIN_CODE, "SEATS_FILE": SEATS20,
+                         "QR_DIR": tmp_path / "qr", "PUBLIC_URL": ""}
     authmod._fails.clear()
     seed(now=T0)
 

@@ -128,7 +128,7 @@ def user_reservations(user, now, limit=30):
 # ---------------------------------------------------------------- 혼잡도·실사용률
 
 # 세부 상태 → 지표: occupied(좌석을 차지함), actual(사람이 실제로 앉아 있음), idle(차지만 하고 비어 있음)
-ACTUAL_USE = {"using", "seated_unchecked", "no_checkin"}
+ACTUAL_USE = {"using", "detected", "seated_unchecked", "no_checkin"}
 IDLE = {"waiting", "away_short", "item", "away", "hoarding"}
 
 

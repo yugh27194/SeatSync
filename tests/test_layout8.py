@@ -48,12 +48,13 @@ def test_removed_seats_release_reservations(layout8, admin, user):
 def test_demo_on_eight_seats(layout8, admin):
     seed(now=T0)
     r = admin.jpost("/api/admin/demo")
-    assert r.status_code == 200 and len(r.json()["messages"]) == 6
+    assert r.status_code == 200 and len(r.json()["messages"]) == 8
     seats = {s["label"]: s for s in admin.jget("/api/admin/seats")["seats"]}
-    expect = {"A-1": "using", "A-2": "away", "A-3": "unauthorized", "A-4": "empty",
-              "B-1": "item", "B-2": "hoarding", "B-3": "empty", "B-4": "broken"}
+    expect = {"A-1": "using", "A-2": "away", "A-3": "unauthorized", "A-4": "detected",
+              "B-1": "item", "B-2": "hoarding", "B-3": "unknown", "B-4": "broken"}
     assert {k: seats[k]["detail"] for k in expect} == expect
-    assert {k for k, s in seats.items() if s["check"]} == {"A-2", "A-3", "B-1", "B-2"}
+    assert {k for k, s in seats.items() if s["check"]} == {"A-2", "A-3", "B-1", "B-2", "B-3"}
+    assert seats["B-3"]["stale"] and seats["B-3"]["seat_state"] == "in_use"
 
 
 def test_one_camera_covers_eight_seats(layout8, device, clock, admin):

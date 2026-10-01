@@ -7,8 +7,9 @@ S = Settings.from_dict({})
 NOW = 1_800_000_000
 
 
-def act(state, ago=0, mark=None, reason=None):
-    return Actual(state=state, since=NOW - ago, mark=mark, reason=reason)
+def act(state, ago=0, mark=None, reason=None, stale_ago=None):
+    return Actual(state=state, since=NOW - ago, mark=mark, reason=reason,
+                  stale_since=None if stale_ago is None else NOW - stale_ago)
 
 
 def res(status, start_ago=0, checked_in_ago=None):
@@ -18,15 +19,16 @@ def res(status, start_ago=0, checked_in_ago=None):
 
 @pytest.mark.parametrize("r, a, mark, seat_state, detail", [
     (None, "empty", None, AVAILABLE, "empty"),
-    (None, "occupied", None, IN_USE, "unauthorized"),        # 카메라가 본 미예약 착석
+    (None, "occupied", None, IN_USE, "detected"),            # QR 체크인 없이 착석 → 기준 시간 전엔 착석 감지
     (None, "occupied", "ok", IN_USE, "using"),               # 관리자가 확인한 이용 → 처리 필요 아님
-    (None, "item", None, IN_USE, "unauthorized"),
+    (None, "occupied", "issue", IN_USE, "unauthorized"),     # 관리자가 무단 점유로 지정 → 즉시
+    (None, "item", None, IN_USE, "item"),
     (None, "item", "ok", IN_USE, "item"),                    # 짐만 있음은 사용중의 하위 상태
     (None, "unavailable", None, UNAVAILABLE, "blocked"),
     ("reserved", "empty", None, IN_USE, "waiting"),
-    ("reserved", "occupied", None, IN_USE, "no_checkin"),
+    ("reserved", "occupied", None, IN_USE, "seated_unchecked"),  # 앉고 QR을 찍기까지 기다림
     ("reserved", "occupied", "ok", IN_USE, "seated_unchecked"),
-    ("reserved", "item", None, IN_USE, "no_checkin"),
+    ("reserved", "item", None, IN_USE, "seated_unchecked"),
     ("reserved", "unavailable", None, UNAVAILABLE, "seat_unavailable"),
     ("in_use", "occupied", None, IN_USE, "using"),
     ("in_use", "occupied", "ok", IN_USE, "using"),
@@ -50,9 +52,11 @@ def test_unavailable_reasons(reason):
 
 
 def test_needs_action_flags():
-    assert judge(None, act("occupied"), NOW, S).needs_action
-    assert not judge(None, act("occupied", mark="ok"), NOW, S).needs_action
-    assert judge(None, act("occupied"), NOW, S).situation == "unauthorized"
+    long = S.unauthorized_min * 60
+    assert judge(None, act("occupied", long), NOW, S).needs_action
+    assert not judge(None, act("occupied"), NOW, S).needs_action
+    assert not judge(None, act("occupied", long, mark="ok"), NOW, S).needs_action
+    assert judge(None, act("occupied", long), NOW, S).situation == "unauthorized"
     assert judge(None, act("empty"), NOW, S).situation == "ok"
 
 
@@ -93,3 +97,72 @@ def test_future_since_clamped():
 
 def test_user_view_three_states():
     assert {user_view(x) for x in (AVAILABLE, IN_USE, UNAVAILABLE)} == {"available", "taken", "unavailable"}
+
+
+# ---------------------------------------------------------------- QR 체크인 × 카메라 감지 판정 기준
+
+def test_unauthorized_boundary():
+    """QR 체크인 없이 사람(또는 짐)이 기준 시간 이상 감지되면 무단 점유."""
+    limit = S.unauthorized_min * 60
+    j = judge(None, act("occupied", limit - 1), NOW, S)
+    assert j.detail == "detected" and not j.needs_action and not j.check
+    assert j.deadline == NOW + 1 and j.next_detail == "unauthorized"
+    j = judge(None, act("occupied", limit + 30), NOW, S)
+    assert j.detail == "unauthorized" and j.since == NOW - 30
+    assert judge(None, act("item", limit - 1), NOW, S).detail == "item"
+    assert judge(None, act("item", limit), NOW, S).detail == "unauthorized"
+
+
+def test_no_checkin_boundary():
+    """예약석에 앉았지만 기준 시간 넘게 QR 체크인하지 않으면 체크인 누락."""
+    limit = S.unauthorized_min * 60
+    r = res("reserved", start_ago=limit + 100)
+    j = judge(r, act("occupied", limit - 1), NOW, S)
+    assert j.detail == "seated_unchecked" and j.next_detail == "no_checkin"
+    assert judge(r, act("occupied", limit), NOW, S).detail == "no_checkin"
+    # 예약 전부터 앉아 있었어도 예약 시작 시점부터 센다
+    assert judge(res("reserved", start_ago=60), act("occupied", limit * 2), NOW, S).detail == "seated_unchecked"
+    assert judge(r, act("occupied", limit, mark="issue"), NOW, S).detail == "no_checkin"
+
+
+def test_away_short_then_long():
+    """QR 체크인 후 사람 미감지: 일시 이석 → 기준 시간이 지나면 장기 이석."""
+    r = res("in_use", checked_in_ago=99999)
+    j = judge(r, act("empty", 60), NOW, S)
+    assert j.detail == "away_short" and j.next_detail == "away" and not j.needs_action
+    assert judge(r, act("empty", S.away_limit_min * 60), NOW, S).detail == "away"
+
+
+def test_unknown_after_threshold():
+    """카메라 판단 불가(UNKNOWN)가 기준 시간 이상 이어지면 '판단 불가'로 관리자 확인."""
+    lim = S.unknown_min * 60
+    r = res("in_use", checked_in_ago=600)
+    j = judge(r, act("occupied", 600, stale_ago=lim - 1), NOW, S)
+    assert j.detail == "using" and j.stale and j.deadline == NOW + 1 and j.next_detail == "unknown"
+    j = judge(r, act("occupied", 600, stale_ago=lim), NOW, S)
+    assert j.detail == "unknown" and j.stale and j.needs_action and j.check and j.seat_state == IN_USE
+    assert j.since == NOW
+    # 예약 없는 빈자리가 판단 불가여도 빈자리로 남는다(예약은 가능) — 관리자 확인만 요청
+    j = judge(None, act("empty", 600, stale_ago=lim), NOW, S)
+    assert j.detail == "unknown" and j.seat_state == AVAILABLE
+
+
+def test_unknown_does_not_escalate_timers():
+    """판단 불가 중에는 장기 이석·무단 점유 기준 시간을 세지 않는다."""
+    r = res("in_use", checked_in_ago=99999)
+    j = judge(r, act("empty", 3600, stale_ago=3500), NOW, S)  # 끊긴 뒤 3500초 → 장기 이석 아님, 판단 불가
+    assert j.detail == "unknown"
+    j = judge(None, act("occupied", 3600, stale_ago=3500), NOW, S)
+    assert j.detail == "unknown"
+
+
+def test_issue_before_outage_is_kept():
+    """끊기기 전에 이미 처리 필요였던 판정은 판단 불가로 덮지 않는다."""
+    limit = S.unauthorized_min * 60
+    j = judge(None, act("occupied", limit + 600, stale_ago=60), NOW, S)
+    assert j.detail == "unauthorized" and j.stale
+
+
+def test_unknown_ignored_for_unavailable():
+    j = judge(None, act("unavailable", 600, reason="broken", stale_ago=3600), NOW, S)
+    assert j.detail == "broken" and not j.needs_action

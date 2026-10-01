@@ -1,7 +1,14 @@
 """좌석 상태 판정과 예약 대조. 순수 함수만 둔다 — DB·Django·현재 시각에 의존하지 않는다.
 
 좌석 상태는 세 가지(빈자리 / 사용중 / 사용불가)이고, 각각 세부 상태를 가진다.
-세부 상태 중 일부(무단 점유·이탈·사석화 등)는 '처리 필요'로 관리자 조치 대상이다.
+
+판정 흐름: 좌석 QR 체크인(예약 기록) × 카메라 사람 감지(현장 상태) → 비교 → 세부 상태.
+  - 정상 이용   : QR 체크인 + 사람 감지
+  - 일시 이석   : QR 체크인했는데 사람 미감지 (장기 이석 기준 전)
+  - 장기 이석   : 사람 미감지가 기준 시간 이상 → ! 관리자 확인
+  - 무단 점유   : QR 체크인 없이 사람(또는 짐)이 기준 시간 이상 감지 → ! 관리자 확인
+  - 판단 불가   : 가림·인식 실패·카메라 오류(UNKNOWN)가 기준 시간 이상 → ! 관리자 확인
+명확한 경우는 자동으로 좌석 상태에 반영하고, 애매하거나 QR과 카메라가 어긋나는 경우만 '처리 필요'(관리자 확인)로 넘긴다.
 """
 from dataclasses import dataclass, fields
 
@@ -11,6 +18,8 @@ DEFAULT_SETTINGS = {
     "checkin_limit_min": 15,
     "away_limit_min": 30,
     "hoarding_min": 30,
+    "unauthorized_min": 10,
+    "unknown_min": 3,
     "auto_return_min": 15,
     "default_use_min": 120,
     "extend_min": 60,
@@ -27,17 +36,22 @@ DEFAULT_SETTINGS = {
 # key: (라벨, 단위, 설명, 최소, 최대). 단위가 "분"인 값은 15초(0.25분) 단위로 정할 수 있다 — 시연(3분)에서 짧게 쓰려고.
 SETTINGS_META = {
     "checkin_limit_min": ("체크인 제한", "분", "예약 후 이 시간 안에 체크인하지 않으면 '! 미입실'(확인 필요)", 0.25, 120),
-    "away_limit_min": ("이탈 기준", "분", "이용 중 좌석이 이 시간 넘게 완전히 비어 있으면 '! 이탈'", 0.25, 240),
+    "away_limit_min": ("장기 이석 기준", "분",
+                       "QR 체크인한 좌석에서 사람이 이 시간 넘게 감지되지 않으면 '! 장기 이석' (그 전까지는 '일시 이석')", 0.25, 240),
     "hoarding_min": ("사석화 기준", "분", "이용 중 좌석에 짐만 두고 이 시간 넘게 자리를 비우면 '! 사석화'", 0.25, 240),
+    "unauthorized_min": ("무단 점유 기준", "분",
+                         "QR 체크인 없이 사람(또는 짐)이 이 시간 넘게 감지되면 '! 무단 점유' (예약석이면 '! 체크인 누락')", 0.25, 120),
+    "unknown_min": ("판단 불가 기준", "분",
+                    "카메라가 이 시간 넘게 좌석을 판단하지 못하면(가림·인식 실패·카메라 오류) '! 판단 불가'로 관리자 확인", 0.25, 60),
     "auto_return_min": ("자동 강제 반납", "분",
-                        "미입실·이탈·사석화로 표시된 뒤 이 시간이 지나면 예약을 자동으로 강제 반납(취소). 0이면 자동 반납 안 함", 0, 240),
+                        "미입실·장기 이석·사석화로 표시된 뒤 이 시간이 지나면 예약을 자동으로 강제 반납(취소). 0이면 자동 반납 안 함", 0, 240),
     "default_use_min": ("기본 이용 시간", "분", "예약 1회 이용 시간", 1, 720),
     "extend_min": ("연장 시간", "분", "연장 1회당 늘어나는 시간", 1, 360),
     "extend_window_min": ("연장 가능 시점", "분", "남은 시간이 이 값 이하일 때만 연장 가능", 0.25, 240),
     "max_extends": ("최대 연장 횟수", "회", "예약 1건당 이용자가 직접 연장할 수 있는 횟수", 0, 10),
     "warning_limit": ("정지 권장 경고 수", "회", "경고가 이 횟수 이상 쌓이면 이용 정지를 권장", 1, 20),
     "suspend_days": ("기본 정지 기간", "일", "이용 정지 시 기본으로 제안하는 기간", 1, 90),
-    "prewarn_min": ("사전 경고 시점", "분", "미입실·이탈·사석화 기준 시간 이만큼 전에 본인에게 사전 경고", 0.25, 60),
+    "prewarn_min": ("사전 경고 시점", "분", "미입실·장기 이석·사석화 기준 시간 이만큼 전에 본인에게 사전 경고", 0.25, 60),
     "waitlist_hold_min": ("빈자리 안내 유지", "분", "빈자리 알림 대기자에게 먼저 예약할 기회를 주는 시간", 0.25, 30),
     "open_hour": ("운영 시작", "시", "혼잡도 통계에 쓰는 운영 시작 시각", 0, 23),
     "close_hour": ("운영 종료", "시", "혼잡도 통계에 쓰는 운영 종료 시각 (24 = 자정)", 1, 24),
@@ -69,6 +83,8 @@ class Settings:
     checkin_limit_min: float
     away_limit_min: float
     hoarding_min: float
+    unauthorized_min: float
+    unknown_min: float
     auto_return_min: float
     default_use_min: float
     extend_min: float
@@ -108,24 +124,32 @@ OK = "ok"
 # 세부 상태: (상위 상태, 라벨, 처리 필요 여부, 설명)
 DETAILS = {
     "empty":            (AVAILABLE,   "빈자리",           False, "비어 있어 누구나 예약할 수 있는 좌석입니다."),
-    "using":            (IN_USE,      "이용 중",          False, "예약자가 체크인해 정상적으로 이용하고 있습니다."),
+    "using":            (IN_USE,      "정상 이용",        False, "QR 체크인한 좌석에서 사람이 감지되어 정상적으로 이용하고 있습니다."),
     "waiting":          (IN_USE,      "입실 대기",        False, "예약 후 체크인 전입니다."),
-    "seated_unchecked": (IN_USE,      "착석(체크인 전)",  False, "예약자가 착석했지만 아직 체크인하지 않았습니다."),
-    "away_short":       (IN_USE,      "잠시 자리 비움",   False, "이용 중인 예약자가 짐 없이 자리를 비웠습니다. 이탈 기준 시간을 넘기면 '이탈'이 됩니다."),
-    "item":             (IN_USE,      "짐만 있음",        False, "사람은 없고 짐만 있습니다. 이용 중인 예약이 있으면 사석화 기준 시간을 넘길 때 '사석화'가 됩니다."),
-    "unauthorized":     (IN_USE,      "무단 점유",        True,  "예약 없이 좌석을 사용하거나 짐으로 자리를 맡아 두었습니다."),
-    "no_checkin":       (IN_USE,      "체크인 누락",      True,  "예약 좌석에 착석(또는 짐)이 있지만 체크인하지 않았습니다."),
+    "detected":         (IN_USE,      "착석 감지(체크인 전)", False,
+                         "예약·QR 체크인 없이 사람이 감지됐습니다. 무단 점유 기준 시간 안에 체크인하지 않으면 '무단 점유'가 됩니다."),
+    "seated_unchecked": (IN_USE,      "착석(체크인 전)",  False,
+                         "예약 좌석에 사람(또는 짐)이 감지됐지만 아직 QR 체크인 전입니다. 기준 시간을 넘기면 '체크인 누락'이 됩니다."),
+    "away_short":       (IN_USE,      "일시 이석",        False,
+                         "QR 체크인한 좌석에서 사람이 감지되지 않습니다. 장기 이석 기준 시간을 넘기면 '장기 이석'이 됩니다."),
+    "item":             (IN_USE,      "짐만 있음",        False,
+                         "사람은 없고 짐만 있습니다. 이용 중이면 사석화 기준, 예약이 없으면 무단 점유 기준 시간을 넘길 때 확인 필요가 됩니다."),
+    "unauthorized":     (IN_USE,      "무단 점유",        True,  "QR 체크인 없이 사람(또는 짐)이 기준 시간보다 오래 감지됐습니다."),
+    "no_checkin":       (IN_USE,      "체크인 누락",      True,  "예약 좌석에 사람(또는 짐)이 기준 시간보다 오래 감지됐지만 QR 체크인하지 않았습니다."),
     "no_show":          (IN_USE,      "미입실",           True,  "체크인 제한 시간 안에 예약자가 오지 않았습니다. 예약은 관리자가 취소할 때까지 유지됩니다."),
-    "away":             (IN_USE,      "이탈",             True,  "이용 중인 좌석이 기준 시간보다 오래 비어 있습니다."),
+    "away":             (IN_USE,      "장기 이석",        True,  "QR 체크인한 좌석에서 사람이 기준 시간보다 오래 감지되지 않았습니다."),
     "hoarding":         (IN_USE,      "사석화",           True,  "짐만 두고 기준 시간보다 오래 자리를 비웠습니다."),
+    # 판단 불가의 상위 상태는 마지막으로 확인된 판정을 따른다(빈자리였으면 빈자리 그대로). 여기 값은 기본값일 뿐.
+    "unknown":          (IN_USE,      "판단 불가",        True,
+                         "카메라가 좌석을 판단하지 못하고 있습니다(가림·인식 실패·카메라 오류). 현장을 확인해 실제 상태를 지정해 주세요."),
     "broken":           (UNAVAILABLE, "고장",             False, "좌석·책상·전원 등이 고장 나 예약할 수 없습니다."),
     "maintenance":      (UNAVAILABLE, "점검·청소",        False, "점검이나 청소 중이라 잠시 예약할 수 없습니다."),
     "blocked":          (UNAVAILABLE, "사용 중지",        False, "운영상 이유로 사용을 막아 둔 좌석입니다."),
     "seat_unavailable": (UNAVAILABLE, "예약 좌석 사용불가", True, "예약된 좌석이 사용불가 상태입니다. 다른 좌석으로 옮겨 주세요."),
 }
 ISSUES = [k for k, v in DETAILS.items() if v[2]]
-# 좌석 지도에서 붉게 강조하고 '!'(확인 필요)를 붙이는 세부 상태: 이석·짐만 있음·무단 점유 등.
-# 처리 필요(ISSUES)에 더해, 아직 기준 시간 전인 '잠시 자리 비움'·'짐만 있음'도 눈으로 확인하도록 표시한다.
+# 좌석 지도에서 붉게 강조하고 '!'(확인 필요)를 붙이는 세부 상태: 장기 이석·무단 점유·판단 불가 등.
+# 처리 필요(ISSUES)에 더해, 아직 기준 시간 전인 '일시 이석'·'짐만 있음'도 눈으로 확인하도록 표시한다.
 CHECK = frozenset(ISSUES) | {"away_short", "item"}
 UNAVAILABLE_REASONS = ("broken", "maintenance", "blocked")
 
@@ -179,8 +203,9 @@ class Judgement:
     seat_state: str           # available | in_use | unavailable
     detail: str               # DETAILS 키
     since: int                # 현재 세부 상태가 시작된 시각
-    deadline: int | None = None  # 다음 변화 예정 시각 (체크인 마감, 이탈·사석화 기준)
+    deadline: int | None = None  # 다음 변화 예정 시각 (체크인 마감, 장기 이석·사석화·무단 점유·판단 불가 기준)
     stale: bool = False          # 카메라 감지 확인 불가 — 마지막으로 확인된 상태를 보여 주는 중
+    next_detail: str | None = None  # deadline에 바뀔 세부 상태
 
     @property
     def situation(self):
@@ -197,14 +222,35 @@ class Judgement:
         return self.detail in CHECK
 
 
-def _j(detail, since, deadline=None, stale=False):
-    return Judgement(DETAILS[detail][0], detail, since, deadline, stale)
+def _j(detail, since, deadline=None, next_detail=None):
+    return Judgement(DETAILS[detail][0], detail, since, deadline, False, next_detail if deadline else None)
 
 
 def judge(res: Reservation | None, actual: Actual, now: int, s: Settings) -> Judgement:
     """res: 해당 좌석의 활성 예약(reserved/in_use)만. actual: 현장 상태."""
     j = _judge(res, actual, now, s)
-    return Judgement(j.seat_state, j.detail, j.since, j.deadline, True) if actual.stale_since is not None else j
+    stale = actual.stale_since
+    if stale is None or actual.state == "unavailable":
+        return j
+    # 카메라가 좌석을 판단하지 못함(UNKNOWN·수신 끊김): 마지막으로 확인된 상태를 보여 주다가,
+    # 기준 시간이 지나도 회복되지 않으면 '판단 불가'로 관리자 확인. 이미 처리 필요였던 판정은 그대로 둔다.
+    unknown_at = min(stale, now) + s.sec("unknown_min")
+    if j.needs_action:
+        return Judgement(j.seat_state, j.detail, j.since, j.deadline, True, j.next_detail)
+    if now >= unknown_at:
+        return Judgement(j.seat_state, "unknown", unknown_at, None, True)
+    return Judgement(j.seat_state, j.detail, j.since, unknown_at, True, "unknown")
+
+
+def _timed(short, issue, start, limit, now, actual):
+    """기준 시간(limit초) 동안은 short, 넘으면 issue.
+    카메라 감지를 믿을 수 없게 된 뒤로는 기준 시간을 세지 않는다(감지 끊김을 이석·점유로 오해하지 않게).
+    끊기기 전에 이미 기준 시간을 넘었다면 그대로 처리 필요."""
+    if actual.stale_since is not None and actual.stale_since < start + limit:
+        return _j(short, start)
+    if now - start < limit:
+        return _j(short, start, start + limit, issue)
+    return _j(issue, start + limit)
 
 
 def _judge(res, actual, now, s):
@@ -220,7 +266,11 @@ def _judge(res, actual, now, s):
         if a in ("occupied", "item"):
             if mark == "ok":  # 관리자가 확인한 이용(현장 허가 등)
                 return _j("using" if a == "occupied" else "item", since)
-            return _j("unauthorized", since)
+            if mark == "issue":  # 관리자가 무단 점유로 지정 → 기준 시간을 기다리지 않음
+                return _j("unauthorized", since)
+            # QR 체크인 없이 사람(또는 짐)이 감지됨 → 기준 시간이 지나면 무단 점유
+            return _timed("detected" if a == "occupied" else "item", "unauthorized", since,
+                          s.sec("unauthorized_min"), now, actual)
         return _j("empty", since)
 
     if res.status == "reserved":
@@ -228,13 +278,16 @@ def _judge(res, actual, now, s):
         start = max(since, res.start_at)
         if a in ("occupied", "item"):
             if mark == "ok":
-                return _j("seated_unchecked", start, checkin_deadline)
-            return _j("no_checkin", start, checkin_deadline)
+                return _j("seated_unchecked", start)
+            if mark == "issue":
+                return _j("no_checkin", start)
+            # 예약자가 앉고 QR을 찍기까지의 시간은 기다린다 → 기준 시간이 지나도 체크인 없으면 체크인 누락
+            return _timed("seated_unchecked", "no_checkin", start, s.sec("unauthorized_min"), now, actual)
         if now >= checkin_deadline:  # 시간 안에 아무도 오지 않음 → 확인 필요 (자동 취소하지 않고 관리자가 판단)
             return _j("no_show", checkin_deadline)
-        return _j("waiting", res.start_at, checkin_deadline)
+        return _j("waiting", res.start_at, checkin_deadline, "no_show")
 
-    # in_use: 자리 비움은 체크인 시점 이후부터 센다
+    # in_use(QR 체크인함): 자리 비움은 체크인 시점 이후부터 센다
     start = max(since, res.checked_in_at or res.start_at)
     if a == "occupied":
         return _j("unauthorized" if mark == "issue" else "using", start)
@@ -244,13 +297,7 @@ def _judge(res, actual, now, s):
         limit, short, issue = s.sec("away_limit_min"), "away_short", "away"
     if mark == "issue":
         return _j(issue, start)
-    # 카메라 감지를 믿을 수 없는 동안에는 이탈·사석화로 넘기지 않는다(감지 끊김을 자리 비움으로 오해하지 않게).
-    # 끊기기 전에 이미 기준 시간을 넘었다면 그대로 처리 필요.
-    if actual.stale_since is not None and actual.stale_since < start + limit:
-        return _j(short, start)
-    if now - start < limit:
-        return _j(short, start, start + limit)
-    return _j(issue, start + limit)
+    return _timed(short, issue, start, limit, now, actual)
 
 
 # 사용자 화면에서 좌석을 눌렀을 때 보이는 안내 (관리자 화면과 같은 상태 이름을 쓰되, 이용자에게 맞는 문장).
@@ -259,18 +306,20 @@ USER_MESSAGES = {
     "empty":            "비어 있는 좌석이에요. 눌러서 예약할 수 있어요.",
     "using":            "다른 이용자가 이용 중인 좌석이에요.",
     "waiting":          "예약된 좌석이에요. 예약자가 입실하기를 기다리고 있어요.",
+    "detected":         "다른 이용자가 앉아 있는 좌석이에요. 본인이라면 좌석 QR로 체크인해 주세요.",
     "seated_unchecked": "예약자가 착석했고 체크인을 기다리고 있어요.",
     "no_checkin":       "예약된 좌석에 착석(또는 짐)이 있지만 아직 체크인하지 않았어요.",
     "no_show":          "예약자가 체크인 시간 안에 오지 않았어요. 시간이 더 지나면 자동으로 반납돼요.",
-    "away_short":       "이용자가 잠시 자리를 비웠어요.",
+    "away_short":       "이용자가 잠시 자리를 비웠어요(일시 이석).",
     "item":             "이용자가 짐만 두고 자리를 비웠어요.",
     "unauthorized":     "예약 없이 사용 중인 좌석이에요. 관리자가 확인하고 있어요.",
-    "away":             "이용자가 기준 시간보다 오래 자리를 비웠어요. 시간이 더 지나면 자동으로 반납돼요.",
+    "away":             "이용자가 기준 시간보다 오래 자리를 비웠어요(장기 이석). 시간이 더 지나면 자동으로 반납돼요.",
     "hoarding":         "짐만 두고 기준 시간보다 오래 자리를 비웠어요. 시간이 더 지나면 자동으로 반납돼요.",
     "broken":           "고장으로 사용할 수 없는 좌석이에요.",
     "maintenance":      "점검·청소 중이라 잠시 사용할 수 없어요.",
     "blocked":          "지금은 사용할 수 없는 좌석이에요.",
     "seat_unavailable": "사용할 수 없는 좌석이에요.",
+    "unknown":          "카메라로 좌석 상태를 확인할 수 없어 관리자가 확인하고 있어요.",
 }
 
 

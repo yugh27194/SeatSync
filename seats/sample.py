@@ -109,7 +109,7 @@ def _session(rnd, s, seat, user, start, end, logs, events):
     ev.append(("checkin", t, None))
     log.append((t, "in_use", "using"))
     status, issue = "returned", False
-    # 이용 중 휴식: 잠시 자리 비움 / 짐만 두고 비움 (일부는 기준 초과 → 이탈·사석화)
+    # 이용 중 휴식: 일시 이석 / 짐만 두고 비움 (일부는 기준 초과 → 장기 이석·사석화)
     while True:
         t += rnd.randint(40, 90) * 60
         if t >= end - 20 * 60 or rnd.random() < 0.45:
@@ -140,7 +140,7 @@ def _session(rnd, s, seat, user, start, end, logs, events):
             t, status = r.end_at, "expired"
     r.status, r.ended_at = status, t
     ev.append(({"returned": "return", "expired": "expire", "force_returned": "force_return"}[status], t,
-               "이탈·사석화" if status == "force_returned" and issue else None))
+               "장기 이석·사석화" if status == "force_returned" and issue else None))
     log.append((t, "available", "empty"))
     _flush(r, seat, ev, log, logs, events)
     return t

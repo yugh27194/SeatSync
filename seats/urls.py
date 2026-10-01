@@ -16,6 +16,7 @@ urlpatterns = [
     path("admin", pages.admin_page),
     path("admin/settings", pages.admin_settings_page),
     path("admin/qr", pages.admin_qr_page),
+    path("admin/qr/files/<str:name>", pages.admin_qr_file),
     path("admin/unlock", accounts.admin_unlock_page),
     path("admin/lock", accounts.admin_lock_page),
 

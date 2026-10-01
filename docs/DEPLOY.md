@@ -41,7 +41,8 @@ cloudflared tunnel --url http://localhost:5000
 ```
 
 - 주소는 **켤 때마다 바뀐다.** 좌석 QR은 그때마다 새로 만들어야 한다:
-  `python tools\make_qr.py --base-url https://quiet-river-1234.trycloudflare.com`
+  관리자 화면 **[좌석 QR]** 에서 주소를 넣고 [QR 파일 다시 만들기], 또는
+  `python manage.py make_qr --base-url https://quiet-river-1234.trycloudflare.com`
 - 관리자 코드를 바꿔서 공유하려면 `share.bat` 실행 전 같은 창에서 `set SEATSYNC_ADMIN_CODE=원하는코드`.
 - ngrok을 써도 된다(가입 필요): `ngrok http 5000` → 나온 `https://….ngrok-free.app` 주소 공유.
 
@@ -83,9 +84,11 @@ cd ~/SeatSync && bash deploy/pythonanywhere_update.sh
 - 3개월마다 Web 탭의 **"Run until 3 months from today"** 버튼을 눌러 연장해야 한다(메일로 알려 줌).
 - 사용량(CPU) 제한이 있지만 이 사이트 규모(좌석 8석, 3초 polling)에서는 충분하다.
 - 오류가 나면 Web 탭의 **Error log**를 확인한다.
-- 좌석 QR은 고정 주소로 한 번만 만들면 된다:
-  `~/.virtualenvs/seatsync/bin/python tools/make_qr.py --base-url https://아이디.pythonanywhere.com`
-  → **Files** 탭에서 `SeatSync/qr/print.html`과 PNG를 내려받아 인쇄.
+- 좌석 QR은 고정 주소로 한 번만 만들면 된다. 관리자 모드 → **관리** → **[좌석 QR]** → 주소 확인 → **[QR 파일 만들기]**
+  → **[A4 한 장 PDF 내려받기]** 로 인쇄(배율 100%), 점선을 따라 잘라 좌석에 붙인다.
+  콘솔에서는 `~/.virtualenvs/seatsync/bin/python manage.py make_qr --base-url https://아이디.pythonanywhere.com`
+  (파일은 `~/SeatSync/qr/`에 저장 — **Files** 탭에서도 내려받을 수 있다).
+  카드 안내 문구를 한글로 넣으려면 한글 글꼴 경로를 `SEATSYNC_QR_FONT`에 지정한다(없으면 영문 "SCAN TO CHECK IN").
 - 라즈베리파이 연동: `pi_bridge.py --url https://아이디.pythonanywhere.com --key <디바이스 키> --camera-id cam1`
   ([DATA_FLOW.md](DATA_FLOW.md#7-pi-설치실행)).
 

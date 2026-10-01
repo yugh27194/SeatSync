@@ -23,7 +23,7 @@ def test_assign_options_grouped(admin):
     groups = admin.jget("/api/admin/seats")["assign"]["groups"]
     assert [g["label"] for g in groups] == ["빈자리", "사용중", "사용불가"]
     in_use = [i["label"] for i in groups[1]["items"]]
-    assert in_use == ["이용 중", "짐만 있음", "무단 점유", "이탈", "사석화"]
+    assert in_use == ["정상 이용", "짐만 있음", "무단 점유", "장기 이석", "사석화"]
     assert [i["label"] for i in groups[2]["items"]] == ["고장", "점검·청소", "사용 중지"]
 
 
@@ -72,7 +72,12 @@ def test_unauthorized_asked_to_leave(admin):
 def test_no_checkin_proxy_checkin(admin, user_a, device, clock):
     from conftest import send
     rid = user_a.jpost("/api/reservations", {"seat_no": 1}).json()["id"]
-    send(device, clock, {1: ("person", clock())})  # 카메라: 누군가 앉았지만 체크인 안 함
+    t0 = clock()
+    send(device, clock, {1: ("person", t0)})  # 카메라: 누군가 앉았지만 체크인 안 함
+    s = admin_seat(admin, 1)
+    assert s["detail"] == "seated_unchecked" and not s["needs_action"] and s["next_label"] == "체크인 누락"
+    clock.advance(10 * 60)  # 무단 점유 기준(10분)이 지나도 체크인 없음
+    send(device, clock, {1: ("person", t0)})
     assert admin_seat(admin, 1)["detail"] == "no_checkin"
     assert admin.jpost(f"/api/admin/reservations/{rid}/checkin").status_code == 200
     s = admin_seat(admin, 1)

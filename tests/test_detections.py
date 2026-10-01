@@ -53,6 +53,12 @@ def test_clock_correction(device, clock):
 
 
 def test_camera_person_without_reservation_is_unauthorized(device, clock, admin):
-    send(device, clock, {1: ("person", clock())})
+    t0 = clock()
+    send(device, clock, {1: ("person", t0)})
+    s = admin_seat(admin, 1)  # QR 체크인 없이 착석 → 기준 시간(10분) 전에는 착석 감지(확인 필요 아님)
+    assert s["seat_state"] == "in_use" and s["detail"] == "detected" and not s["needs_action"] and not s["check"]
+    assert s["deadline_sec"] == 600 and s["next_label"] == "무단 점유"
+    clock.advance(600)
+    send(device, clock, {1: ("person", t0)})
     s = admin_seat(admin, 1)
     assert s["seat_state"] == "in_use" and s["detail"] == "unauthorized" and s["needs_action"]

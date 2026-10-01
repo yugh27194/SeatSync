@@ -3,7 +3,7 @@ import json
 
 from conftest import DEVICE_KEY, admin_seat, qr_token, set_state
 
-from seats.models import Camera, JudgmentFeedback, Seat
+from seats.models import Alert, Camera, JudgmentFeedback, Seat
 from seats.timeutil import to_iso
 
 
@@ -40,7 +40,7 @@ def test_snapshot_maps_camera_seat_ids(device, clock, admin):
     assert "A03" in r["missing"]  # 대응표에 있는데 스냅샷에 빠진 좌석
     assert seat(1).state == "occupied" and seat(1).state_since == clock() - 12 and seat(1).cam_confidence == 0.91
     assert seat(2).state == "empty" and seat(2).state_source == "camera"
-    assert admin_seat(admin, 1)["detail"] == "unauthorized"   # 예약 없이 사람 → 무단 점유
+    assert admin_seat(admin, 1)["detail"] == "detected"   # 예약 없이 사람 → 착석 감지 (기준 시간 뒤 무단 점유)
     cam2 = post(device, snapshot(clock, {"A01": ("OCCUPIED", 0.7, 3)}), camera_id="cam2").json()
     assert cam2["accepted"] == 1 and seat(10).state == "occupied"  # cam2의 A01 = C-1
 
@@ -72,18 +72,22 @@ def test_health_not_ok_means_unknown(device, clock):
 
 
 def test_stale_camera_freezes_away_escalation(device, clock, user, admin):
-    """카메라가 끊긴 동안에는 이탈로 넘기지 않는다(감지 끊김 ≠ 자리 비움)."""
+    """카메라가 끊긴 동안에는 장기 이석으로 넘기지 않는다(감지 끊김 ≠ 자리 비움).
+    대신 판단 불가 기준(3분)이 지나면 '판단 불가'로 관리자 확인."""
     user.jpost("/api/reservations", {"seat_no": 4, "qr_token": qr_token(4)})
     clock.advance(5)
     post(device, snapshot(clock, {"A04": ("EMPTY", 0, 0)}))   # 자리 비움 시작
+    stale_at = clock() + 5
     clock.advance(10)                                           # valid_until(5초) 경과 → 감지 끊김
     s = admin_seat(admin, 4)
-    assert s["detail"] == "away_short" and s["stale"] is True and s["deadline"] is None
+    assert s["detail"] == "away_short" and s["stale"] is True and not s["needs_action"]
+    assert s["next_label"] == "판단 불가" and s["deadline_sec"] == stale_at + 180 - clock()
     clock.advance(40 * 60)
     admin.get("/api/admin/seats")
     clock.advance(10)
     s = admin_seat(admin, 4)
-    assert s["detail"] == "away_short" and not s["needs_action"]   # 40분이 지나도 이탈 아님
+    assert s["detail"] == "unknown" and s["needs_action"] and s["seat_state"] == "in_use"  # 장기 이석이 아니라 판단 불가
+    assert Alert.objects.filter(seat_id=4, type="unknown", resolved_at__isnull=True).exists()
     post(device, snapshot(clock, {"A04": ("EMPTY", 0, 45 * 60)}))  # 다시 연결: 45분째 비어 있음
     s = admin_seat(admin, 4)
     assert s["stale"] is False and s["detail"] == "away"

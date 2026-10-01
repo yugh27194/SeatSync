@@ -103,7 +103,7 @@ AUTO_RETURN = ("away", "hoarding", "no_show")
 
 
 def _auto_return(results, now, s):
-    """미입실·이탈·사석화가 auto_return_min 넘게 이어지면 예약을 자동으로 강제 반납(미입실은 취소)한다.
+    """미입실·장기 이석·사석화가 auto_return_min 넘게 이어지면 예약을 자동으로 강제 반납(미입실은 취소)한다.
     카메라 감지가 끊긴 좌석은 자리 비움을 확신할 수 없으므로 자동 반납하지 않는다."""
     limit = s.sec("auto_return_min")
     if limit <= 0:
@@ -163,8 +163,9 @@ def notify(user_id, kind, level, title, body, now, seat=None, reservation=None, 
 
 
 def _prewarn(results, now, s):
-    """이석·짐만 두고 비움·체크인 마감이 기준 시간 prewarn_min 전이면 본인에게 사전 경고,
-    처리 필요로 넘어가면 다시 알림. 같은 사안(예약·상태 시작 시각)마다 한 번씩만 보낸다."""
+    """일시 이석·짐만 두고 비움·체크인 마감이 기준 시간 prewarn_min 전이면 본인에게 사전 경고,
+    처리 필요로 넘어가면 다시 알림. 같은 사안(예약·상태 시작 시각)마다 한 번씩만 보낸다.
+    카메라 판단 불가(stale)인 동안의 deadline은 '판단 불가' 기준이라 본인 경고에 쓰지 않는다."""
     pw = s.sec("prewarn_min")
     for it in results:
         r, j, seat = it["res"], it["j"], it["seat"]
@@ -172,8 +173,8 @@ def _prewarn(results, now, s):
             continue
         d, left = j.detail, (j.deadline - now) if j.deadline else None
         uid = r.user_id
-        if d in ("away_short", "item") and left is not None and left <= pw:
-            target = "이탈" if d == "away_short" else "사석화"
+        if d in ("away_short", "item") and j.next_detail in ("away", "hoarding") and left is not None and left <= pw:
+            target = "장기 이석" if d == "away_short" else "사석화"
             what = "자리를 비운" if d == "away_short" else "짐만 두고 자리를 비운"
             notify(uid, "prewarn", "warn", f"{seat.label} 좌석 사전 경고",
                    f"{what} 지 {fmt_sec(now - j.since)}가 지났어요. {fmt_sec(left)} 안에 돌아오지 않으면 "
@@ -194,9 +195,9 @@ def _prewarn(results, now, s):
                    now, seat=seat, reservation=r, key=f"iss:unav:{r.id}:{j.since}")
         if d == "no_checkin":
             notify(uid, "prewarn", "warn", f"{seat.label} 체크인해 주세요",
-                   "예약 좌석에 착석(또는 짐)이 확인됐지만 아직 체크인 전이에요. 좌석 QR을 스캔해 체크인하세요.",
+                   "예약 좌석에 착석(또는 짐)이 기준 시간 넘게 감지됐지만 아직 체크인 전이에요. 좌석 QR을 스캔해 체크인하세요.",
                    now, seat=seat, reservation=r, key=f"iss:nocheckin:{r.id}:{j.since}")
-        if r.status == "reserved" and left is not None and 0 < left <= pw:
+        if d == "waiting" and left is not None and 0 < left <= pw:
             notify(uid, "prewarn", "warn", f"{seat.label} 체크인 마감 {fmt_sec(left)} 전",
                    f"{fmt_sec(left)} 안에 좌석 QR로 체크인하지 않으면 '미입실'로 표시되고 자동으로 취소될 수 있어요.",
                    now, seat=seat, reservation=r, key=f"pre:checkin:{r.id}")
@@ -343,7 +344,7 @@ def compute_hourly_stats(day_start, day_end, now):
             "away_min": round(x["away"] / 60, 1),
             "hoarding_min": round(x["hoarding"] / 60, 1),
             "unauthorized_min": round(x["unauthorized"] / 60, 1),
-            # 이탈·사석화 비율 = (이탈 + 사석화) / (정상 이용 + 이탈 + 사석화)
+            # 장기 이석·사석화 비율 = (장기 이석 + 사석화) / (정상 이용 + 장기 이석 + 사석화)
             "issue_rate": round((x["away"] + x["hoarding"]) / base, 3) if base else 0.0,
         })
     return hours
@@ -356,7 +357,8 @@ def setup_demo(now):
     """활성 예약·미해결 알림을 정리하고 seats.json의 "demo" 목록대로 다양한 상황을 만든다. 안내 문구 목록을 돌려준다.
 
     demo 항목: {"seat": 좌석 라벨, "user": 아이디, "reservation": "in_use"|"reserved", "start_ago_min": 예약 시작 몇 분 전
-    (없으면 체크인 제한을 넘긴 예약 → 미입실), "state": 현장 상태, "mark", "reason", "state_ago_min", "note", "memo"}
+    (없으면 체크인 제한을 넘긴 예약 → 미입실), "state": 현장 상태, "mark", "reason", "state_ago_min", "note", "memo",
+    "camera_unknown_ago_min": 카메라가 몇 분 전부터 판단 불가(UNKNOWN)였는지 — 판단 불가 시연용}
     """
     from .seed import load_layout
     msgs = []
@@ -380,6 +382,9 @@ def setup_demo(now):
             seat.state, seat.mark, seat.reason = d.get("state", "empty"), d.get("mark"), d.get("reason")
             seat.note, seat.state_since = d.get("note"), now - int(d.get("state_ago_min", 0)) * 60
             seat.state_source = "manual"
+            if d.get("camera_unknown_ago_min") is not None:  # 카메라가 이 좌석을 판단하지 못하는 상황
+                seat.state_source, seat.cam_state = "camera", "UNKNOWN"
+                seat.cam_unknown_since = now - int(round(float(d["camera_unknown_ago_min"]) * 60))
             seat.save()
             who = "예약 없음"
             if sno:

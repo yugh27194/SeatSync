@@ -121,11 +121,15 @@ def test_reserved_until_end_becomes_no_show(user, clock):
 
 
 def test_item_approval_ends_with_reservation(admin, user, clock):
-    """예약 중 '짐만 있음'으로 확인한 짐이 예약 종료 뒤에도 남으면 무단 점유."""
+    """예약 중 '짐만 있음'으로 확인한 짐이 예약 종료 뒤에도 남으면(무단 점유 기준 시간 경과) 무단 점유."""
     from conftest import qr_token
     rid = user.jpost("/api/reservations", {"seat_no": 7, "qr_token": qr_token(7)}).json()["id"]
+    clock.advance(60)
     set_state(admin, 7, "item")
     user.jpost(f"/api/reservations/{rid}/return")
+    s = admin_seat(admin, 7)
+    assert s["detail"] == "item" and s["check"] and not s["needs_action"]
+    clock.advance(10 * 60)
     assert admin_seat(admin, 7)["detail"] == "unauthorized"
 
 
@@ -144,10 +148,10 @@ def test_mark_cleared_on_expiry(admin, clock):
 # ---------------------------------------------------------------- 자동 강제 반납
 
 def test_auto_return_after_away(admin, clock):
-    """이탈로 표시된 뒤 auto_return_min(기본 15분)이 지나면 자동 강제 반납."""
+    """장기 이석으로 표시된 뒤 auto_return_min(기본 15분)이 지나면 자동 강제 반납."""
     r = _in_use(1, clock())
     set_state(admin, 1, "empty")                 # 자리 비움
-    clock.advance(30 * 60)                       # 이탈 기준 30분
+    clock.advance(30 * 60)                       # 장기 이석 기준 30분
     assert admin_seat(admin, 1)["detail"] == "away"
     clock.advance(15 * 60 - 1)
     assert Reservation.objects.get(id=r.id).status == "in_use"
@@ -156,7 +160,7 @@ def test_auto_return_after_away(admin, clock):
     assert Reservation.objects.get(id=r.id).status == "force_returned" and s["detail"] == "empty"
     assert _open(1) == []
     log = admin.jget("/api/admin/log?limit=5")["log"]
-    assert log[0]["action"] == "auto_return" and "이탈" in log[0]["memo"]
+    assert log[0]["action"] == "auto_return" and "장기 이석" in log[0]["memo"]
 
 
 def test_auto_return_no_show(user, clock):

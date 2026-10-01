@@ -90,6 +90,12 @@ SEATSYNC = {
     "ADMIN_CODE": os.environ.get("SEATSYNC_ADMIN_CODE", "admin"),
     "ADMIN_MODE_MIN": int(os.environ.get("SEATSYNC_ADMIN_MODE_MIN", "60")),
     "SEATS_FILE": BASE_DIR / "config" / "seats.json",
+    # 좌석 QR 인쇄 파일(좌석별 PNG·A4 PDF)을 저장하는 폴더. 좌석 토큰이 들어 있으므로 git에 올리지 않는다(.gitignore).
+    "QR_DIR": Path(os.environ.get("SEATSYNC_QR_DIR", str(BASE_DIR / "qr"))),
+    # QR에 넣을 서비스 주소(예: https://jiyujin.pythonanywhere.com). 비우면 관리자가 접속한 주소를 쓴다.
+    "PUBLIC_URL": os.environ.get("SEATSYNC_PUBLIC_URL", "").rstrip("/"),
+    # QR 카드에 한글을 쓰는 글꼴 파일(.ttf/.ttc/.otf). 비우면 흔한 위치에서 찾고, 없으면 영문으로 쓴다.
+    "QR_FONT": os.environ.get("SEATSYNC_QR_FONT", ""),
 }
 
 LOGGING = {

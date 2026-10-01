@@ -53,7 +53,7 @@
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| GET | `/api/admin/seats` | 좌석별 좌석 상태·세부 상태·처리 필요·경과/마감·현장 상태·카메라 정보·예약자·빈자리 안내, 요약, 부여 가능한 세부 상태 목록 |
+| GET | `/api/admin/seats` | 좌석별 좌석 상태·세부 상태·처리 필요·경과/마감(`deadline`·`next_label`: 마감 때 바뀔 상태)·현장 상태·카메라 정보·예약자·빈자리 안내, 요약, 부여 가능한 세부 상태 목록 |
 | POST | `/api/admin/seats/{no}/state` | `{detail, note?}` 세부 상태 부여: empty·using·item·unauthorized·away·hoarding·broken·maintenance·blocked |
 | POST | `/api/admin/seats/{no}/feedback` | `{verdict: correct\|wrong, correct_detail?, apply?, memo?}` 판정 피드백 |
 | GET | `/api/admin/feedback` | 판정 정확도(전체·출처별·상태별), 자주 틀리는 판정, 최근 피드백, 카메라 탐지 점수 평균 |
@@ -67,7 +67,7 @@
 | POST | `/api/admin/users/{id}/warn` · `/unwarn` · `/suspend` · `/unsuspend` | 경고(누적)·취소·`{days}` 이용 정지·해제 |
 | GET | `/api/admin/log` | 처리 이력 |
 | GET/PUT | `/api/admin/settings` | 판정·운영 기준값 |
-| GET | `/api/admin/stats?date=YYYY-MM-DD` | 시간대별 이용·이탈·사석화·무단 점유 누적 |
+| GET | `/api/admin/stats?date=YYYY-MM-DD` | 시간대별 이용·장기 이석·사석화·무단 점유 누적 |
 | POST | `/api/admin/demo` · `/api/admin/demo-history` | 시연 상황 배치 · 샘플 이력 생성 `{weeks}` |
 
 ## 디바이스 API (`X-Device-Key`)
@@ -76,3 +76,11 @@
 |---|---|---|
 | POST | `/api/detections` | 감지 결과 수신 — 감지 프로토타입 스냅샷(`schema_version: 1`) 또는 occupancy 형식. 자세한 형식은 [DATA_FLOW.md](DATA_FLOW.md#3-메시지-형식) |
 | GET | `/api/device/config?camera_id=` | 카메라 좌석 ID ↔ 웹 좌석 대응표, 권장 전송 주기 |
+
+### 좌석 QR 인쇄 (화면, 관리자 모드)
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/admin/qr` | 좌석 QR 화면: 저장된 인쇄 파일 목록·미리보기, 화면용 QR |
+| POST | `/admin/qr` | `base_url` 폼 값으로 인쇄 파일을 새로 만든다 → 저장 폴더(`SEATSYNC_QR_DIR`, 기본 `qr/`) |
+| GET | `/admin/qr/files/{name}[?download=1]` | 저장 파일 내려받기: `seats_A4.pdf`, `seats_A4.png`, `seat_{no}.png` (manifest에 있는 파일만) |
