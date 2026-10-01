@@ -14,7 +14,7 @@ def _actions(admin):
 
 def test_permissions(user):
     r = user.get("/api/admin/seats")
-    assert r.status_code == 403 and r.json()["error"]["message"] == "관리자 권한이 필요합니다."
+    assert r.status_code == 403 and r.json()["error"]["message"] == "관리자 코드가 필요해요."
     assert user.jpost("/api/admin/seats/1/state", {"detail": "empty"}).status_code == 403
 
 

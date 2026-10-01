@@ -20,7 +20,7 @@ def login_view(request):
         if user is not None:
             login(request, user)
             return redirect(next_url or "/map")
-        error = "학번 또는 비밀번호가 올바르지 않습니다."
+        error = "학번 또는 비밀번호가 맞지 않아요."
     elif request.user.is_authenticated:
         return redirect(next_url or "/map")
     return render(request, "login.html", {"error": error, "next_url": next_url or ""})
@@ -37,15 +37,15 @@ def signup_view(request):
         if not student_no or not name:
             error = "학번과 이름을 입력해 주세요."
         elif len(password) < 4:
-            error = "비밀번호는 4자 이상이어야 합니다."
+            error = "비밀번호는 4자 이상으로 정해 주세요."
         elif User.objects.filter(student_no=student_no).exists():
-            error = "이미 가입된 학번입니다."
+            error = "이미 가입된 학번이에요."
         else:
             try:
                 user = User.objects.create(student_no=student_no, name=name, password=make_password(password),
                                            created_at=clock.now())
             except IntegrityError:
-                error = "이미 가입된 학번입니다."
+                error = "이미 가입된 학번이에요."
             else:
                 login(request, user, backend="django.contrib.auth.backends.ModelBackend")
                 return redirect(next_url or "/map")

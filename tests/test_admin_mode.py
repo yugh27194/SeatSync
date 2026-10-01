@@ -11,7 +11,7 @@ def test_no_admin_account_seeded():
 
 def test_api_requires_admin_mode(user):
     r = user.get("/api/admin/seats")
-    assert r.status_code == 403 and err(r) == "ADMIN_REQUIRED" and r.json()["error"]["message"] == "관리자 권한이 필요합니다."
+    assert r.status_code == 403 and err(r) == "ADMIN_REQUIRED" and r.json()["error"]["message"] == "관리자 코드가 필요해요."
     assert user.jget("/api/admin-mode")["admin"] is False
 
 

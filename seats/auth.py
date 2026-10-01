@@ -16,7 +16,7 @@ from . import clock
 from .http import error_response
 from .services import log_admin
 
-ADMIN_REQUIRED_MSG = "관리자 권한이 필요합니다."
+ADMIN_REQUIRED_MSG = "관리자 코드가 필요해요."
 MAX_FAILS = 5         # 연속 실패 허용 횟수
 LOCK_SEC = 5 * 60     # 초과 시 잠금 시간
 SESSION_KEY = "admin_ok"  # 관리자 코드를 통과한 세션
@@ -50,7 +50,7 @@ def login_required(view):
     def wrapped(request, *args, **kwargs):
         if not request.user.is_authenticated:
             if _is_api(request):
-                return error_response(401, "UNAUTHENTICATED", "로그인이 필요합니다.")
+                return error_response(401, "UNAUTHENTICATED", "로그인해 주세요.")
             return redirect("/login?next=" + quote(request.get_full_path(), safe="/"))
         return view(request, *args, **kwargs)
     return wrapped
@@ -84,7 +84,7 @@ def try_unlock(request, code):
         cnt, until = _fails.get(uid, [0, 0])
         if until > now:
             mins = (until - now + 59) // 60
-            return False, "ADMIN_LOCKED", f"시도 횟수를 초과했습니다. {mins}분 후 다시 시도하세요."
+            return False, "ADMIN_LOCKED", f"잠시 잠겼어요. {mins}분 뒤 다시 시도해 주세요."
         if until:  # 잠금이 끝났으면 초기화
             cnt = 0
         expected = settings.SEATSYNC["ADMIN_CODE"]
@@ -101,5 +101,5 @@ def try_unlock(request, code):
         return True, None, None
     if cnt >= MAX_FAILS:
         log_admin(uid, "admin_locked", now, memo=f"관리자 코드 {MAX_FAILS}회 실패")
-        return False, "ADMIN_LOCKED", f"관리자 코드가 {MAX_FAILS}회 틀렸습니다. {LOCK_SEC // 60}분 후 다시 시도하세요."
-    return False, "BAD_ADMIN_CODE", f"관리자 코드가 올바르지 않습니다. (남은 시도 {MAX_FAILS - cnt}회)"
+        return False, "ADMIN_LOCKED", f"{MAX_FAILS}회 틀려서 잠겼어요. {LOCK_SEC // 60}분 뒤 다시 시도해 주세요."
+    return False, "BAD_ADMIN_CODE", f"관리자 코드가 맞지 않아요. (남은 시도 {MAX_FAILS - cnt}회)"

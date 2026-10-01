@@ -68,7 +68,7 @@ def _sweep(now, s):
         record_event(r, "no_show" if no_show else "expire", r.end_at)
         if no_show:
             notify(r.user_id, "issue", "danger", f"{r.seat.label} 예약이 미입실로 끝났어요",
-                   "예약 시간이 끝날 때까지 체크인하지 않았습니다.", now, seat=r.seat, reservation=r, key=f"noshow:{r.id}")
+                   "예약 시간 안에 체크인하지 않았어요.", now, seat=r.seat, reservation=r, key=f"noshow:{r.id}")
     if ended:
         clear_marks(ended)
 
@@ -124,8 +124,7 @@ def _auto_return(results, now, s):
         seat.refresh_from_db(fields=["mark"])
         notify(r.user_id, "issue", "danger",
                f"{seat.label} 예약이 자동으로 {'취소' if no_show else '반납'}됐어요",
-               f"'{label}' 상태가 {fmt_min(s.auto_return_min)} 동안 이어져 자동으로 "
-               f"{'취소' if no_show else '강제 반납'}됐습니다.", now, seat=seat, reservation=r, key=f"auto:{r.id}")
+               f"'{label}' 상태가 {fmt_min(s.auto_return_min)} 동안 이어졌어요.", now, seat=seat, reservation=r, key=f"auto:{r.id}")
         log_admin(None, "auto_return", now, seat_no=seat.no, reservation_id=r.id, target_user_id=r.user_id, memo=memo)
         it["res"] = None
         it["j"] = judge(None, to_actual(seat, now), now, s)
@@ -175,36 +174,32 @@ def _prewarn(results, now, s):
         uid = r.user_id
         if d in ("away_short", "item") and j.next_detail in ("away", "hoarding") and left is not None and left <= pw:
             target = "장기 이석" if d == "away_short" else "사석화"
-            what = "자리를 비운" if d == "away_short" else "짐만 두고 자리를 비운"
             notify(uid, "prewarn", "warn", f"{seat.label} 좌석 사전 경고",
-                   f"{what} 지 {fmt_sec(now - j.since)}가 지났어요. {fmt_sec(left)} 안에 돌아오지 않으면 "
-                   f"'{target}'(으)로 처리되어 관리자가 반납 처리할 수 있어요.",
+                   f"{fmt_sec(left)} 안에 자리로 돌아와 주세요. 늦으면 '{target}'(으)로 처리돼요.",
                    now, seat=seat, reservation=r, key=f"pre:{d}:{r.id}:{j.since}")
         elif d in ("away", "hoarding"):
             notify(uid, "issue", "danger", f"{seat.label} 좌석이 '{DETAILS[d][1]}'(으)로 표시됐어요",
-                   "기준 시간이 지나 처리 필요 좌석이 되었습니다. 바로 좌석으로 돌아가거나 반납해 주세요. "
-                   "관리자가 강제 반납하거나 경고를 줄 수 있어요.",
+                   "자리로 돌아가거나 반납해 주세요. 그대로 두면 반납될 수 있어요.",
                    now, seat=seat, reservation=r, key=f"iss:{d}:{r.id}:{j.since}")
         elif d == "unauthorized":  # 내 예약 좌석을 다른 사람이 점유(관리자 확인)
             notify(uid, "issue", "warn", f"{seat.label} 내 예약 좌석에 다른 이용이 확인됐어요",
-                   "관리자가 확인 중입니다. 필요하면 [관리자 호출]로 알려 주세요.",
+                   "관리자가 확인하고 있어요.",
                    now, seat=seat, reservation=r, key=f"iss:unauth:{r.id}:{j.since}")
         elif d == "seat_unavailable":
             notify(uid, "issue", "danger", f"{seat.label} 예약 좌석을 사용할 수 없게 됐어요",
-                   "좌석 고장·점검으로 사용불가입니다. 관리자가 다른 좌석으로 옮겨 드리거나, 반납 후 다른 좌석을 예약해 주세요.",
+                   "관리자에게 문의하거나 반납 후 다른 좌석을 예약해 주세요.",
                    now, seat=seat, reservation=r, key=f"iss:unav:{r.id}:{j.since}")
         if d == "no_checkin":
             notify(uid, "prewarn", "warn", f"{seat.label} 체크인해 주세요",
-                   "예약 좌석에 착석(또는 짐)이 기준 시간 넘게 감지됐지만 아직 체크인 전이에요. 좌석 QR을 스캔해 체크인하세요.",
+                   "좌석 QR을 찍어 체크인해 주세요.",
                    now, seat=seat, reservation=r, key=f"iss:nocheckin:{r.id}:{j.since}")
         if d == "waiting" and left is not None and 0 < left <= pw:
             notify(uid, "prewarn", "warn", f"{seat.label} 체크인 마감 {fmt_sec(left)} 전",
-                   f"{fmt_sec(left)} 안에 좌석 QR로 체크인하지 않으면 '미입실'로 표시되고 자동으로 취소될 수 있어요.",
+                   f"{fmt_sec(left)} 안에 좌석 QR로 체크인해 주세요. 늦으면 예약이 취소될 수 있어요.",
                    now, seat=seat, reservation=r, key=f"pre:checkin:{r.id}")
         if d == "no_show":
             notify(uid, "issue", "danger", f"{seat.label} 체크인 시간이 지났어요",
-                   "'미입실'로 표시됐어요. 좌석에 도착했다면 바로 QR로 체크인하고, 이용하지 않을 거면 예약을 취소해 주세요. "
-                   "관리자가 예약을 취소할 수 있어요.", now, seat=seat, reservation=r, key=f"iss:noshow:{r.id}")
+                   "도착했다면 바로 좌석 QR로 체크인해 주세요. 이용하지 않으면 예약을 취소해 주세요.", now, seat=seat, reservation=r, key=f"iss:noshow:{r.id}")
 
 
 # ---------------------------------------------------------------- 빈자리 알림 대기
@@ -225,7 +220,7 @@ def _waitlist(results, now, s):
             e.status, e.ended_at = "expired", now
             e.save(update_fields=["status", "ended_at"])
             notify(e.user_id, "offer", "info", "빈자리 안내 시간이 지났어요",
-                   f"{e.offered_seat.label} 좌석 안내가 만료되어 대기가 끝났어요. 다시 기다리려면 [빈자리 알림]을 눌러 주세요.",
+                   f"{e.offered_seat.label} 좌석 안내가 끝났어요. 다시 기다리려면 [빈자리 알림]을 눌러 주세요.",
                    now, seat=e.offered_seat, key=f"offer-exp:{e.id}")
         elif e.offered_seat_id not in free:  # 안내한 좌석을 더 쓸 수 없음(관리자 배정·사용불가 등) → 다시 대기
             e.status, e.offered_seat, e.offered_at, e.expires_at = "waiting", None, None, None
@@ -241,7 +236,7 @@ def _waitlist(results, now, s):
         e.save(update_fields=["status", "offered_seat", "offered_at", "expires_at"])
         offers[seat.no] = e
         notify(e.user_id, "offer", "ok", f"{seat.label} 빈자리가 생겼어요",
-               f"{fmt_min(s.waitlist_hold_min)} 동안 먼저 예약할 수 있어요. 좌석 지도에서 [바로 예약]을 눌러 주세요.",
+               f"{fmt_min(s.waitlist_hold_min)} 동안 먼저 예약할 수 있어요.",
                now, seat=seat, key=f"offer:{e.id}:{now}")
     return offers
 
@@ -270,7 +265,7 @@ def set_seat_state(seat, state, source, now, mark=None, reason=None, note=None):
 def extend_check(res, now, s):
     """(연장 가능 여부, 불가 사유)."""
     if res is None or res.status != "in_use":
-        return False, "체크인한 뒤 이용 중일 때만 연장할 수 있어요."
+        return False, "체크인 후에 연장할 수 있어요."
     if res.extend_count >= s.max_extends:
         return False, f"연장은 최대 {s.max_extends}회까지 가능해요."
     if res.end_at - now > s.sec("extend_window_min"):

@@ -8,16 +8,16 @@
   const MARK = { ok: "관리자 확인", issue: "관리자가 문제로 지정" };
   // 확인 필요(!) 좌석을 처리할 때 보여 주는 안내: 지금 어떤 상태인지 + 무엇을 하면 되는지
   const GUIDE = {
-    unauthorized: "QR 체크인 없이 사람(또는 짐)이 기준 시간보다 오래 감지됐습니다. 현장에서 이용자를 확인해 좌석을 배정하거나 퇴실을 안내하세요. 짐만 있다면 짐 주인에게 배정하거나 짐을 수거하세요.",
-    no_checkin: "앉아 있는 사람이 예약자면 대리 체크인, 다른 사람이면 예약자를 다른 좌석으로 옮기세요.",
-    away: "QR 체크인했지만 사람이 기준 시간보다 오래 감지되지 않았습니다(장기 이석). 돌아오지 않으면 강제 반납하고, 반복되면 경고하세요.",
-    hoarding: "짐만 두고 기준 시간보다 오래 비웠습니다. 짐을 보관 처리하고 강제 반납하거나 예약자에게 경고하세요.",
+    unauthorized: "현장을 확인해 좌석을 배정하거나 퇴실을 안내하세요. 짐만 있으면 수거하세요.",
+    no_checkin: "예약자 본인이면 대리 체크인, 다른 사람이면 퇴실을 안내하세요.",
+    away: "돌아오지 않으면 강제 반납하고, 반복되면 경고하세요.",
+    hoarding: "짐을 보관하고 강제 반납하거나 경고하세요.",
     seat_unavailable: "예약자를 다른 좌석으로 옮기거나 예약을 취소하세요.",
-    no_show: "예약자가 체크인 시간 안에 오지 않았습니다. 연락이 없으면 예약을 취소하고, 늦게 도착했다면 대리 체크인하세요.",
-    away_short: "일시 이석입니다. 아직 장기 이석 기준 시간 전이니 곧 돌아오는지 지켜보고, 필요하면 [사전 경고]로 예약자에게 알리세요.",
-    unknown: "현장을 보고 실제 상태를 아래 버튼으로 지정하세요. 카메라가 회복되면 다시 자동 판정합니다. 여러 좌석이 함께 판단 불가라면 카메라 연결을 점검하세요.",
-    item_res: "예약자가 짐만 두고 자리를 비웠습니다. 기준 시간 전에 돌아오는지 확인하고, 필요하면 [사전 경고]를 보내세요.",
-    item_nores: "예약 없이 짐만 있습니다. 짐 주인을 찾아 좌석을 배정하거나 짐을 수거하세요.",
+    no_show: "오지 않으면 예약을 취소하고, 늦게 왔다면 대리 체크인하세요.",
+    away_short: "곧 돌아오는지 지켜보세요. 필요하면 [사전 경고]를 보내세요.",
+    unknown: "현장을 보고 실제 상태를 지정하세요. 여러 좌석이 함께 판단 불가면 카메라를 점검하세요.",
+    item_res: "곧 돌아오는지 지켜보세요. 필요하면 [사전 경고]를 보내세요.",
+    item_nores: "짐 주인에게 좌석을 배정하거나 짐을 수거하세요.",
   };
   const RES_STATUS = { reserved: "예약(입실 전)", in_use: "이용 중" };
 
@@ -121,7 +121,7 @@
       html.push(`<button type="button" class="seat cat-${s.category}${s.booth ? " booth" : ""}${bang ? " check" : ""}${selected === s.no ? " selected" : ""}"
         data-no="${s.no}" style="grid-column:${s.x};grid-row:${s.y}" title="${esc(s.label)} · ${esc(s.category_label)} · ${esc(s.detail_label)}" aria-label="${esc(s.label)} ${esc(s.category_label)}${bang ? " · 관리자 확인 필요" : ""}">
         ${bang ? '<span class="bang" aria-hidden="true">!</span>' : ""}
-        ${s.stale && s.category !== "unknown" ? '<span class="cam-off" title="카메라 감지 확인 불가 — 마지막 상태 표시 중">📷?</span>' : ""}
+        ${s.stale && s.category !== "unknown" ? '<span class="cam-off" title="카메라 끊김 · 마지막 상태 표시 중">📷?</span>' : ""}
         <span class="sl">${esc(s.label)}</span><span class="sub">${esc(s.category_label)}</span></button>`);
     }
     el.innerHTML = html.join("");
@@ -192,7 +192,7 @@
         · ${s.camera.state ? { OCCUPIED: "사람 있음", EMPTY: "사람 없음", UNKNOWN: "확인 불가" }[s.camera.state] : "수신 없음"}
         ${s.camera.confidence ? ` (점수 ${s.camera.confidence.toFixed(2)})` : ""}
         ${s.camera.seen_at ? ` · ${fmtTime(s.camera.seen_at)} 수신` : ""}
-        ${s.stale ? ` · <b class="warn-text">${s.detail === "unknown" ? "판단 불가 — 현장 확인 필요" : "감지 끊김 — 마지막 상태 유지, 장기 이석·무단 점유 판정 보류"}</b>` : ""}</p>` : ""}
+        ${s.stale ? ` · <b class="warn-text">${s.detail === "unknown" ? "판단 불가 · 현장 확인 필요" : "카메라 끊김 · 마지막 상태 표시 중"}</b>` : ""}</p>` : ""}
       ${s.offer ? `<p class="small" style="margin:6px 0 0">🔔 빈자리 알림 대기자 <b>${esc(s.offer.user_name)}</b> 님에게 안내 중 (${fmtRemain(s.offer.left_sec)} 남음)</p>` : ""}
       <div class="section-title">좌석 상태 지정</div>
       ${assignPanel(s)}
@@ -204,7 +204,7 @@
 
   function renderAlerts() {
     $("alert-count").textContent = alerts.length;
-    if (!alerts.length) { $("alerts").innerHTML = `<li class="muted small">조치할 좌석이 없습니다.</li>`; return; }
+    if (!alerts.length) { $("alerts").innerHTML = `<li class="muted small">조치할 좌석이 없어요.</li>`; return; }
     $("alerts").innerHTML = alerts.map((a) => {
       const s = seatByNo(a.seat_no) || { no: a.seat_no, label: a.seat_label, reservation: null };
       const ru = a.reservation && a.reservation.user;
@@ -318,7 +318,7 @@
 
     async leave(d) {
       if (d.keep) {  // 예약자 신고(내 자리에 다른 사람) 처리: 착석자를 내보내고 예약자가 앉을 수 있게 비움
-        const ok = await modal({ title: "착석자 퇴실 안내 완료", body: `${d.label} 좌석에 앉아 있던 분에게 퇴실(또는 빈자리 예약)을 안내했나요?\n현장을 '비어 있음'으로 바꾸고 신고를 처리 완료합니다.\n예약자에게 좌석 QR로 체크인하도록 안내하세요.`, ok: "처리" });
+        const ok = await modal({ title: "착석자 퇴실 안내 완료", body: `${d.label} 좌석을 비우고 신고를 처리할까요?\n예약자에게 QR 체크인을 안내해 주세요.`, ok: "처리" });
         if (ok) run(async () => {
           await api("POST", `/api/admin/seats/${d.seat}/state`, { detail: "empty" });
           if (d.alert) await api("POST", `/api/admin/alerts/${d.alert}/resolve`, { memo: "착석자 퇴실 안내 → 예약자 좌석 확보" });
@@ -326,8 +326,8 @@
         return;
       }
       const ok = d.item
-        ? await modal({ title: "짐 수거 완료", body: `${d.label} 좌석에 방치된 짐을 수거(보관)했나요?\n현장을 '비어 있음'으로 바꿉니다.`, ok: "비어 있음으로 변경" })
-        : await modal({ title: "퇴실 안내 완료", body: `${d.label} 좌석의 무단 점유자에게 퇴실(또는 예약)을 안내했나요?\n현장을 '비어 있음'으로 바꿉니다.`, ok: "비어 있음으로 변경" });
+        ? await modal({ title: "짐 수거 완료", body: `${d.label} 좌석을 비어 있음으로 바꿀까요?`, ok: "비어 있음으로 변경" })
+        : await modal({ title: "퇴실 안내 완료", body: `${d.label} 좌석을 비어 있음으로 바꿀까요?`, ok: "비어 있음으로 변경" });
       if (ok) run(() => api("POST", `/api/admin/seats/${d.seat}/state`, { detail: "empty" }), "현장을 비어 있음으로 바꿨습니다.");
     },
 
@@ -337,7 +337,7 @@
       const first = opts.find((o) => !o.disabled);
       const v = await modal({
         title: `${s.label} 대리 예약·배정`,
-        body: "이용자를 선택하세요. 착석한 이용자라면 '바로 이용 시작'을 고르세요.",
+        body: "앉아 있는 사람이면 '바로 이용 시작'을 고르세요.",
         fields: [
           { name: "user_id", label: "이용자", type: "select", options: opts, value: first ? first.value : "" },
           { name: "mode", label: "방식", type: "select", value: d.checkin === "1" ? "1" : "0",
@@ -357,7 +357,7 @@
       const first = opts.find((o) => !o.disabled);
       const v = await modal({
         title: `${s.label} 예약`,
-        body: `이용자를 고르면 이 좌석을 예약합니다. 체크인 제한 시간(${SS.fmtMin(data.settings.checkin_limit_min)}) 안에 아무도 오지 않으면 '! 확인 필요(미입실)'로 표시됩니다.`,
+        body: `${SS.fmtMin(data.settings.checkin_limit_min)} 안에 체크인하지 않으면 미입실로 표시돼요.`,
         fields: [
           { name: "user_id", label: "이용자", type: "select", options: opts, value: first ? first.value : "" },
           { name: "memo", label: "메모 (선택)", type: "textarea", placeholder: "예: 전화 예약" },
@@ -375,7 +375,7 @@
       const opts = otherReservations(s).map((x) => ({ value: x.reservation.id,
         label: `${x.reservation.user.name} — ${x.label} ${x.reservation.status === "reserved" ? "예약(체크인 전)" : "이용 중"}` }));
       const v = await modal({ title: `${s.label}에 앉은 사람이 다른 좌석 예약자인가요?`,
-        body: `본인 확인 후 그 예약을 ${s.label}(으)로 옮기고 바로 체크인합니다. 원래 좌석은 빈자리가 됩니다.`,
+        body: `본인 확인 후 예약을 ${s.label}(으)로 옮기고 바로 체크인해요.`,
         fields: [{ name: "res", label: "예약", type: "select", options: opts, value: opts[0].value },
           { name: "memo", label: "메모 (선택)", type: "textarea", placeholder: "예: 좌석 착각" }], ok: "옮기고 체크인" });
       if (!v) return;
@@ -384,14 +384,14 @@
     },
 
     async checkin(d) {
-      const ok = await modal({ title: "대리 체크인", body: `${d.label} 좌석에 예약자 본인이 앉아 있는지 확인했나요?`, ok: "체크인 처리" });
+      const ok = await modal({ title: "대리 체크인", body: `${d.label} 좌석에 예약자 본인이 앉아 있나요?`, ok: "체크인 처리" });
       if (ok) run(() => api("POST", `/api/admin/reservations/${d.res}/checkin`), "대리 체크인했습니다.");
     },
 
     async move(d) {
       const free = data.seats.filter((s) => s.seat_state === "available" && s.actual === "empty");
       if (!free.length) { toast("옮길 수 있는 빈자리가 없습니다.", "error"); return; }
-      const v = await modal({ title: `${d.label} 예약 좌석 이동`, body: "빈자리 중에서 옮길 좌석을 고르세요.",
+      const v = await modal({ title: `${d.label} 예약 좌석 이동`, body: "옮길 빈자리를 고르세요.",
         fields: [
           { name: "seat_no", label: "옮길 좌석", type: "select", options: free.map((s) => ({ value: s.no, label: `${s.label} · ${s.zone || ""}` })) },
           { name: "memo", label: "메모 (선택)", type: "textarea", placeholder: "예: 좌석 고장으로 이동" },
@@ -401,31 +401,31 @@
     },
 
     async extend(d) {
-      const ok = await modal({ title: "관리자 연장", body: `${d.label} 예약의 종료 시각을 ${SS.fmtMin(data.settings.extend_min)} 늘립니다.\n(이용자 연장 횟수에는 포함되지 않습니다)`, ok: "연장" });
+      const ok = await modal({ title: "관리자 연장", body: `${d.label} 예약을 ${SS.fmtMin(data.settings.extend_min)} 늘려요. (연장 횟수에는 포함되지 않아요)`, ok: "연장" });
       if (ok) run(() => api("POST", `/api/admin/reservations/${d.res}/extend`), "연장했습니다.");
     },
 
     async force(d) {
       if (d.noshow) {
-        const m = await modal({ title: "미입실 예약 취소", body: `${d.label} 좌석의 예약을 미입실로 취소할까요?\n예약자에게 알림이 갑니다.`,
+        const m = await modal({ title: "미입실 예약 취소", body: `${d.label} 예약을 미입실로 취소할까요?`,
           input: { placeholder: "메모 (선택)" }, ok: "예약 취소", danger: true });
         if (m !== false) run(() => api("POST", `/api/admin/reservations/${d.res}/force-return`, { memo: m, no_show: true }), "미입실로 예약을 취소했습니다.");
         return;
       }
-      const memo = await modal({ title: "강제 반납", body: `${d.label} 좌석의 예약을 종료할까요?\n해당 좌석의 미해결 알림도 함께 처리됩니다.`,
+      const memo = await modal({ title: "강제 반납", body: `${d.label} 예약을 종료할까요?`,
         input: { placeholder: "사유 (선택) 예: 40분 이상 자리 비움" }, ok: "강제 반납", danger: true });
       if (memo !== false) run(() => api("POST", `/api/admin/reservations/${d.res}/force-return`, { memo }), "강제 반납했습니다.");
     },
 
     async warn(d) {
-      const reason = await modal({ title: `${d.name} 님에게 경고`, body: "경고는 누적되며, 기준 횟수 이상이면 이용 정지를 권장합니다.",
+      const reason = await modal({ title: `${d.name} 님에게 경고`, body: "경고는 누적돼요.",
         input: { placeholder: "사유 (알림에서 부여하면 비워 둬도 됩니다)" }, ok: "경고 부여", danger: true });
       if (reason === false) return;
       const body = { reason };
       if (d.alert) { body.alert_id = Number(d.alert); if (d.resolve) body.resolve = true; }
       const res = await run(() => api("POST", `/api/admin/users/${d.user}/warn`, body), `${d.name} 님에게 경고했습니다.`);
       if (res && res.suspend_suggested) {
-        const days = await modal({ title: "이용 정지 권장", body: `${d.name} 님의 경고가 ${res.warnings}회 누적되었습니다. 이용을 정지할까요?`,
+        const days = await modal({ title: "이용 정지 권장", body: `경고가 ${res.warnings}회 쌓였어요. 이용을 정지할까요?`,
           fields: [{ name: "days", label: "정지 기간(일)", type: "number", min: 1, max: 90, value: data.settings.suspend_days }], ok: "이용 정지", danger: true });
         if (days) run(() => api("POST", `/api/admin/users/${d.user}/suspend`, { days: Number(days.days), reason: `경고 ${res.warnings}회 누적` }), "이용을 정지했습니다.");
       }
@@ -437,7 +437,7 @@
     },
 
     async suspend(d) {
-      const v = await modal({ title: `${d.name} 님 이용 정지`, body: "정지 기간 동안 새 예약을 할 수 없습니다. (현재 예약은 필요하면 강제 반납하세요)",
+      const v = await modal({ title: `${d.name} 님 이용 정지`, body: "정지 기간에는 새 예약을 할 수 없어요.",
         fields: [
           { name: "days", label: "정지 기간(일)", type: "number", min: 1, max: 90, value: data.settings.suspend_days },
           { name: "reason", label: "사유", type: "textarea", placeholder: "예: 사석화 반복" },
@@ -460,7 +460,7 @@
         waiting: "체크인 마감 전에 좌석 QR로 체크인해 주세요.",
       };
       const msg = await modal({ title: `${d.name} 님에게 사전 경고`,
-        body: "본인 계정으로 주의 알림만 보냅니다. 누적 경고 횟수에는 포함되지 않아요.",
+        body: "주의 알림만 보내요. 경고 횟수에는 포함되지 않아요.",
         input: { value: PRESET[d.detail] || "좌석 이용 규정을 지켜 주세요. 계속되면 경고가 부여될 수 있어요." },
         ok: "보내기" });
       if (msg === false) return;
@@ -469,7 +469,7 @@
     },
 
     async resolve(d) {
-      const memo = await modal({ title: "처리 완료", body: "처리 내용을 남겨 두면 처리 이력에 기록됩니다.", input: { placeholder: "예: 현장 확인 후 안내함 (선택)" }, ok: "처리 완료" });
+      const memo = await modal({ title: "처리 완료", input: { placeholder: "메모 (선택)" }, ok: "처리 완료" });
       if (memo !== false) run(() => api("POST", `/api/admin/alerts/${d.alert}/resolve`, { memo }), "처리 완료했습니다.");
     },
   };

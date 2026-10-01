@@ -73,11 +73,11 @@
     try {
       const d = await api("PUT", "/api/admin/settings", body);
       render(d.settings);
-      toast("저장했습니다. 다음 갱신부터 반영됩니다.", "ok");
+      toast("저장했어요. 바로 적용돼요.", "ok");
     } catch (err) { /* 토스트 표시됨 */ }
   });
-  document.getElementById("btn-demo").onclick = () => { fill(DEMO); toast("시연 모드 값을 채웠습니다. [저장]을 눌러 적용하세요."); };
-  document.getElementById("btn-default").onclick = () => { fill(defaults); toast("기본값을 채웠습니다. [저장]을 눌러 적용하세요."); };
+  document.getElementById("btn-demo").onclick = () => { fill(DEMO); toast("시연 모드 값을 채웠어요. [저장]을 눌러 주세요."); };
+  document.getElementById("btn-default").onclick = () => { fill(defaults); toast("기본값을 채웠어요. [저장]을 눌러 주세요."); };
 
   load();
 })();

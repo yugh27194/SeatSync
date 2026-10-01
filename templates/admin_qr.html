@@ -5,9 +5,8 @@
 <div class="toolbar no-print"><h1 style="margin:0">좌석 QR 보관함</h1><span class="spacer"></span><span class="muted small">{{ cards|length }}석</span></div>
 <div class="card no-print">
   <h2>좌석에 붙여 둔 QR 그대로</h2>
-  <p class="muted small" style="margin:-4px 0 12px">이 화면은 QR을 새로 만들거나 바꾸지 않고, 각 좌석에 저장된 QR을 그대로 보여 줍니다.
-    QR이 떨어지거나 훼손된 좌석이 있으면 A4 한 장으로 인쇄해 다시 붙이면 됩니다(배율 100%, 점선을 따라 자르기).
-    좌석마다 비밀 토큰이 들어 있으니 관리자만 보세요.</p>
+  <p class="muted small" style="margin:-4px 0 12px">QR을 새로 만들지 않고 붙여 둔 QR을 그대로 보여 줘요.
+    떨어지거나 훼손된 QR은 A4로 인쇄해 다시 붙이세요(배율 100%). 관리자만 보세요.</p>
   <button type="button" class="btn block" onclick="window.print()">A4로 인쇄</button>
 </div>
 <div class="card a4-card-wrap">
@@ -26,7 +25,7 @@
       </div>
     </div>
     {% empty %}
-    <p class="muted">좌석이 없습니다.</p>
+    <p class="muted">좌석이 없어요.</p>
     {% endfor %}
   </div>
 </div>

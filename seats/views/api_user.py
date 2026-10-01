@@ -12,28 +12,28 @@ from ..models import Alert, Notification, Reservation, Seat, WaitEntry
 from ..seed import load_layout
 from ..services import (clear_marks, extend_check, get_settings, record_event, refresh, reservation_json,
                         set_seat_state, user_active_reservation, wait_position)
-from ..status import DETAILS, USER_MESSAGES, fmt_sec, user_view
+from ..status import DETAILS, fmt_sec, user_view
 from ..timeutil import to_iso
 
 # 본인 좌석 상태 안내(사전 경고용). 내 예약 좌석에 한해서만 세부 상태를 알려 준다.
 OWN_STATUS = {
-    "waiting": ("info", "체크인 대기 중이에요. 좌석 QR로 체크인해 주세요."),
-    "seated_unchecked": ("warn", "착석이 확인됐어요. {left} 안에 좌석 QR로 체크인해 주세요."),
-    "no_checkin": ("warn", "착석(또는 짐)이 확인됐지만 체크인 전이에요. 좌석 QR로 체크인해 주세요."),
-    "away_short": ("warn", "자리를 비운 상태예요(일시 이석). {left} 뒤 '장기 이석'으로 처리됩니다."),
-    "item": ("warn", "짐만 두고 자리를 비운 상태예요. {left} 뒤 '사석화'로 처리됩니다."),
-    "away": ("danger", "'장기 이석'으로 표시됐어요. {auto}"),
-    "hoarding": ("danger", "'사석화'로 표시됐어요. {auto}"),
-    "unauthorized": ("warn", "내 예약 좌석에 다른 이용이 확인되어 관리자가 확인 중이에요."),
-    "no_show": ("danger", "체크인 시간이 지나 '미입실'로 표시됐어요. 도착했다면 바로 QR로 체크인해 주세요. {auto}"),
-    "seat_unavailable": ("danger", "예약 좌석이 사용불가 상태예요. 관리자가 좌석을 옮겨 드리거나, 반납 후 다시 예약해 주세요."),
-    "unknown": ("info", "카메라가 좌석을 확인하지 못하고 있어 관리자가 확인 중이에요. 계속 이용하셔도 돼요."),
+    "waiting": ("info", "좌석 QR로 체크인해 주세요."),
+    "seated_unchecked": ("warn", "{left} 안에 좌석 QR로 체크인해 주세요."),
+    "no_checkin": ("warn", "아직 체크인 전이에요. 좌석 QR로 체크인해 주세요."),
+    "away_short": ("warn", "자리를 비웠어요. {left} 안에 돌아와 주세요."),
+    "item": ("warn", "짐만 두고 자리를 비웠어요. {left} 안에 돌아와 주세요."),
+    "away": ("danger", "오래 자리를 비웠어요. {auto}"),
+    "hoarding": ("danger", "짐만 두고 오래 자리를 비웠어요. {auto}"),
+    "unauthorized": ("warn", "내 좌석에 다른 사람이 있어 관리자가 확인하고 있어요."),
+    "no_show": ("danger", "체크인 시간이 지났어요. 도착했다면 바로 체크인해 주세요. {auto}"),
+    "seat_unavailable": ("danger", "예약한 좌석을 지금 사용할 수 없어요. 관리자에게 문의해 주세요."),
+    "unknown": ("info", "좌석 확인 중이에요. 계속 이용하셔도 돼요."),
 }
 # 카메라 판단 불가 중에는 기준 시간을 세지 않으므로 남은 시간({left}) 없는 문장을 쓴다.
 OWN_STATUS_PAUSED = {
     "seated_unchecked": "착석이 확인됐어요. 좌석 QR로 체크인해 주세요.",
-    "away_short": "자리를 비운 상태예요(일시 이석). 자리로 돌아오시거나 반납해 주세요.",
-    "item": "짐만 두고 자리를 비운 상태예요. 자리로 돌아오시거나 반납해 주세요.",
+    "away_short": "자리를 비웠어요. 돌아오거나 반납해 주세요.",
+    "item": "짐만 두고 자리를 비웠어요. 돌아오거나 반납해 주세요.",
 }
 
 CALL_DEDUP_SEC = 60  # 같은 사용자 60초 내 중복 호출은 기존 알림 반환
@@ -81,9 +81,9 @@ def own_status(results, my, now):
         auto = (f"{_fmt_left(auto_left)} 뒤 예약이 자동으로 {'취소' if my.status == 'reserved' else '반납'}돼요."
                 if auto_left > 0 else "곧 자동으로 반납돼요.")
         if j.detail != "no_show":
-            auto = "바로 돌아가거나 반납해 주세요. " + auto
+            auto = "돌아가거나 반납해 주세요. " + auto
     else:
-        auto = "바로 돌아가거나 반납해 주세요. 관리자가 반납 처리할 수 있어요." if j.detail != "no_show" else "관리자가 예약을 취소할 수 있어요."
+        auto = "돌아가거나 반납해 주세요." if j.detail != "no_show" else "예약이 취소될 수 있어요."
     return {"detail": j.detail, "label": DETAILS[j.detail][1], "level": level,
             "message": msg.format(left=_fmt_left(left) if left is not None else "", auto=auto),
             "deadline": to_iso(j.deadline)}
@@ -118,13 +118,13 @@ def _find(results, seat_no):
     for it in results:
         if it["seat"].no == seat_no:
             return it
-    raise ApiError(404, "NOT_FOUND", "좌석을 찾을 수 없습니다.")
+    raise ApiError(404, "NOT_FOUND", "좌석을 찾을 수 없어요.")
 
 
 def _own(request, res_id):
     r = Reservation.objects.select_related("seat").filter(id=res_id).first()
     if r is None or r.user_id != request.user.id:
-        raise ApiError(404, "NOT_FOUND", "예약을 찾을 수 없습니다.")
+        raise ApiError(404, "NOT_FOUND", "예약을 찾을 수 없어요.")
     return r
 
 
@@ -140,11 +140,10 @@ def seats(request):
     layout, booths = layout_json()
     out = []
     for it in results:
-        seat, j = it["seat"], it["j"]
+        seat = it["seat"]
         row = {"no": seat.no, "label": seat.label, "x": seat.x, "y": seat.y, "zone": seat.zone,
-               "booth": seat.no in booths, "view": _seat_view(it, my, request.user.id),
-               # 좌석을 누르면 보이는 상태 이름·안내 (관리자 화면과 같은 이름). 색은 3가지로만 칠한다.
-               "state_label": DETAILS[j.detail][1], "state_msg": USER_MESSAGES.get(j.detail, "")}
+               "booth": seat.no in booths, "view": _seat_view(it, my, request.user.id)}
+        # 일반 이용자에게는 빈자리·사용중·사용불가만 알린다(왜 사용중·사용불가인지는 관리자 탭에서만).
         out.append(row)
     return jres({
         "server_time": to_iso(now), "grid": layout["grid"], "fixtures": layout["fixtures"], "zones": layout["zones"],
@@ -169,7 +168,7 @@ def seat_detail(request, no):
     it = _find(refresh(now), no)
     s = get_settings()
     my = user_active_reservation(request.user.id)
-    seat, res, j = it["seat"], it["res"], it["j"]
+    seat, res = it["seat"], it["res"]
     token = request.GET.get("t")
     if res and my and res.id == my.id:
         mode = "mine_checkin" if res.status == "reserved" else "mine_in_use"
@@ -184,8 +183,6 @@ def seat_detail(request, no):
         "view": _seat_view(it, my, request.user.id), "page_mode": mode,
         "held": it.get("offer") is not None and it["offer"].user_id != request.user.id,
         "unavailable": seat.state == "unavailable",
-        "unavailable_label": DETAILS[j.detail][1] if seat.state == "unavailable" and not res else None,
-        "unavailable_note": seat.note if seat.state == "unavailable" else None,
         "occupied": res is None and seat.state in ("occupied", "item"),  # 누군가 앉아 있거나 짐이 있음
         "qr_ok": None if not token else token_ok(token, seat),
         "my_reservation": reservation_json(my, now, s), "my_status": own_status([it], my, now),
@@ -208,21 +205,21 @@ def create_reservation(request):
         request.user.refresh_from_db(fields=["suspended_until"])
         until = request.user.suspended(now)
         if until:
-            raise ApiError(403, "SUSPENDED", f"이용 정지 중입니다. ({to_iso(until)[:16].replace('T', ' ')}까지)")
+            raise ApiError(403, "SUSPENDED", f"이용 정지 중이에요. ({to_iso(until)[:16].replace('T', ' ')}까지)")
         if user_active_reservation(request.user.id):
-            raise ApiError(409, "ALREADY_HAS_RESERVATION", "이미 이용 중인 예약이 있습니다. 반납 후 다시 예약해 주세요.")
+            raise ApiError(409, "ALREADY_HAS_RESERVATION", "이미 예약한 좌석이 있어요.")
         if it["res"]:
-            raise ApiError(409, "SEAT_TAKEN", "이미 예약된 좌석입니다.")
+            raise ApiError(409, "SEAT_TAKEN", "이미 예약된 좌석이에요.")
         if seat.state == "unavailable":
-            raise ApiError(409, "SEAT_UNAVAILABLE", "사용할 수 없는 좌석입니다.")
+            raise ApiError(409, "SEAT_UNAVAILABLE", "사용할 수 없는 좌석입니다. 관리자에게 문의해 주세요.")
         offer = it.get("offer")
         if offer is not None and offer.user_id != request.user.id:
-            raise ApiError(409, "SEAT_HELD", "빈자리 알림 대기자에게 먼저 안내된 좌석입니다. 잠시 후 다시 확인해 주세요.")
+            raise ApiError(409, "SEAT_HELD", "다른 대기자에게 먼저 안내 중인 좌석이에요.")
         ok = token_ok(qr_token, seat)
         if seat.state in ("occupied", "item") and not ok:
-            raise ApiError(409, "SEAT_OCCUPIED", "현재 다른 이용자가 사용 중인(또는 짐이 있는) 좌석입니다.")
+            raise ApiError(409, "SEAT_OCCUPIED", "다른 사용자가 사용 중인 좌석입니다.")
         if qr_token and not ok:
-            raise ApiError(403, "BAD_QR_TOKEN", "좌석 QR을 다시 스캔해 주세요.")
+            raise ApiError(403, "BAD_QR_TOKEN", "QR을 인식하지 못했어요. 좌석 QR을 다시 찍어 주세요.")
         s = get_settings()
         try:
             with transaction.atomic():
@@ -231,7 +228,7 @@ def create_reservation(request):
                     end_at=now + s.sec("default_use_min"), checked_in_at=now if ok else None,
                     source="seat_page" if ok else "map")
         except IntegrityError:
-            raise ApiError(409, "SEAT_TAKEN", "방금 다른 이용자가 예약했습니다.")
+            raise ApiError(409, "SEAT_TAKEN", "방금 다른 사용자가 예약했어요.")
         record_event(res, "reserve", now, memo="좌석 QR" if ok else "좌석 지도")
         if ok:
             record_event(res, "checkin", now, memo="좌석 QR로 바로 예약")
@@ -252,11 +249,11 @@ def checkin(request, res_id):
         refresh(now)
         r = _own(request, res_id)
         if not token_ok(body.get("qr_token"), r.seat):
-            raise ApiError(403, "BAD_QR_TOKEN", "좌석 QR을 다시 스캔해 주세요.")
+            raise ApiError(403, "BAD_QR_TOKEN", "QR을 인식하지 못했어요. 좌석 QR을 다시 찍어 주세요.")
         if r.status != "reserved":
-            raise ApiError(409, "INVALID_STATE", "체크인할 수 있는 예약이 아닙니다.")
+            raise ApiError(409, "INVALID_STATE", "체크인할 수 있는 예약이 아니에요.")
         if r.seat.state == "unavailable":
-            raise ApiError(409, "SEAT_UNAVAILABLE", "사용할 수 없는 좌석입니다. 관리자에게 좌석 이동을 요청해 주세요.")
+            raise ApiError(409, "SEAT_UNAVAILABLE", "사용할 수 없는 좌석입니다. 관리자에게 문의해 주세요.")
         r.status, r.checked_in_at = "in_use", now
         r.save(update_fields=["status", "checked_in_at"])
         record_event(r, "checkin", now, memo="좌석 QR")
@@ -293,7 +290,7 @@ def return_reservation(request, res_id):
         refresh(now)
         r = _own(request, res_id)
         if r.status not in ("reserved", "in_use"):
-            raise ApiError(409, "INVALID_STATE", "이미 종료된 예약입니다.")
+            raise ApiError(409, "INVALID_STATE", "이미 끝난 예약이에요.")
         new_status = "cancelled" if r.status == "reserved" else "returned"
         r.status, r.ended_at = new_status, now
         r.save(update_fields=["status", "ended_at"])
@@ -317,12 +314,12 @@ def create_call(request):
     memo = str_field(body, "memo")
     kind = body.get("kind") or ""
     if kind not in CALL_KINDS:
-        raise ApiError(400, "BAD_REQUEST", "알 수 없는 호출 종류입니다.")
+        raise ApiError(400, "BAD_REQUEST", "알 수 없는 호출이에요.")
     now = clock.now()
     with transaction.atomic():
         seat = Seat.objects.filter(no=seat_no, active=True).first()
         if seat is None:
-            raise ApiError(404, "NOT_FOUND", "좌석을 찾을 수 없습니다.")
+            raise ApiError(404, "NOT_FOUND", "좌석을 찾을 수 없어요.")
         if kind == "seat_taken" and not Reservation.objects.filter(
                 seat=seat, user=request.user, status__in=("reserved", "in_use")).exists():
             raise ApiError(409, "NOT_YOUR_SEAT", "내가 예약한 좌석에서만 보낼 수 있어요.")
@@ -351,12 +348,12 @@ def waitlist_join(request):
     with transaction.atomic():
         layout = load_layout()
         if zone and zone not in {st.get("zone") for st in layout["seats"]}:
-            raise ApiError(400, "BAD_REQUEST", "알 수 없는 구역입니다.")
+            raise ApiError(400, "BAD_REQUEST", "알 수 없는 구역이에요.")
         request.user.refresh_from_db(fields=["suspended_until"])
         if request.user.suspended(now):
-            raise ApiError(403, "SUSPENDED", "이용 정지 중에는 빈자리 알림을 신청할 수 없습니다.")
+            raise ApiError(403, "SUSPENDED", "이용 정지 중에는 빈자리 알림을 신청할 수 없어요.")
         if user_active_reservation(request.user.id):
-            raise ApiError(409, "ALREADY_HAS_RESERVATION", "이미 이용 중인 예약이 있습니다.")
+            raise ApiError(409, "ALREADY_HAS_RESERVATION", "이미 예약한 좌석이 있어요.")
         if WaitEntry.objects.filter(user=request.user, status__in=("waiting", "offered")).exists():
             raise ApiError(409, "ALREADY_WAITING", "이미 빈자리 알림을 기다리고 있어요.")
         WaitEntry.objects.create(user=request.user, zone=zone, created_at=now)
@@ -369,7 +366,7 @@ def _end_wait(request, status):
     with transaction.atomic():
         n = WaitEntry.objects.filter(user=request.user, status__in=("waiting", "offered")).update(status=status, ended_at=now)
         if not n:
-            raise ApiError(409, "INVALID_STATE", "기다리는 빈자리 알림이 없습니다.")
+            raise ApiError(409, "INVALID_STATE", "기다리는 빈자리 알림이 없어요.")
         refresh(now)  # 양보한 좌석은 다음 대기자에게
     return jres({"ok": True})
 

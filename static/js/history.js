@@ -51,7 +51,7 @@
         <span class="ri-used">${r.used_min ? hm(r.used_min) + " 이용" : "이용 안 함"}</span></div>
       <div class="muted small">${fmtTime(r.start_at)} 예약 · 종료 ${r.ended_at ? fmtTime(r.ended_at) : fmtTime(r.end_at) + " 예정"}${r.extend_count ? ` · 연장 ${r.extend_count}회` : ""}</div>
       <ol class="timeline">${r.events.map((e) => `<li class="ev-${esc(e.kind)}"><span class="t">${fmtTime(e.at)}</span>${esc(e.label)}${e.memo ? ` <span class="muted">(${esc(e.memo)})</span>` : ""}</li>`).join("")}</ol>
-    </li>`).join("") : `<li class="muted small">아직 이용 기록이 없습니다. 좌석 지도에서 예약해 보세요.</li>`;
+    </li>`).join("") : `<li class="muted small">아직 이용 기록이 없어요.</li>`;
   }
 
   async function loadNotices() {
@@ -60,7 +60,7 @@
     $("notice-list").innerHTML = list.length ? list.map((n) => `<li class="res-item nl-item lv-${esc(n.level)}">
       <div class="ri-head"><b>${esc(n.title)}</b><span class="ri-used muted small">${md(n.created_at)} ${fmtTime(n.created_at)}</span></div>
       ${n.body ? `<div class="small">${esc(n.body)}</div>` : ""}</li>`).join("")
-      : `<li class="muted small">받은 경고가 없습니다. 👍</li>`;
+      : `<li class="muted small">받은 경고가 없어요.</li>`;
   }
 
   $("period").addEventListener("click", (e) => {

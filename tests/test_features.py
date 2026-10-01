@@ -214,7 +214,7 @@ def test_prewarn_before_away(user, admin, clock):
     clock.advance(60)  # 장기 이석 기준(30분) 10분 전
     d = user.jget("/api/seats")
     assert notes("20260001", "prewarn") == ["A-4 좌석 사전 경고"]
-    assert d["my_status"]["detail"] == "away_short" and "장기 이석" in d["my_status"]["message"]
+    assert d["my_status"]["detail"] == "away_short" and "돌아와 주세요" in d["my_status"]["message"]
     for _ in range(3):
         clock.advance(60)
         user.get("/api/seats")

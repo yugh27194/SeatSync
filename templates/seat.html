@@ -3,7 +3,7 @@
 {% block container_class %}narrow{% endblock %}
 {% block content %}
 {% if not seat %}
-  <div class="card"><h1>좌석을 찾을 수 없습니다</h1><p class="muted">좌석 QR을 다시 스캔해 주세요.</p>
+  <div class="card"><h1>좌석을 찾을 수 없어요</h1><p class="muted">좌석 QR을 다시 찍어 주세요.</p>
   <a class="btn secondary" href="/map">좌석 지도로</a></div>
 {% else %}
 <div id="seat-root" data-no="{{ seat.no }}" data-token="{{ token }}">

@@ -7,9 +7,9 @@
 
   function render() {
     if (!r) {
-      root.innerHTML = `<div class="card seat-hero"><h1>현재 예약이 없어요</h1>
-        ${me.suspended_until ? `<div class="notice danger">이용 정지 중입니다. ${me.suspended_until.slice(5, 10)} ${fmtTime(me.suspended_until)}까지 예약할 수 없어요.</div>` : ""}
-        <p class="muted">좌석 지도에서 빈자리를 누르거나, 좌석의 QR을 스캔해 예약하세요.</p>
+      root.innerHTML = `<div class="card seat-hero"><h1>예약한 좌석이 없어요</h1>
+        ${me.suspended_until ? `<div class="notice danger">이용 정지 중이에요. ${me.suspended_until.slice(5, 10)} ${fmtTime(me.suspended_until)}까지 예약할 수 없어요.</div>` : ""}
+        <p class="muted">좌석 지도에서 빈자리를 누르거나 좌석 QR을 찍어 예약하세요.</p>
         <a class="btn" href="/map">좌석 지도로</a></div>`;
       return;
     }
@@ -24,7 +24,7 @@
         ${reserved
           ? `<p style="text-align:center;margin:0">체크인 마감까지</p>
              <div class="countdown" id="cd"></div>
-             <div class="notice warn">좌석에 붙은 QR을 스캔해 체크인하세요. 마감까지 체크인하지 않으면 '미입실'로 표시되고 관리자가 예약을 취소할 수 있어요.</div>`
+             <div class="notice warn">좌석에 붙은 QR을 찍어 체크인해 주세요. 시간 안에 체크인하지 않으면 예약이 취소될 수 있어요.</div>`
           : `<p style="text-align:center;margin:0">남은 시간</p><div class="countdown" id="cd"></div>`}
         <dl class="kv">
           <dt>시작</dt><dd>${fmtTime(r.start_at)}</dd>
@@ -42,8 +42,7 @@
         ${r.can_extend ? "" : `<p class="muted small" style="margin:8px 0 0">${esc(r.extend_reason || "")}</p>`}
         <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
         <button class="btn danger block" id="btn-taken">내 자리에 다른 사람이 앉아 있어요</button>
-        <button class="btn secondary block" id="btn-call" style="margin-top:8px">관리자 호출 (그 밖의 문제)</button>
-        <p class="muted small" style="margin:6px 0 0">예약한 좌석에 다른 분이 앉아 있으면 위 버튼을 눌러 주세요. 관리자 화면에 바로 알림이 뜹니다.</p>
+        <button class="btn secondary block" id="btn-call" style="margin-top:8px">관리자 호출</button>
         <p class="small" style="margin:10px 0 0"><a href="/history">내 이용 기록 보기 →</a></p>
       </div>`;
     bind();
@@ -68,19 +67,19 @@
     document.getElementById("btn-return").onclick = async () => {
       const reserved = r.status === "reserved";
       const ok = await modal({ title: reserved ? "예약을 취소할까요?" : "조기 반납할까요?",
-        body: `${r.seat_label} 좌석을 ${reserved ? "취소" : "반납"}합니다.`, ok: reserved ? "예약 취소" : "반납", danger: true });
+        body: `${r.seat_label} 좌석`, ok: reserved ? "예약 취소" : "반납", danger: true });
       if (!ok) return;
       try { await api("POST", `/api/reservations/${r.id}/return`); toast(reserved ? "예약을 취소했어요." : "반납했어요.", "ok"); } catch (e) { /* 토스트 */ }
       sync();
     };
     document.getElementById("btn-taken").onclick = () => SS.reportSeatTaken(r.seat_no, r.seat_label);
     document.getElementById("btn-call").onclick = async () => {
-      const memo = await modal({ title: "관리자 호출", body: "상황을 간단히 적어 주세요.", ok: "호출",
-        input: { placeholder: "예: 제 예약석에 다른 분이 앉아 계세요" } });
+      const memo = await modal({ title: "관리자 호출", ok: "호출",
+        input: { placeholder: "상황을 적어 주세요 (선택)" } });
       if (memo === false) return;
       try {
         const res = await api("POST", "/api/calls", { seat_no: r.seat_no, memo });
-        toast(res.duplicate ? "방금 호출했어요. 관리자가 확인 중입니다." : "관리자를 호출했어요.", "ok");
+        toast(res.duplicate ? "방금 호출했어요. 잠시만 기다려 주세요." : "관리자를 불렀어요.", "ok");
       } catch (e) { /* 토스트 */ }
     };
   }

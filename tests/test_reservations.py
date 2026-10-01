@@ -28,12 +28,10 @@ def test_user_sees_three_states_without_marks(user, user2):
     data = user.jget("/api/seats")
     views = {s["no"]: s["view"] for s in data["seats"]}
     assert views[1] == "available" and views[2] == "taken" and views[3] == "taken" and views[20] == "unavailable"
-    # 일반 사용자: 색은 3가지(무단 점유도 'taken'), 붉은 강조·'!'는 없고, 좌석을 누르면 상태 이름·안내가 보인다
-    assert all("attention" not in s and "detail_label" not in s for s in data["seats"])
-    seats = {s["no"]: s for s in data["seats"]}
-    assert seats[3]["state_label"] == "무단 점유" and "예약 없이" in seats[3]["state_msg"]
-    assert seats[1]["state_label"] == "빈자리" and seats[20]["state_label"] == "고장"
-    for word in ("unauthorized", "처리 필요", "확인 필요"):
+    # 일반 사용자: 색은 3가지(무단 점유도 'taken'), 왜 사용중·사용불가인지는 알려 주지 않는다
+    for s in data["seats"]:
+        assert set(s) == {"no", "label", "x", "y", "zone", "booth", "view"}
+    for word in ("unauthorized", "처리 필요", "확인 필요", "무단 점유", "고장"):
         assert word not in str(data)
 
 
@@ -142,7 +140,7 @@ def test_seat_page_modes(user, user2):
     assert d["page_mode"] == "reserve_now" and d["qr_ok"] is True
     assert user.jget("/api/seats/1?t=bad")["qr_ok"] is False
     d = user.jget("/api/seats/20")
-    assert d["page_mode"] == "unavailable" and d["unavailable_label"] == "고장" and d["unavailable_note"] == "콘센트 고장"
+    assert d["page_mode"] == "unavailable" and "고장" not in str(d)  # 사용불가 사유는 이용자에게 보이지 않는다
     assert user.jget("/api/seats/3")["occupied"] is True
     rid = reserve(user, 1).json()["id"]
     assert user.jget("/api/seats/1")["page_mode"] == "mine_checkin"

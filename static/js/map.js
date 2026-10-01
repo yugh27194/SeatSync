@@ -42,34 +42,34 @@
     const w = data.waitlist;
     const now = serverNow();
     if (!r && me.suspended_until) {
-      barEl.innerHTML = `<div class="txt"><span class="deadline">이용 정지 중</span> · ${me.suspended_until.slice(5, 10)} ${fmtTime(me.suspended_until)}까지 예약할 수 없어요.</div>`;
+      barEl.innerHTML = `<div class="txt"><span class="deadline">이용 정지 중</span> · ${me.suspended_until.slice(5, 10)} ${fmtTime(me.suspended_until)}까지 예약할 수 없어요</div>`;
       return;
     }
     if (r) {
       const txt = r.status === "reserved"
         ? (parseTs(r.checkin_deadline) > now
-          ? `<strong>${esc(r.seat_label)}</strong> · 예약됨<br><span class="deadline">${fmtRemain(parseTs(r.checkin_deadline) - now)}</span> 안에 좌석 QR로 체크인하세요`
-          : `<strong>${esc(r.seat_label)}</strong> · 예약됨<br><span class="deadline">체크인 시간이 지났어요.</span> 도착했다면 바로 좌석 QR로 체크인하세요`)
+          ? `<strong>${esc(r.seat_label)}</strong> · 예약됨<br><span class="deadline">${fmtRemain(parseTs(r.checkin_deadline) - now)}</span> 안에 좌석 QR로 체크인해 주세요`
+          : `<strong>${esc(r.seat_label)}</strong> · 예약됨<br><span class="deadline">체크인 시간이 지났어요.</span> 좌석 QR로 바로 체크인해 주세요`)
         : `<strong>${esc(r.seat_label)}</strong> · 남은 시간 <strong>${fmtRemain(parseTs(r.end_at) - now)}</strong>`;
       barEl.innerHTML = `<div class="txt">${txt}</div><a class="btn small" href="/my">내 자리 관리</a>${statusLine()}`;
       return;
     }
     if (w && w.status === "offered") {
       const left = parseTs(w.offer.expires_at) - now;
-      barEl.innerHTML = `<div class="txt"><strong>${esc(w.offer.seat_label)}</strong> 빈자리가 안내됐어요!<br>
-        <span class="deadline">${SS.fmtClock(left)}</span> 안에 예약하면 먼저 이용할 수 있어요.</div>
+      barEl.innerHTML = `<div class="txt"><strong>${esc(w.offer.seat_label)}</strong> 자리가 났어요!<br>
+        <span class="deadline">${SS.fmtClock(left)}</span> 동안 먼저 예약할 수 있어요</div>
         <div class="btn-row"><button class="btn small" data-wl="take">바로 예약</button>
         <button class="btn small secondary" data-wl="decline">양보</button></div>`;
       return;
     }
     if (w) {
       barEl.innerHTML = `<div class="txt">🔔 빈자리 알림 대기 중 · <strong>${w.position}번째</strong>${w.zone ? ` · ${esc(w.zone)}` : " · 아무 자리"}<br>
-        <span class="muted small">빈자리가 나면 ${SS.fmtMin(data.policy.hold_min)} 동안 먼저 예약할 수 있게 알려 드려요.</span></div>
+        <span class="muted small">자리가 나면 알려 드릴게요.</span></div>
         <button class="btn small secondary" data-wl="cancel">대기 취소</button>`;
       return;
     }
     const free = data.seats.filter((x) => x.view === "available").length;
-    barEl.innerHTML = `<div class="txt">${free ? "빈 좌석을 눌러 예약하세요" : "지금은 빈자리가 없어요"}</div>
+    barEl.innerHTML = `<div class="txt">${free ? "초록색 좌석을 눌러 예약하세요" : "지금은 빈자리가 없어요"}</div>
       <button class="btn small ${free ? "secondary" : ""}" data-wl="join">🔔 빈자리 알림</button>`;
   }
 
@@ -96,7 +96,7 @@
     if (kind === "join") {
       const zones = Object.keys(data.zones || {});
       const v = await modal({ title: "🔔 빈자리 알림 받기",
-        body: `빈자리가 나면 대기 순서대로 알려 드리고, ${SS.fmtMin(data.policy.hold_min)} 동안 먼저 예약할 수 있게 자리를 잡아 둡니다.\n(이 화면을 열어 두면 알림을 바로 받을 수 있어요)`,
+        body: `자리가 나면 순서대로 알려 드려요.\n알림을 받으면 ${SS.fmtMin(data.policy.hold_min)} 동안 먼저 예약할 수 있어요.`,
         fields: [{ name: "zone", label: "원하는 구역", type: "select", value: "",
           options: [{ value: "", label: "아무 자리" }].concat(zones.map((z) => ({ value: z, label: `${z} · ${data.zones[z]}` }))) }],
         ok: "알림 신청" });
@@ -121,13 +121,13 @@
   async function reserve(seat) {
     const p = data.policy;
     const ok = await modal({ title: `${seat.label} 좌석을 예약할까요?`,
-      body: `${seat.zone ? seat.zone + " · " : ""}이용 시간 ${fmtMinutes(p.default_use_min)}, ${SS.fmtMin(p.checkin_limit_min)} 안에 체크인 필요`,
+      body: `이용 시간 ${fmtMinutes(p.default_use_min)}\n예약 후 ${SS.fmtMin(p.checkin_limit_min)} 안에 좌석 QR로 체크인해 주세요.`,
       ok: "예약하기" });
     if (!ok) return;
     busy = true;
     try {
       await api("POST", "/api/reservations", { seat_no: seat.no });
-      toast(`${seat.label} 좌석을 예약했어요. 좌석 QR로 체크인해 주세요.`, "ok");
+      toast(`${seat.label} 예약 완료! 좌석 QR로 체크인해 주세요.`, "ok");
       SS.refreshNotices();
     } catch (e) { /* 토스트 표시됨 */ }
     finally { busy = false; await ticker.refresh(); }
@@ -139,14 +139,17 @@
     const seat = data.seats.find((s) => s.no === Number(btn.dataset.no));
     if (!seat) return;
     if (seat.view === "mine") { location.href = "/my"; return; }
-    if (seat.view === "held") { toast("빈자리 알림 대기자에게 먼저 안내 중인 좌석이에요. 잠시 후 다시 확인해 주세요."); return; }
+    if (seat.view === "held") { toast("다른 대기자에게 먼저 안내 중인 좌석이에요."); return; }
     if (seat.view === "available" || seat.view === "offered") {
-      if (data.my_reservation) { toast("이미 예약한 좌석이 있어요. 반납 후 다시 예약해 주세요.", "error"); return; }
+      if (data.my_reservation) { toast("이미 예약한 좌석이 있어요.", "error"); return; }
       reserve(seat);
       return;
     }
-    // 사용중·사용불가 좌석: 관리자 화면과 같은 상태 이름으로 안내 (색은 주황/회색 그대로)
-    modal({ title: `${seat.label} · ${seat.state_label}`, body: seat.state_msg || "", ok: "닫기", noCancel: true });
+    // 사용중·사용불가 좌석: 이유는 알리지 않는다
+    const msg = seat.view === "unavailable"
+      ? "사용할 수 없는 좌석입니다. 관리자에게 문의해 주세요."
+      : "다른 사용자가 사용 중인 좌석입니다.";
+    modal({ title: seat.label, body: msg, ok: "닫기", noCancel: true });
   });
 
   const ticker = poll(load, 3000);

@@ -5,10 +5,10 @@
   const { api, poll, esc } = window.SS;
   const $ = (id) => document.getElementById(id);
   const METRICS = {
-    occupancy: ["점유율", "좌석이 예약·사용중인 비율"],
-    actual: ["실사용률", "사람이 실제로 앉아 있는 비율"],
-    idle: ["유휴 점유", "자리는 차지했지만 비어 있는 비율(입실 대기·일시 이석·짐만 있음·장기 이석·사석화)"],
-    issue: ["처리 필요", "장기 이석·사석화·무단 점유·판단 불가 등 처리 필요 상태 비율"],
+    occupancy: ["점유율", "예약·사용 중인 좌석 비율"],
+    actual: ["실사용률", "실제로 사람이 앉아 있는 비율"],
+    idle: ["유휴 점유", "예약은 됐지만 비어 있는 비율"],
+    issue: ["처리 필요", "관리자 확인이 필요했던 비율"],
   };
   let data = null, metric = "occupancy";
 
@@ -25,8 +25,8 @@
     const p = Math.round(l.occupancy * 100);
     const lvl = p >= 85 ? ["high", "혼잡"] : p >= 60 ? ["mid", "보통"] : ["low", "여유"];
     $("live-card").innerHTML = `<div class="gauge ${lvl[0]}" style="--p:${p}"><div class="g-val">${p}%</div><div class="g-lbl">${lvl[1]}</div></div>
-      <div class="live-info"><b>지금 ${l.in_use}석 사용중</b> · 빈자리 ${l.available}석 (사용 가능 ${l.usable}석)
-      ${l.actual_rate != null ? `<br>실제 착석 ${l.actual}석 · 실사용률 ${Math.round(l.actual_rate * 100)}% <span class="muted small">(관리자)</span>` : ""}
+      <div class="live-info"><b>지금 ${l.in_use}석 사용 중</b> · 빈자리 ${l.available}석
+      ${l.actual_rate != null ? `<br>실제 착석 ${l.actual}석 · 실사용률 ${Math.round(l.actual_rate * 100)}% ` : ""}
       ${data.quiet ? `<br><span class="muted small">보통 가장 한산한 때: ${data.quiet.weekday}요일 ${data.quiet.hour}시</span>` : ""}</div>`;
   }
 
@@ -43,7 +43,7 @@
     }).join("");
     $("today-legend").innerHTML = admin
       ? `<span><i style="background:hsl(80 70% 70%)"></i>점유율</span><span><i style="background:rgba(20,40,80,.35)"></i>그중 실제 착석</span>`
-      : `<span class="muted small">막대 높이 = 그 시간대에 사용중이던 좌석 비율</span>`;
+      : `<span class="muted small">막대 = 시간대별 사용 중인 좌석 비율</span>`;
   }
 
   function renderHeatmap() {
@@ -59,9 +59,9 @@
     if (data.admin) {
       const avg = (grid) => { const v = grid.flat().filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0; };
       const o = avg(data.occupancy), a = avg(data.actual), i = avg(data.idle);
-      ins.push(`평균 점유율 ${pct(o)} 중 실제 착석 ${pct(a)} → 예약 대비 실사용 <b>${o ? pct(a / o) : "-"}</b>, 유휴 점유 ${pct(i)} (관리자)`);
+      ins.push(`평균 점유율 ${pct(o)} 중 실제 착석 ${pct(a)} → 예약 대비 실사용 <b>${o ? pct(a / o) : "-"}</b>, 유휴 점유 ${pct(i)}`);
     }
-    ins.push(`<span class="muted">${METRICS[metric][1]}. 셀 숫자는 %입니다.</span>`);
+    ins.push(`<span class="muted">${METRICS[metric][1]} (단위 %)</span>`);
     $("insights").innerHTML = ins.map((x) => `<li>${x}</li>`).join("");
   }
 

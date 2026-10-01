@@ -14,11 +14,11 @@
 
   function renderNotices() {
     const n = [];
-    if (data.qr_ok === false) n.push(notice("좌석 QR을 다시 스캔해 주세요. (QR 정보가 올바르지 않습니다)", "danger"));
+    if (data.qr_ok === false) n.push(notice("QR을 인식하지 못했어요. 좌석 QR을 다시 찍어 주세요.", "danger"));
     if (data.me && data.me.suspended_until && !data.my_reservation)
-      n.push(notice(`이용 정지 중입니다. ${data.me.suspended_until.slice(5, 10)} ${fmtTime(data.me.suspended_until)}까지 예약할 수 없어요.`, "danger"));
+      n.push(notice(`이용 정지 중이에요. ${data.me.suspended_until.slice(5, 10)} ${fmtTime(data.me.suspended_until)}까지 예약할 수 없어요.`, "danger"));
     if (data.unavailable && data.page_mode !== "unavailable")
-      n.push(notice("이 좌석은 현재 사용불가 상태입니다. 관리자가 좌석을 옮겨 드릴 거예요.", "warn"));
+      n.push(notice("이 좌석은 지금 사용할 수 없어요. 관리자에게 문의해 주세요.", "warn"));
     notices.innerHTML = n.join("");
   }
 
@@ -35,9 +35,9 @@
 
     let h = "";
     if (mode === "mine_checkin") {
-      h = `<h2>예약하신 좌석입니다</h2>
+      h = `<h2>예약한 좌석이에요</h2>
         <p>체크인 마감까지 <strong class="deadline" data-cd="checkin"></strong></p>
-        ${tokenOk() ? "" : notice("좌석에 붙은 QR을 스캔해야 체크인할 수 있어요.", "warn")}
+        ${tokenOk() ? "" : notice("좌석에 붙은 QR을 찍어야 체크인할 수 있어요.", "warn")}
         <button class="btn big" id="btn-checkin" ${tokenOk() ? "" : "disabled"}>체크인</button>
         <button class="btn secondary block" id="btn-taken" style="margin-top:10px">내 자리에 다른 사람이 앉아 있어요</button>`;
     } else if (mode === "mine_in_use") {
@@ -56,28 +56,24 @@
       if (r) {
         // 다른 좌석을 예약한 사람이 이 좌석 QR을 찍음 → 잘못 앉았을 수 있다
         h = `<h2>예약한 좌석은 <strong>${esc(r.seat_label)}</strong>이에요</h2>
-          ${notice(`지금 찍은 QR은 <b>${esc(data.label)}</b> 좌석이에요. 자리를 착각했다면 <b>${esc(r.seat_label)}</b> 좌석으로 가서 그 좌석 QR을 찍어 주세요.`, "warn")}
-          <p class="muted small">이 좌석을 계속 쓰고 싶다면 아래 버튼으로 바꿀 수 있어요. (${esc(r.seat_label)} ${r.status === "reserved" ? "예약은 취소" : "이용은 반납"}됩니다)</p>
+          ${notice(`지금 찍은 QR은 <b>${esc(data.label)}</b> 좌석이에요. <b>${esc(r.seat_label)}</b> 좌석의 QR을 찍어 주세요.`, "warn")}
+          <p class="muted small">이 좌석으로 바꾸면 ${esc(r.seat_label)} ${r.status === "reserved" ? "예약은 취소" : "이용은 반납"}돼요.</p>
           <button class="btn big" id="btn-switch">${esc(r.seat_label)} → ${esc(data.label)}(으)로 바꾸기</button>`;
       } else {
         const how = tokenOk()
-          ? "예약과 동시에 체크인됩니다."
-          : `좌석 QR 없이 예약하면 ${SS.fmtMin(p.checkin_limit_min)} 안에 QR로 체크인해야 해요.`;
-        h = `<h2>이 좌석을 배정받아 주세요</h2>
-          <p class="muted">앉아 계신다면 지금 바로 예약해 주세요. ${how}</p>
-          ${data.occupied && !tokenOk() ? notice("현재 다른 이용자가 앉아 있는 좌석입니다. 본인이라면 좌석 QR을 스캔해 주세요.", "warn") : ""}
+          ? "예약하면 바로 체크인돼요."
+          : `예약 후 ${SS.fmtMin(p.checkin_limit_min)} 안에 좌석 QR로 체크인해 주세요.`;
+        h = `<h2>이 좌석을 예약할까요?</h2>
+          <p class="muted">${how}</p>
+          ${data.occupied && !tokenOk() ? notice("다른 사용자가 사용 중인 좌석입니다.", "warn") : ""}
           <button class="btn big" id="btn-reserve" ${data.occupied && !tokenOk() ? "disabled" : ""}>바로 예약하기</button>`;
       }
     } else if (mode === "unavailable") {
-      const why = [data.unavailable_label, data.unavailable_note].filter(Boolean).map(esc).join(" · ");
       h = `<h2><span class="pill">사용불가</span></h2>
-        <p>지금은 사용할 수 없는 좌석입니다.${why ? ` (${why})` : ""}</p>
-        <p class="muted small">다른 빈자리를 이용해 주세요.</p>
-        <a class="btn block" href="/map">좌석 지도 보기</a>`;
+        <p>사용할 수 없는 좌석입니다. 관리자에게 문의해 주세요.</p>`;
     } else if (mode === "reserved_by_other") {
-      h = `<h2>예약된 좌석입니다</h2>
-        <p class="muted">예약자라면 본인 계정으로 로그인하세요.</p>
-        <p class="muted small">예약한 좌석에 다른 분이 앉아 계신가요? 관리자에게 알려 주세요.</p>
+      h = `<h2>다른 사용자가 예약한 좌석입니다</h2>
+        <p class="muted">빈자리는 좌석 지도에서 찾을 수 있어요. 문제가 있으면 관리자를 불러 주세요.</p>
         <button class="btn secondary block" id="btn-call">관리자 호출</button>`;
     }
     panel.innerHTML = h;
@@ -90,7 +86,7 @@
     const r = data.my_reservation, now = serverNow();
     panel.querySelectorAll("[data-cd]").forEach((el) => {
       const left = (el.dataset.cd === "checkin" ? parseTs(r.checkin_deadline) : parseTs(r.end_at)) - now;
-      el.textContent = el.dataset.cd === "end" ? fmtClock(left) : (left > 0 ? fmtRemain(left) : "시간 지남 — 지금 체크인하세요");
+      el.textContent = el.dataset.cd === "end" ? fmtClock(left) : (left > 0 ? fmtRemain(left) : "시간 지남 · 지금 체크인해 주세요");
       el.classList.toggle("low", left < 600);
     });
   }
@@ -105,30 +101,30 @@
     const r = data.my_reservation;
     const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
     on("btn-taken", () => SS.reportSeatTaken(seatNo, r.seat_label));
-    on("btn-checkin", () => act(() => api("POST", `/api/reservations/${r.id}/checkin`, { qr_token: token }), "체크인했어요. 좋은 시간 되세요!"));
+    on("btn-checkin", () => act(() => api("POST", `/api/reservations/${r.id}/checkin`, { qr_token: token }), "체크인 완료!"));
     on("btn-extend", () => act(() => api("POST", `/api/reservations/${r.id}/extend`), "이용 시간을 연장했어요."));
     on("btn-return", async () => {
-      if (await modal({ title: "반납할까요?", body: `${r.seat_label} 좌석을 반납합니다.`, ok: "반납", danger: true }))
+      if (await modal({ title: `${r.seat_label} 좌석을 반납할까요?`, ok: "반납", danger: true }))
         act(() => api("POST", `/api/reservations/${r.id}/return`), "반납했어요.");
     });
     on("btn-reserve", () => act(
       () => api("POST", "/api/reservations", token ? { seat_no: seatNo, qr_token: token } : { seat_no: seatNo }),
-      tokenOk() ? "예약·체크인 완료!" : "예약했어요. 좌석 QR로 체크인해 주세요."));
+      tokenOk() ? "예약·체크인 완료!" : "예약 완료! 좌석 QR로 체크인해 주세요."));
     on("btn-switch", async () => {
-      if (!(await modal({ title: "좌석을 바꿀까요?", body: `${r.seat_label} 좌석을 반납하고 이 좌석을 예약합니다.`, ok: "바꾸기" }))) return;
+      if (!(await modal({ title: "좌석을 바꿀까요?", body: `${r.seat_label} → ${data.label}`, ok: "바꾸기" }))) return;
       act(async () => {
         await api("POST", `/api/reservations/${r.id}/return`);
         await api("POST", "/api/reservations", token ? { seat_no: seatNo, qr_token: token } : { seat_no: seatNo });
-      }, "좌석을 변경했어요.");
+      }, "좌석을 바꿨어요.");
     });
     on("btn-call", async () => {
-      const memo = await modal({ title: "관리자 호출", body: "상황을 간단히 적어 주세요. (선택)", ok: "호출",
-        input: { placeholder: "예: 제 예약석에 다른 분이 앉아 계세요" } });
+      const memo = await modal({ title: "관리자 호출", ok: "호출",
+        input: { placeholder: "상황을 적어 주세요 (선택)" } });
       if (memo === false) return;
       act(async () => {
         const res = await api("POST", "/api/calls", { seat_no: seatNo, memo });
-        if (res.duplicate) toast("방금 호출했어요. 관리자가 확인 중입니다.");
-      }, "관리자를 호출했어요.");
+        if (res.duplicate) toast("방금 호출했어요. 잠시만 기다려 주세요.");
+      }, "관리자를 불렀어요.");
     });
   }
 

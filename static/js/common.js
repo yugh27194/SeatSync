@@ -43,9 +43,9 @@
     if (!force && document.body.dataset.admin === "1") return Promise.resolve(true);
     if (adminPrompt) return adminPrompt;
     adminPrompt = (async () => {
-      let msg = reason || "관리자 탭은 관리자만 들어갈 수 있습니다. 관리자 코드를 입력하세요.\n(이번 로그인 동안에는 다시 묻지 않습니다)";
+      let msg = reason || "관리자 코드를 입력하세요.\n로그인한 동안은 다시 묻지 않아요.";
       for (;;) {
-        const v = await modal({ title: "🔒 관리자 코드 입력", body: msg, ok: "관리자 탭 열기",
+        const v = await modal({ title: "🔒 관리자 탭", body: msg, ok: "관리자 탭 열기",
           fields: [{ name: "code", label: "관리자 코드", type: "password" }] });
         if (!v) {
           if (!stay && location.pathname.startsWith("/admin")) location.href = "/map";
@@ -76,8 +76,8 @@
     try {
       res = await fetch(url, init);
     } catch (e) {
-      if (!opts.quiet) toast("서버에 연결할 수 없습니다.", "error");
-      throw new ApiError(0, "NETWORK", "서버에 연결할 수 없습니다.");
+      if (!opts.quiet) toast("서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.", "error");
+      throw new ApiError(0, "NETWORK", "서버에 연결할 수 없어요.");
     }
     let data = null;
     try { data = await res.json(); } catch (e) { /* 본문 없음 */ }
@@ -85,7 +85,7 @@
       if (res.status === 401) {
         location.href = "/login?next=" + encodeURIComponent(location.pathname + location.search);
       }
-      const err = (data && data.error) || { code: "HTTP_" + res.status, message: "요청을 처리하지 못했습니다." };
+      const err = (data && data.error) || { code: "HTTP_" + res.status, message: "요청을 처리하지 못했어요. 다시 시도해 주세요." };
       if (!opts.quiet && err.code !== "ADMIN_REQUIRED") toast(err.message, "error");
       throw new ApiError(res.status, err.code, err.message);
     }
@@ -297,7 +297,7 @@
     const items = notices.length ? notices.map((n) => `<li class="nl-item lv-${esc(n.level)}${n.read ? "" : " unread"}">
         <div class="nl-title">${esc(n.title)}</div>${n.body ? `<div class="nl-body">${esc(n.body)}</div>` : ""}
         <div class="nl-time">${n.created_at.slice(5, 10).replace("-", "/")} ${fmtTime(n.created_at)}</div></li>`).join("")
-      : `<li class="muted small">알림이 없습니다.</li>`;
+      : `<li class="muted small">알림이 없어요.</li>`;
     back.innerHTML = `<div class="modal notice-list" role="dialog"><h3>🔔 알림</h3><ul>${items}</ul>
       <div class="btn-row"><button type="button" class="btn secondary" data-close>닫기</button></div></div>`;
     document.body.append(back);
@@ -326,12 +326,12 @@
   /** 예약자 → 관리자: "내 예약 좌석에 다른 사람이 앉아 있어요" (관리자 화면에 팝업으로 뜬다) */
   async function reportSeatTaken(seatNo, seatLabel) {
     const memo = await modal({ title: "내 자리에 다른 사람이 앉아 있어요",
-      body: `${seatLabel} 좌석에 다른 분이 앉아 있다고 관리자에게 바로 알립니다.\n직접 말하기 어렵다면 자리 근처에서 잠시 기다려 주세요.`,
-      ok: "관리자에게 알리기", input: { placeholder: "덧붙일 말 (선택) 예: 짐도 올려 두었어요" } });
+      body: `${seatLabel} 좌석 상황을 관리자에게 바로 알려요.`,
+      ok: "관리자에게 알리기", input: { placeholder: "덧붙일 말 (선택)" } });
     if (memo === false) return;
     try {
       const res = await api("POST", "/api/calls", { seat_no: seatNo, memo, kind: "seat_taken" });
-      toast(res.duplicate ? "방금 알렸어요. 관리자가 확인 중입니다." : "관리자에게 알렸어요. 곧 확인해 드릴게요.", "ok", 5000);
+      toast(res.duplicate ? "방금 알렸어요. 잠시만 기다려 주세요." : "관리자에게 알렸어요. 곧 도와드릴게요.", "ok", 5000);
     } catch (e) { /* 토스트 표시됨 */ }
   }
 
@@ -371,7 +371,7 @@
     });
     const first = fresh[0];
     const go = await modal({ alert: true, title: `📣 이용자 호출 ${fresh.length}건`, body: lines.join("\n\n"),
-      ok: `${first.seat_label} 좌석 처리하기`, cancel: "확인(나중에)" });
+      ok: `${first.seat_label} 처리하기`, cancel: "나중에" });
     ackCalls(fresh.map((a) => a.id));
     callPopupOpen = false;
     if (go) location.href = `/admin?seat=${first.seat_no}`;
