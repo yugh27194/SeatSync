@@ -12,7 +12,7 @@
   --ok: #23a05a;
 
   /* 이용자 좌석 지도 색: 옅은 회색 빈자리 · 초록 사용중 · 회색 빗금 사용불가 */
-  --v-available: #e4e8ed;  /* 빈자리: 옅은 회색 */
+  --v-available: #c5ccd4;  /* 빈자리: 옅은 회색 */
   --v-taken: #23a05a;  /* 사람이 사용 중: 초록 */
   --v-unavailable: #9aa2ac;  /* 사용불가: 회색 빗금 */
   --v-check: #de4a26;
@@ -21,7 +21,7 @@
   --c-away: #ef8414;
   --c-unauthorized: #d32f2f;
   --c-unknown: #3f4652;
-  --c-empty: #e4e8ed;
+  --c-empty: #c5ccd4;
   --c-unavailable: #9aa2ac;
   --bang: #d0101c;
 
