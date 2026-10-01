@@ -130,3 +130,33 @@ def test_signup_keeps_qr_next():
     r = c.post("/signup", {"student_no": "20269999", "name": "새이용자", "password": "pw123456",
                            "password2": "pw123456", "next": path})
     assert r.status_code == 302 and r["Location"] == path
+
+
+# ---------------------------------------------------------------- 이미 출력한 QR이 계속 쓰이는지
+
+def test_printed_qr_url_unchanged(admin, clock):
+    """예전 /admin/qr 화면에서 출력한 QR(= {접속 주소}/seat/{no}?t={토큰})과 같은 주소를 만든다."""
+    seat = Seat.objects.get(no=1)
+    legacy = f"http://testserver/seat/{seat.no}?t={seat.qr_token}"  # 예전: request.build_absolute_uri(...)
+    assert legacy in admin.get("/admin/qr").content.decode()
+    assert qr.seat_url(seat, "http://testserver") == legacy
+
+
+def test_tokens_survive_reseed_and_qr_build(clock):
+    before = dict(Seat.objects.values_list("no", "qr_token"))
+    from seats.seed import seed
+    seed(now=clock())
+    qr.build(list(Seat.objects.filter(active=True)), BASE, clock())
+    assert dict(Seat.objects.values_list("no", "qr_token")) == before
+
+
+def test_reset_keeps_tokens_helper(tmp_path):
+    import sqlite3
+
+    from seats.management.commands.init_db import saved_tokens
+    db = tmp_path / "old.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE seats_seat (no INTEGER PRIMARY KEY, qr_token TEXT)")
+        conn.executemany("INSERT INTO seats_seat VALUES (?, ?)", [(1, "aaa"), (2, "bbb")])
+    assert saved_tokens(db) == {1: "aaa", 2: "bbb"}
+    assert saved_tokens(tmp_path / "none.db") == {}
