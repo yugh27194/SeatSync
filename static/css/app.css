@@ -537,14 +537,16 @@ table.recon tr.mismatch td:first-child { box-shadow: inset 4px 0 0 var(--bang); 
 .a4-sub { font-size: 9pt; color: #5b6573; margin-top: 1mm; line-height: 1.4; }
 .a4-brand { font-size: 11pt; font-weight: 700; color: #2f6fdf; margin-top: 4mm; }
 .a4-open { display: inline-block; font-size: 12px; margin-top: 2mm; }
-@media (max-width: 860px) { .a4 { zoom: .45; } }
+.a4-card-wrap .a4 { zoom: .9; box-shadow: 0 0 0 1px var(--line); }  /* 화면에서는 카드 폭(820px)에 맞춰 조금 줄여 보여 준다 */
+@media (max-width: 860px) { .a4-card-wrap .a4 { zoom: .4; } }
 @media print {
   @page { size: A4; margin: 0; }
   .topbar, .tabs, .subtabs, .no-print, #notice-stack, #toasts { display: none !important; }
   body { background: #fff; padding: 0 !important; }
   .container { max-width: none; padding: 0; margin: 0; }
   .a4-wrap { padding: 0; overflow: visible; }
-  .a4 { box-shadow: none; zoom: 1; }
+  .a4-card-wrap { box-shadow: none; padding: 0; margin: 0; border-radius: 0; background: none; }
+  .a4, .a4-card-wrap .a4 { box-shadow: none; zoom: 1; }
 }
 
 /* ---------- 관리자 상태 분류 색 ---------- */
@@ -556,3 +558,29 @@ table.recon tr.mismatch td:first-child { box-shadow: inset 4px 0 0 var(--bang); 
 .seat.cat-unavailable { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.25) 0 6px, transparent 6px 12px); }
 .admin-map .seat .sub { font-size: 12px; font-weight: 800; }
 .admin-map .seat .sub2 { font-size: 10px; font-weight: 500; opacity: .9; line-height: 1.2; }
+
+/* ---------- 관리자 탭: 이용자 화면과 같은 한 줄(카드) 배치 ---------- */
+.stat-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.stat-tile { border-radius: 12px; padding: 10px 8px; text-align: center; background: #f4f6f9; border-top: 4px solid var(--tc, #c9cfd6); min-width: 0; }
+.stat-tile .st-num { font-size: 26px; font-weight: 800; line-height: 1.1; color: var(--tc, var(--text)); }
+.stat-tile .st-label { font-size: 14px; font-weight: 700; margin-top: 2px; white-space: nowrap; }
+.stat-tile .st-sub { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-tile.zero .st-num { opacity: .35; }
+.stat-tile.t-normal { --tc: var(--c-normal); }
+.stat-tile.t-away { --tc: var(--c-away); }
+.stat-tile.t-unauthorized { --tc: var(--c-unauthorized); }
+.stat-tile.t-unknown { --tc: var(--c-unknown); }
+.stat-tile.t-issue { --tc: var(--bang); background: #fdf0f0; }
+.admin-map .seat { min-height: 0; height: 72px; padding: 4px 2px; gap: 2px; font-size: 16px; }
+.admin-map .seat .sl { font-size: 17px; font-weight: 800; line-height: 1.1; }
+.admin-map .seat .sub { font-size: 12px; font-weight: 700; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+table.recon td:first-child { white-space: nowrap; }
+@media (max-width: 560px) {
+  .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat-tile.t-issue { grid-column: 1 / -1; }
+  .admin-map .seat { height: 64px; }
+  .admin-map .seat .sl { font-size: 15px; }
+  .admin-map .seat .sub { font-size: 11px; }
+  .hide-sm { display: none; }
+  table.recon { min-width: 0; }
+}

@@ -94,16 +94,17 @@
   // ------------------------------------------------ 렌더링
   function renderChips() {
     const c = data.categories, sm = data.summary;
-    const chip = (cls, label, n, extra) => `<span class="chip cat-${cls}${n ? "" : " zero"}">${label} <b>${n}</b>${extra || ""}</span>`;
+    // 항목 수·순서가 고정된 타일 — 값이 바뀌어도 자리가 움직이지 않는다
+    const tile = (cls, label, n, sub) => `<div class="stat-tile t-${cls}${n ? "" : " zero"}">
+      <div class="st-num">${n}</div><div class="st-label">${label}</div><div class="st-sub">${sub || "&nbsp;"}</div></div>`;
     $("chips").innerHTML =
-      chip("normal", "정상", c.normal) +
-      chip("away", "이석", c.away, c.away ? ` <span class="small">(일시 ${c.away_short} · 장기 ${c.away_long})</span>` : "") +
-      chip("unauthorized", "무단 점유", c.unauthorized) +
-      chip("unknown", "판단 불가", c.unknown) +
-      (c.unavailable ? chip("unavailable", "사용불가", c.unavailable) : "") +
-      `<span class="chip st-issue${sm.issues ? "" : " zero"}">! 관리자 확인 <b>${sm.issues}</b></span>` +
-      `<span class="chip plain">점유율 <b>${Math.round(data.live.occupancy * 100)}%</b> · 실사용 <b>${Math.round(data.live.actual_rate * 100)}%</b></span>` +
-      `<span class="chip plain${data.waiting ? "" : " zero"}">🔔 빈자리 대기 <b>${data.waiting}</b></span>`;
+      tile("normal", "정상", c.normal, "정상 이용·빈자리") +
+      tile("away", "이석", c.away, `일시 ${c.away_short} · 장기 ${c.away_long}`) +
+      tile("unauthorized", "무단 점유", c.unauthorized, "체크인 없이 감지") +
+      tile("unknown", "판단 불가", c.unknown, "카메라 인식 오류") +
+      tile("issue", "! 관리자 확인", sm.issues, "조치 목록");
+    $("live-line").textContent = `점유율 ${Math.round(data.live.occupancy * 100)}% · 실사용 ${Math.round(data.live.actual_rate * 100)}%` +
+      ` · 빈자리 대기 ${data.waiting}명` + (c.unavailable ? ` · 사용불가 ${c.unavailable}석` : "");
   }
 
   function renderMap() {
@@ -115,7 +116,7 @@
         data-no="${s.no}" style="grid-column:${s.x};grid-row:${s.y}" title="${esc(s.label)} · ${esc(s.category_label)} · ${esc(s.detail_label)}" aria-label="${esc(s.label)} ${esc(s.category_label)}${bang ? " · 관리자 확인 필요" : ""}">
         ${bang ? '<span class="bang" aria-hidden="true">!</span>' : ""}
         ${s.stale && s.category !== "unknown" ? '<span class="cam-off" title="카메라 감지 확인 불가 — 마지막 상태 표시 중">📷?</span>' : ""}
-        ${esc(s.label)}<span class="sub">${esc(s.category_label)}</span><span class="sub2">${esc(s.detail_label)}</span></button>`);
+        <span class="sl">${esc(s.label)}</span><span class="sub">${esc(s.category_label)}</span></button>`);
     }
     el.innerHTML = html.join("");
   }
@@ -235,9 +236,10 @@
       return `<tr class="${s.needs_action ? "mismatch" : ""}" data-act="select" data-seat="${s.no}" style="cursor:pointer">
         <td><b>${esc(s.label)}</b></td>
         <td>${r ? `${userLine(r.user)}<br><span class="muted small">${r.status === "reserved" ? "예약(체크인 전)" : "QR 체크인"} · ${fmtTime(r.start_at)}~${fmtTime(r.end_at)}</span>` : '<span class="muted">없음</span>'}</td>
-        <td>${camCell(s)}</td>
-        <td>${esc(s.actual_label)}</td>
-        <td><span class="statetag cat-${s.category}">${esc(s.category_label)}</span> <span class="small">${esc(s.detail_label)}</span>${s.needs_action ? ' <b class="warn-text">!</b>' : ""}</td></tr>`;
+        <td class="hide-sm">${camCell(s)}</td>
+        <td class="hide-sm">${esc(s.actual_label)}</td>
+        <td><span class="statetag cat-${s.category}">${esc(s.category_label)}</span>${s.needs_action ? ' <b class="warn-text">!</b>' : ""}
+          <div class="small muted">${esc(s.detail_label)}</div></td></tr>`;
     }).join("");
   }
 
@@ -245,9 +247,9 @@
     $("log").innerHTML = d.log.length ? d.log.map((l) => `<tr>
       <td class="small">${l.at.slice(5, 10)} ${fmtTime(l.at)}</td>
       <td><b>${esc(l.action_label)}</b></td>
-      <td>${esc(l.admin_name || (l.action === "auto_return" ? "자동" : ""))}</td>
+      <td class="hide-sm">${esc(l.admin_name || (l.action === "auto_return" ? "자동" : ""))}</td>
       <td>${esc(l.seat_label || "")}</td>
-      <td>${l.user_name ? userLine({ name: l.user_name, student_no: l.user_student_no }) : ""}</td>
+      <td class="hide-sm">${l.user_name ? userLine({ name: l.user_name, student_no: l.user_student_no }) : ""}</td>
       <td class="small">${esc(l.memo || "")}</td></tr>`).join("")
       : `<tr><td colspan="6" class="muted small">아직 처리 이력이 없습니다.</td></tr>`;
   }
@@ -443,7 +445,7 @@
     if (seat) {
       selected = Number(seat.dataset.no);
       renderMap(); renderDetail();
-      if (window.innerWidth < 960) $("detail").scrollIntoView({ behavior: "smooth", block: "start" });
+      $("detail").scrollIntoView({ behavior: "smooth", block: "start" });  // 상세는 지도 바로 아래 카드
     }
   });
 
