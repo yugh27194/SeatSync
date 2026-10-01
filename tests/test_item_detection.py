@@ -93,3 +93,17 @@ def test_turning_off_clears_camera_items_only(admin, device, clock):
     assert seat(1).state == "empty" and seat(1).state_since == since
     assert seat(5).state == "item"
     assert admin_seat(admin, 5)["has_item"] is False  # 꺼져 있으면 점은 찍지 않는다
+
+
+def test_dot_depends_only_on_item_not_person(admin, device, clock):
+    """노란 점은 사람 유무와 상관없이 짐 유무만으로 정한다."""
+    toggle(admin, True)
+    post(device, items_snapshot(clock, {"A01": ("OCCUPIED", True), "A02": ("EMPTY", True),
+                                        "A03": ("OCCUPIED", False), "A04": ("EMPTY", False),
+                                        "A05": ("UNKNOWN", True)}))  # 사람 확정 전이어도 짐이 확인되면 점
+    dots = {n: admin_seat(admin, n)["has_item"] for n in (1, 2, 3, 4, 5)}
+    assert dots == {1: True, 2: True, 3: False, 4: False, 5: True}
+    set_state(admin, 6, "item")  # 짐 정보가 없는 좌석: 관리자가 지정한 '짐만 있음'을 따름
+    assert admin_seat(admin, 6)["has_item"] is True
+    clock.advance(60)  # 카메라 끊김 → 짐 판정이 만료되면 마지막 상태만 따름
+    assert admin_seat(admin, 1)["has_item"] is False and admin_seat(admin, 2)["has_item"] is True

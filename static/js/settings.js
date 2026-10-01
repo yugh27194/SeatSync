@@ -81,7 +81,6 @@
 
   // 짐 감지 on/off: [저장]과 별개로 누르면 바로 적용된다.
   const sw = document.getElementById("item-switch");
-  const sub = document.getElementById("item-sub");
   let itemOn = false;
   function renderItem(d) {
     itemOn = d.enabled;
@@ -89,19 +88,15 @@
     sw.classList.toggle("on", itemOn);
     sw.setAttribute("aria-checked", String(itemOn));
     sw.querySelector(".tlabel").textContent = itemOn ? "ON" : "OFF";
-    sub.textContent = d.receiving ? "카메라에서 짐 정보를 받고 있어요" : "카메라가 아직 짐 정보를 보내지 않아요";
-    sub.classList.toggle("warn-text", itemOn && !d.receiving);
   }
   async function loadItem() {
-    try { renderItem(await api("GET", "/api/admin/item-detection", null, { quiet: true })); } catch (e) { sub.textContent = "불러오지 못했어요"; }
+    try { renderItem(await api("GET", "/api/admin/item-detection", null, { quiet: true })); } catch (e) { /* 스위치는 비활성으로 남는다 */ }
   }
   sw.addEventListener("click", async () => {
     const next = !itemOn;
     const ok = await modal({
       title: next ? "짐 감지를 켤까요?" : "짐 감지를 끌까요?",
-      body: next
-        ? "사람이 없고 짐만 있으면 '짐만 있음'으로 판정하고, 지도에서 짐이 있는 좌석에 노란 점을 찍어요."
-        : "사람 감지만으로 판정해요. 카메라가 정한 '짐만 있음'은 '비어 있음'으로 바뀌고 노란 점이 사라져요.",
+      body: next ? "짐이 있는 좌석을 노란 점으로 표시해요." : "노란 점 표시와 짐 판정을 멈춰요.",
       ok: next ? "켜기" : "끄기" });
     if (!ok) return;
     try {

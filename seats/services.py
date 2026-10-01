@@ -64,12 +64,14 @@ def set_item_detection(enabled, now):
 
 
 def seat_has_item(seat, on, now):
-    """지도에 노란 점(짐 있음)을 찍을지. 짐 감지가 켜져 있을 때만 — 카메라가 지금 짐을 보고 있거나 '짐만 있음' 상태."""
+    """관리자 지도에 노란 점(짐 있음)을 찍을지. 짐 감지가 켜져 있을 때만.
+    사람 유무와 상관없이 짐 유무만 본다: 카메라의 짐 판정(has_item)이 유효하면 그 값을 그대로 쓰고,
+    짐을 모를 때(카메라 끊김·짐 감지 없는 카메라)만 마지막 '짐만 있음' 상태(관리자 지정 포함)를 따른다."""
     if not on:
         return False
-    if seat.state == "item":
-        return True
-    return bool(seat.cam_item) and seat.cam_state in ("OCCUPIED", "EMPTY") and (seat.cam_valid_until or 0) >= now
+    if seat.cam_item is not None and (seat.cam_valid_until or 0) >= now:
+        return seat.cam_item
+    return seat.state == "item"
 
 
 def to_actual(seat, now):
