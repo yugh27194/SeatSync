@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SeatSync — 열람실 좌석 QR 체크인 × 카메라 감지</title>
-  <meta name="description" content="좌석 QR 체크인과 카메라 사람 감지를 비교해 정상·이석·무단 점유·판단 불가를 자동으로 판정하고, 관리자는 예외만 확인하는 열람실 좌석 관리 서비스">
+  <meta name="description" content="좌석 QR 체크인과 카메라의 사람·짐 감지를 비교해 빈자리·정상·이석·무단 점유·판단 불가를 자동으로 판정하고, 관리자는 예외만 확인하는 열람실 좌석 관리 서비스">
   <meta property="og:title" content="SeatSync">
   <meta property="og:description" content="좌석 QR 체크인 × 카메라 감지로 자동 판정하는 열람실 좌석 관리">
   <link rel="icon" href="icon.svg">
@@ -109,7 +109,9 @@
     /* 상태 분류 4가지 (관리자) */
     :root { --c-normal: #23a05a; --c-away: #ef8414; --c-unauth: #d32f2f; --c-unknown: #3f4652; }
     .s.n { background: var(--c-normal); } .s.w { background: var(--c-away); } .s.x { background: var(--c-unauth); } .s.k { background: var(--c-unknown); }
-    .s .bang2 { position: absolute; top: -6px; left: -6px; width: 18px; height: 18px; border-radius: 50%; background: var(--bang);
+    .s.e { background: #bebebe; color: #2b3240; }
+    .s .dot { position: absolute; top: 5px; left: 5px; width: 8px; height: 8px; border-radius: 50%; background: #ffd23f; box-shadow: 0 0 0 1.5px #fff; }
+    .s .bang2 { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; background: var(--bang);
       border: 2px solid #fff; font-size: 11px; line-height: 14px; text-align: center; }
     .grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 14px minmax(0, 1fr) minmax(0, 1fr); gap: 7px; }
     .flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; counter-reset: fl; }
@@ -139,8 +141,8 @@
       <div class="hero-body">
         <div>
           <h1>예약한 자리,<br><em>정말 쓰고 있나요?</em></h1>
-          <p class="lead">SeatSync는 <b>좌석 QR 체크인</b>과 카메라의 <b>사람 감지</b>를 비교해
-            좌석마다 정상·이석·무단 점유·판단 불가를 자동으로 판정합니다. 관리자는 확인이 필요한 좌석만 보면 됩니다.</p>
+          <p class="lead">SeatSync는 <b>좌석 QR 체크인</b>과 카메라의 <b>사람·짐 감지</b>를 비교해
+            좌석마다 빈자리·정상·이석·무단 점유·판단 불가를 자동으로 판정합니다. 관리자는 확인이 필요한 좌석만 보면 됩니다.</p>
           <div class="cta">
             <a class="btn primary" data-app href="#">SeatSync 바로가기 →</a>
             <a class="btn ghost" href="#flow">어떻게 판정하나요</a>
@@ -150,16 +152,17 @@
         <div class="mini" aria-hidden="true">
           <div class="bar">관리자 대시보드 · <b>! 관리자 확인 3석</b></div>
           <div class="grid2">
-            <div class="s n">A-1<small>정상</small></div><div class="s w"><span class="bang2">!</span>A-2<small>이석(장기)</small></div>
+            <div class="s n"><span class="dot"></span>A-1<small>정상</small></div><div class="s w"><span class="dot"></span><span class="bang2">!</span>A-2<small>이석</small></div>
             <div></div>
-            <div class="s w">B-1<small>이석(일시)</small></div><div class="s n">B-2<small>정상</small></div>
-            <div class="s x"><span class="bang2">!</span>A-3<small>무단 점유</small></div><div class="s n">A-4<small>정상</small></div>
+            <div class="s e">B-1<small>빈자리</small></div><div class="s n">B-2<small>정상</small></div>
+            <div class="s x"><span class="bang2">!</span>A-3<small>무단 점유</small></div><div class="s e">A-4<small>빈자리</small></div>
             <div></div>
-            <div class="s k"><span class="bang2">!</span>B-3<small>판단 불가</small></div><div class="s n">B-4<small>정상</small></div>
+            <div class="s k"><span class="bang2">!</span>B-3<small>판단 불가</small></div><div class="s w">B-4<small>이석</small></div>
           </div>
           <div class="legend">
-            <span><i style="background:var(--c-normal)"></i>정상</span><span><i style="background:var(--c-away)"></i>이석(일시·장기)</span>
+            <span><i style="background:#bebebe"></i>빈자리</span><span><i style="background:var(--c-normal)"></i>정상</span><span><i style="background:var(--c-away)"></i>이석</span>
             <span><i style="background:var(--c-unauth)"></i>무단 점유</span><span><i style="background:var(--c-unknown)"></i>판단 불가</span>
+            <span><i style="background:#ffd23f;border-radius:50%"></i>짐 있음</span>
           </div>
         </div>
       </div>
@@ -172,7 +175,7 @@
         <h2>이런 문제를 해결합니다</h2>
         <p class="sub">예약 시스템의 "예약됨"과 열람실의 실제 모습은 자주 다릅니다.</p>
         <div class="problem">
-          <div class="card"><div class="ic">🎒</div><h3>사석화 · 장기 이석</h3><p>체크인만 해 두고 오래 자리를 비우면 다른 사람이 쓰지 못합니다.</p></div>
+          <div class="card"><div class="ic">🎒</div><h3>짐만 두고 자리 비우기</h3><p>체크인하거나 짐만 놓고 오래 자리를 비우면 다른 사람이 쓰지 못합니다.</p></div>
           <div class="card"><div class="ic">🙅</div><h3>무단 점유</h3><p>예약·체크인 없이 앉아 있어 예약한 사람이 자리를 쓰지 못합니다.</p></div>
           <div class="card"><div class="ic">👀</div><h3>관리 부담</h3><p>관리자가 열람실을 계속 돌아보지 않으면 어느 자리가 문제인지 모릅니다.</p></div>
         </div>
@@ -185,20 +188,23 @@
         <p class="sub">명확한 경우는 자동으로 반영하고, 애매하거나 QR과 카메라가 어긋날 때만 관리자 확인으로 넘깁니다.</p>
         <div class="flow">
           <div class="f"><div class="ic">📱</div><b>좌석 QR 체크인</b><span>A-1 QR → A-1 체크인</span></div>
-          <div class="f"><div class="ic">📷</div><b>카메라 사람 감지</b><span>좌석마다 사람 있음/없음</span></div>
+          <div class="f"><div class="ic">📷</div><b>카메라 사람·짐 감지</b><span>좌석마다 사람·짐 있음/없음</span></div>
           <div class="f"><div class="ic">⚖️</div><b>두 정보 비교</b><span>기준 시간과 함께</span></div>
-          <div class="f"><div class="ic">🏷️</div><b>자동 판정</b><span>정상·이석·무단 점유·판단 불가</span></div>
+          <div class="f"><div class="ic">🏷️</div><b>자동 판정</b><span>빈자리·정상·이석·무단 점유·판단 불가</span></div>
           <div class="f"><div class="ic">🛠️</div><b>관리자 확인</b><span>예외 좌석만 !</span></div>
         </div>
         <table class="judge">
           <tr><th>판정</th><th>QR 체크인</th><th>카메라</th><th>처리</th></tr>
-          <tr><td><span class="pill" style="background:var(--c-normal)">정상</span></td><td>함</td><td>사람 있음</td><td>자동 반영</td></tr>
-          <tr><td><span class="pill" style="background:var(--c-away)">이석(일시)</span></td><td>함</td><td>사람 없음</td><td>자동 반영 · 기준 전 본인에게 사전 경고</td></tr>
-          <tr><td><span class="pill" style="background:var(--c-away)">이석(장기) !</span></td><td>함</td><td>오래 사람 없음</td><td>관리자 확인 · 그대로면 자동 반납</td></tr>
+          <tr><td><span class="pill" style="background:#bebebe;color:#2b3240">빈자리</span></td><td>안 함 · 예약 후 입실 전</td><td>사람 없음</td><td>예약 가능 (예약 없는 좌석은 짐만 있어도 빈자리)</td></tr>
+          <tr><td><span class="pill" style="background:var(--c-normal)">정상</span></td><td>함 · 앉고 체크인 전</td><td>사람 있음</td><td>자동 반영 — 사람이 있을 때만 초록</td></tr>
+          <tr><td><span class="pill" style="background:var(--c-away)">이석</span></td><td>함</td><td>사람 없음 (짐만 있어도)</td><td>자동 반영 · 기준 전에 본인에게 사전 경고</td></tr>
+          <tr><td><span class="pill" style="background:var(--c-away)">이석 !</span></td><td>함 · 예약 후 안 옴</td><td>오래 사람 없음</td><td>관리자 확인 · 그대로면 자동 반납/취소</td></tr>
           <tr><td><span class="pill" style="background:var(--c-unauth)">무단 점유 !</span></td><td>안 함</td><td>오래 사람 있음</td><td>관리자 확인 (예약석이면 체크인 누락)</td></tr>
           <tr><td><span class="pill" style="background:var(--c-unknown)">판단 불가 !</span></td><td>—</td><td>가림·인식 오류·카메라 꺼짐</td><td>관리자가 현장 확인 후 상태 지정</td></tr>
         </table>
-        <p class="sub" style="margin-top:10px">기준 시간은 관리자가 정합니다. 운영 기본값은 장기 이석 30분 · 무단 점유 10분 · 판단 불가 3분, 시연 모드는 1분 안팎입니다.
+        <p class="sub" style="margin-top:10px">관리자 화면에는 이 다섯 가지 상태만 보이고, "짐을 두고 오래 자리를 비웠어요", "예약 후 체크인 시간 안에 오지 않았어요"처럼
+          세부 사유는 조치 버튼 위에 한 문장으로 붙습니다.</p>
+        <p class="sub" style="margin-top:6px">기준 시간은 관리자가 정합니다. 운영 기본값은 장기 이석 30분(짐만 두고 비운 경우 포함) · 체크인 제한 15분 · 무단 점유 10분 · 판단 불가 3분, 시연 모드는 1분 안팎입니다.
           카메라 영상은 라즈베리파이 안에서만 처리하고(YOLO11n), 웹에는 좌석별 상태만 보냅니다.</p>
       </div>
     </section>
@@ -208,11 +214,11 @@
         <h2>주요 기능</h2>
         <p class="sub">이용자는 폰만으로, 관리자는 [관리자] 탭 한 곳에서.</p>
         <div class="features">
-          <div class="card"><div class="ic">🗺️</div><h3>좌석 지도<span class="who u">이용자</span></h3><p>빈자리 · 사용중 · 사용불가 세 가지 색으로 보고 바로 예약. 다른 사람의 사정은 보이지 않습니다.</p></div>
+          <div class="card"><div class="ic">🗺️</div><h3>좌석 지도<span class="who u">이용자</span></h3><p>회색 빈자리 · 초록 사용중 두 가지만 보고 바로 예약. 내 자리는 하늘색 테두리로 표시되고, 다른 사람의 사정은 보이지 않습니다.</p></div>
           <div class="card"><div class="ic">📱</div><h3>좌석 QR 체크인<span class="who u">이용자</span></h3><p>좌석에 붙은 QR을 찍으면 그 좌석에 체크인·바로 예약. 처음 왔다면 가입 후 그 좌석으로 돌아옵니다.</p></div>
-          <div class="card"><div class="ic">🙋</div><h3>내 자리에 다른 사람이?<span class="who u">이용자</span></h3><p>버튼 하나로 관리자에게 알림. 관리자 화면에 바로 팝업과 알림음이 뜹니다.</p></div>
-          <div class="card"><div class="ic">🔔</div><h3>빈자리 알림 · 사전 경고<span class="who u">이용자</span></h3><p>자리가 나면 순서대로 먼저 예약할 기회를, 자리를 오래 비우기 전에는 본인에게 먼저 알림을 줍니다.</p></div>
-          <div class="card"><div class="ic">🛠️</div><h3>관리자 대시보드<span class="who m">관리자</span></h3><p>정상·이석·무단 점유·판단 불가 4가지 색과 !로 예외만 표시. 좌석마다 처리 방법과 조치 버튼.</p></div>
+          <div class="card"><div class="ic">🔔</div><h3>알림 · 신고<span class="who u">이용자</span></h3><p>자리를 오래 비우기 전에는 본인에게 사전 경고, 자리가 나면 빈자리 알림. 내 자리에 다른 사람이 있으면 버튼 하나로 관리자 화면에 팝업.</p></div>
+          <div class="card"><div class="ic">🛠️</div><h3>관리자 대시보드<span class="who m">관리자</span></h3><p>빈자리·정상·이석·무단 점유·판단 불가 5가지 색과 !로 예외만 표시. 사유는 한 문장, 좌석마다 처리 방법과 조치 버튼.</p></div>
+          <div class="card"><div class="ic">🎒</div><h3>짐 감지<span class="who m">관리자</span></h3><p>노트북·가방·핸드백·캐리어·컵·책을 사람과 따로 감지. 판정 기준 화면에서 켜고 끄며, 켜면 짐이 있는 좌석에 노란 점(관리자 지도에만).</p></div>
           <div class="card"><div class="ic">🧾</div><h3>좌석 QR 보관함 · 이용 분석<span class="who m">관리자</span></h3><p>붙여 둔 QR을 그대로 A4 한 장으로 다시 인쇄. 실사용률·유휴 점유 분석과 판정 기준 설정.</p></div>
         </div>
       </div>
@@ -226,13 +232,13 @@
           <div class="card"><h3>내 예약석에 다른 사람이 앉아 있다</h3><ol>
             <li>[내 자리에 다른 사람이 앉아 있어요]</li><li>관리자 화면에 팝업</li><li>관리자가 현장 안내 → 내가 QR 체크인</li></ol></div>
           <div class="card"><h3>체크인하고 오래 자리를 비웠다</h3><ol>
-            <li>이석(일시) → 본인에게 사전 경고</li><li>기준 시간이 지나면 이석(장기) !</li><li>그대로면 자동 반납</li></ol></div>
+            <li>이석 → 본인에게 사전 경고</li><li>기준 시간이 지나면 이석 ! (짐이 있으면 "짐을 두고 자리 비움")</li><li>그대로면 자동 반납</li></ol></div>
           <div class="card"><h3>자리를 착각해 다른 좌석에 앉았다</h3><ol>
             <li>그 좌석 QR: "예약한 좌석은 A-1이에요"</li><li>A-1로 가거나 [바꾸기]</li><li>관리자가 예약을 옮기고 바로 체크인도 가능</li></ol></div>
         </div>
         <div class="more">
           <span>예약만 하고 오지 않음</span><span>연장하고 싶음</span><span>시간이 끝났는데 계속 앉음</span><span>짐만 두고 식사</span>
-          <span>빈자리 알림</span><span>같은 좌석 동시 예약</span><span>QR 사진으로 대신 체크인</span><span>좌석 고장</span>
+          <span>빈자리 알림</span><span>같은 좌석 동시 예약</span><span>QR 사진으로 대신 체크인</span><span>가방만 두고 체크인 안 함</span>
           <span>카메라 가림</span><span>카메라 꺼짐</span><span>반복 위반 → 이용 정지</span><span>처음 온 사람</span><span>자리 옮기기</span>
         </div>
         <p class="sub" style="margin-top:10px">전체 흐름: <a data-repo-path="docs/SCENARIOS.md" href="#">상황별 처리 흐름 문서</a></p>
@@ -259,7 +265,7 @@
 
   <footer>
     <div class="wrap">
-      SeatSync · 열람실 좌석 QR 체크인 × 카메라 감지 ·
+      SeatSync · 열람실 좌석 QR 체크인 × 카메라 사람·짐 감지 ·
       <a data-repo href="#">GitHub 저장소</a> ·
       감지 프로토타입 <a href="https://github.com/Seojieun05/SKKU_MakerHackerton">SKKU_MakerHackerton</a>
     </div>
