@@ -83,3 +83,19 @@ def test_four_categories_on_admin_map(layout8, admin):
     }
     c = d["categories"]
     assert (c["normal"], c["away"], c["away_short"], c["away_long"], c["unauthorized"], c["unknown"]) == (2, 3, 1, 2, 1, 1)
+
+
+def test_empty_seats_are_separate_from_normal(layout8, admin, user):
+    """빈자리(옅은 회색)는 사람이 이용 중인 정상(초록)과 따로 분류한다. 예약 후 입실 전도 빈자리 쪽."""
+    from conftest import qr_token
+    seed(now=T0)
+    from seats.scenarios import setup_scenario
+    setup_scenario("reset", T0)
+    assert user.jpost("/api/reservations", {"seat_no": 1, "qr_token": qr_token(1)}).status_code == 201  # A-1 이용 중
+    login_b = __import__("conftest").login(__import__("conftest").ApiClient(), "userB")
+    assert login_b.jpost("/api/reservations", {"seat_no": 2}).status_code == 201  # A-2 예약만
+    d = admin.jget("/api/admin/seats")
+    cats = {s["label"]: (s["category"], s["category_label"]) for s in d["seats"]}
+    assert cats["A-1"] == ("normal", "정상")
+    assert cats["A-2"] == ("empty", "입실 대기") and cats["A-3"] == ("empty", "빈자리")
+    assert (d["categories"]["normal"], d["categories"]["empty"]) == (1, 7)

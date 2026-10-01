@@ -69,7 +69,7 @@
       return;
     }
     const free = data.seats.filter((x) => x.view === "available").length;
-    barEl.innerHTML = `<div class="txt">${free ? "초록색 좌석을 눌러 예약하세요" : "지금은 빈자리가 없어요"}</div>
+    barEl.innerHTML = `<div class="txt">${free ? "회색 빈자리를 눌러 예약하세요" : "지금은 빈자리가 없어요"}</div>
       <button class="btn small ${free ? "secondary" : ""}" data-wl="join">🔔 빈자리 알림</button>`;
   }
 

@@ -104,13 +104,13 @@
     const tile = (cls, label, n, sub) => `<div class="stat-tile t-${cls}${n ? "" : " zero"}">
       <div class="st-num">${n}</div><div class="st-label">${label}</div><div class="st-sub">${sub || "&nbsp;"}</div></div>`;
     $("chips").innerHTML =
-      tile("normal", "정상", c.normal, "정상 이용·빈자리") +
+      tile("normal", "정상", c.normal, "사람이 이용 중") +
       tile("away", "이석", c.away, `일시 ${c.away_short} · 장기 ${c.away_long}`) +
       tile("unauthorized", "무단 점유", c.unauthorized, "체크인 없이 감지") +
       tile("unknown", "판단 불가", c.unknown, "카메라 인식 오류") +
       tile("issue", "! 관리자 확인", sm.issues, "조치 목록");
     $("live-line").textContent = `점유율 ${Math.round(data.live.occupancy * 100)}% · 실사용 ${Math.round(data.live.actual_rate * 100)}%` +
-      ` · 빈자리 대기 ${data.waiting}명` + (c.unavailable ? ` · 사용불가 ${c.unavailable}석` : "");
+      ` · 빈자리 ${c.empty}석 · 빈자리 대기 ${data.waiting}명` + (c.unavailable ? ` · 사용불가 ${c.unavailable}석` : "");
   }
 
   function renderMap() {

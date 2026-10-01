@@ -153,10 +153,13 @@ ISSUES = [k for k, v in DETAILS.items() if v[2]]
 CHECK = frozenset(ISSUES) | {"away_short", "item"}
 UNAVAILABLE_REASONS = ("broken", "maintenance", "blocked")
 
-# 관리자 화면의 상태 분류 4가지(+사용불가): 정상(초록) · 이석(주황, 일시/장기) · 무단 점유(빨강) · 판단 불가(짙은 회색)
-CATEGORIES = {"normal": "정상", "away": "이석", "unauthorized": "무단 점유", "unknown": "판단 불가", "unavailable": "사용불가"}
+# 관리자 화면의 상태 분류 4가지: 정상(초록, 사람이 있음) · 이석(주황, 일시/장기) · 무단 점유(빨강) · 판단 불가(짙은 회색)
+# + 빈자리(옅은 회색, 아무도 없음 — 예약 후 입실 전 포함) · 사용불가(회색 빗금)
+CATEGORIES = {"normal": "정상", "away": "이석", "unauthorized": "무단 점유", "unknown": "판단 불가",
+              "empty": "빈자리", "unavailable": "사용불가"}
 _CATEGORY_OF = {
-    "empty": "normal", "using": "normal", "waiting": "normal", "detected": "normal", "seated_unchecked": "normal",
+    "empty": "empty", "waiting": "empty",
+    "using": "normal", "detected": "normal", "seated_unchecked": "normal",
     "away_short": "away", "item": "away", "away": "away", "hoarding": "away", "no_show": "away",
     "unauthorized": "unauthorized", "no_checkin": "unauthorized",
     "unknown": "unknown",
@@ -170,6 +173,8 @@ def category(detail):
     cat = _CATEGORY_OF[detail]
     if cat == "away":
         return cat, "이석(장기)" if detail in AWAY_LONG else "이석(일시)"
+    if detail == "waiting":
+        return cat, "입실 대기"
     return cat, CATEGORIES[cat]
 
 
