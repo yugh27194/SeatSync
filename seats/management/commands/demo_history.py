@@ -6,7 +6,7 @@ from ...sample import generate_history
 
 
 class Command(BaseCommand):
-    help = "지난 N주 샘플 이력 생성 (관리자 화면의 [샘플 이력 생성] 버튼과 같음)"
+    help = "지난 N주 샘플 이력 생성 (콘솔 전용 — 서버를 처음 만들 때는 init_db --sample)"
 
     def add_arguments(self, parser):
         parser.add_argument("--weeks", type=int, default=4)

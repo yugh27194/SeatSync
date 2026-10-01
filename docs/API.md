@@ -2,7 +2,7 @@
 
 - 요청·응답은 JSON, 시각은 ISO 8601(+09:00). DB에는 UTC epoch 초로 저장한다.
 - 브라우저 API(`/api/…`)는 로그인 세션 쿠키 + CSRF 토큰(`X-CSRFToken` 헤더)을 사용한다.
-- 관리자 API(`/api/admin/…`)는 **관리자 모드**(관리자 코드로 켬)가 켜져 있어야 한다. 꺼져 있으면 `403 ADMIN_REQUIRED`.
+- 관리자 API(`/api/admin/…`)는 이 세션에서 **관리자 코드**를 통과해야 한다(관리자 탭 첫 진입 때 한 번, 로그아웃 전까지 유지). 아니면 `403 ADMIN_REQUIRED`.
 - 디바이스 API(`/api/detections`, `/api/device/config`)는 `X-Device-Key` 헤더로 인증하고 CSRF 검사에서 제외된다.
 
 ## 에러 형식
@@ -26,7 +26,7 @@
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| GET | `/api/seats` | 좌석 지도: 배치(grid·fixtures·zones), 좌석별 `view`(available·taken·unavailable·mine·offered·held), 내 예약, 내 좌석 상태 안내(`my_status`), 빈자리 대기(`waitlist`), 지금 혼잡도(`live`). 관리자 모드면 좌석별 `attention`(처리 필요)·`detail_label` 추가 |
+| GET | `/api/seats` | 좌석 지도: 배치(grid·fixtures·zones), 좌석별 `view`(available·taken·unavailable·mine·offered·held), 내 예약, 내 좌석 상태 안내(`my_status`), 빈자리 대기(`waitlist`), 지금 혼잡도(`live`). 관리자 확인 표시는 넣지 않는다(→ `/api/admin/seats`) |
 | GET | `/api/seats/{no}?t={qr_token}` | 좌석 QR 페이지: `page_mode`(mine_checkin·mine_in_use·reserve_now·reserved_by_other·unavailable), `qr_ok`, `occupied`, `held` |
 | POST | `/api/reservations` | `{seat_no, qr_token?}` 예약. 올바른 QR 토큰이면 예약과 동시에 체크인 |
 | POST | `/api/reservations/{id}/checkin` | `{qr_token}` 좌석 QR 체크인 |
@@ -39,21 +39,20 @@
 | GET | `/api/me/reservations` | 최근 예약 30건과 이력(예약·체크인·연장·반납…) |
 | GET | `/api/me/notifications` | 내 알림 40건, 안 읽은 수 |
 | POST | `/api/me/notifications/read` | `{ids?}` 읽음 처리 (생략하면 전부) |
-| GET | `/api/congestion` | 지금 혼잡도, 오늘 시간대별, 요일×시간 점유율 히트맵. 관리자 모드면 실사용률·유휴 점유·처리 필요 추가 |
+| GET | `/api/congestion[?scope=admin]` | 지금 혼잡도, 오늘 시간대별, 요일×시간 점유율 히트맵. `scope=admin`(관리자 탭 이용 분석, 관리자 코드 통과 세션)이면 실사용률·유휴 점유·처리 필요 추가 |
 
-## 관리자 모드
-
-| 메서드 | 경로 | 설명 |
-|---|---|---|
-| GET | `/api/admin-mode` | 현재 관리자 모드 여부 |
-| POST | `/api/admin-mode/unlock` | `{code}` 관리자 모드 켜기 (틀리면 `BAD_ADMIN_CODE`, 5회 실패 시 `ADMIN_LOCKED`) |
-| POST | `/api/admin-mode/lock` | 관리자 모드 끄기 |
-
-## 관리자 API (관리자 모드 필요)
+## 관리자 탭 권한
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| GET | `/api/admin/seats` | 좌석별 좌석 상태·세부 상태·처리 필요·경과/마감(`deadline`·`next_label`: 마감 때 바뀔 상태)·현장 상태·카메라 정보·예약자·빈자리 안내, 요약, 부여 가능한 세부 상태 목록 |
+| GET | `/api/admin-mode` | 이 세션이 관리자 코드를 통과했는지 |
+| POST | `/api/admin-mode/unlock` | `{code}` 관리자 코드 확인 → 세션 동안 관리자 탭 허용 (틀리면 `BAD_ADMIN_CODE`, 5회 실패 시 `ADMIN_LOCKED`) |
+
+## 관리자 API (관리자 코드 통과 세션)
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/api/admin/seats` | 좌석별 상태 분류(`category`: normal·away·unauthorized·unknown·unavailable, `category_label`: 정상·이석(일시)·이석(장기)·무단 점유·판단 불가)·좌석 상태·세부 상태·처리 필요·경과/마감(`deadline`·`next_label`: 마감 때 바뀔 상태)·현장 상태·카메라 정보·예약자·빈자리 안내, 요약, 부여 가능한 세부 상태 목록 |
 | POST | `/api/admin/seats/{no}/state` | `{detail, note?}` 세부 상태 부여: empty·using·item·unauthorized·away·hoarding·broken·maintenance·blocked |
 | POST | `/api/admin/seats/{no}/feedback` | `{verdict: correct\|wrong, correct_detail?, apply?, memo?}` 판정 피드백 |
 | GET | `/api/admin/feedback` | 판정 정확도(전체·출처별·상태별), 자주 틀리는 판정, 최근 피드백, 카메라 탐지 점수 평균 |
@@ -68,7 +67,6 @@
 | GET | `/api/admin/log` | 처리 이력 |
 | GET/PUT | `/api/admin/settings` | 판정·운영 기준값 |
 | GET | `/api/admin/stats?date=YYYY-MM-DD` | 시간대별 이용·장기 이석·사석화·무단 점유 누적 |
-| POST | `/api/admin/demo` · `/api/admin/demo-history` | 시연 상황 배치 · 샘플 이력 생성 `{weeks}` |
 
 ## 디바이스 API (`X-Device-Key`)
 
@@ -77,10 +75,11 @@
 | POST | `/api/detections` | 감지 결과 수신 — 감지 프로토타입 스냅샷(`schema_version: 1`) 또는 occupancy 형식. 자세한 형식은 [DATA_FLOW.md](DATA_FLOW.md#3-메시지-형식) |
 | GET | `/api/device/config?camera_id=` | 카메라 좌석 ID ↔ 웹 좌석 대응표, 권장 전송 주기 |
 
-### 좌석 QR 인쇄 (화면, 관리자 모드)
+### 관리자 탭 화면
 
-| 메서드 | 경로 | 설명 |
-|---|---|---|
-| GET | `/admin/qr` | 좌석 QR 화면: 저장된 인쇄 파일 목록·미리보기, 화면용 QR |
-| POST | `/admin/qr` | `base_url` 폼 값으로 인쇄 파일을 새로 만든다 → 저장 폴더(`SEATSYNC_QR_DIR`, 기본 `qr/`) |
-| GET | `/admin/qr/files/{name}[?download=1]` | 저장 파일 내려받기: `seats_A4.pdf`, `seats_A4.png`, `seat_{no}.png` (manifest에 있는 파일만) |
+| 경로 | 설명 |
+|---|---|
+| `/admin` | 대시보드 |
+| `/admin/qr` | 좌석 QR 보관함 — 좌석에 붙여 둔 QR을 그대로 A4 한 장으로 보기·인쇄 (GET만, QR을 만들거나 바꾸지 않음) |
+| `/admin/congestion` | 이용 분석 (실사용률·유휴 점유·처리 필요) |
+| `/admin/settings` | 판정 기준 |

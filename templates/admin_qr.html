@@ -1,68 +1,28 @@
 {% extends "base.html" %}
-{% block title %}좌석 QR{% endblock %}
+{% block title %}좌석 QR 보관함{% endblock %}
 {% block content %}
 <div class="toolbar no-print">
-  <h1 style="margin:0">좌석 QR</h1>
+  <h1 style="margin:0">좌석 QR 보관함</h1>
+  <span class="spacer"></span>
+  <button type="button" class="btn small" onclick="window.print()">A4로 인쇄</button>
 </div>
-
-<div class="card no-print">
-  <h2>인쇄용 QR 파일</h2>
-  <p class="muted small" style="margin-top:0">
-    좌석마다 QR 하나를 만듭니다. <b>A-1 QR을 찍으면 A-1 좌석 페이지</b>가 열리고, 로그인한 뒤 그 좌석에
-    <b>[체크인]</b>(내 예약 좌석) 또는 <b>[바로 예약하기]</b>(빈자리 — 예약과 동시에 체크인)를 할 수 있습니다.
-    QR 안에는 좌석마다 다른 비밀 토큰이 있어, 좌석에 직접 가야만 체크인할 수 있습니다.
-  </p>
-  <div class="notice">좌석 토큰은 바뀌지 않으므로 <b>이미 출력해 붙인 QR은 그대로 쓰면 됩니다.</b>
-    파일을 다시 만들어도 같은 주소면 QR 내용은 똑같습니다.</div>
-  {% if built %}<div class="notice ok">QR 파일을 새로 만들었습니다. 아래에서 내려받아 인쇄하세요.</div>{% endif %}
-  {% if error %}<div class="notice danger">{{ error }}</div>{% endif %}
-  {% if outdated %}
-  <div class="notice warn"><b>저장된 QR이 지금 좌석 정보와 다릅니다.</b> 다시 만들어 인쇄하세요.
-    <span class="small">({{ outdated|join:", " }})</span></div>
-  {% endif %}
-  <form method="post" action="/admin/qr" class="qr-build">
-    {% csrf_token %}
-    <label for="base_url">QR에 넣을 서비스 주소</label>
-    <input id="base_url" name="base_url" type="url" value="{{ base_url }}" placeholder="https://jiyujin.pythonanywhere.com" required>
-    {% if local_host %}<p class="small warn-text" style="margin:4px 0 0">localhost 주소는 폰에서 열 수 없습니다. 실제 서비스 주소로 바꾸세요.</p>{% endif %}
-    <div class="btn-row" style="margin-top:10px">
-      <button type="submit" class="btn">{% if manifest %}QR 파일 다시 만들기{% else %}QR 파일 만들기{% endif %}</button>
-    </div>
-  </form>
-
-  {% if manifest %}
-  <div class="section-title">저장된 파일</div>
-  <p class="muted small" style="margin:0 0 8px">
-    {{ generated_at }} 생성 · {{ manifest.seats|length }}석 · 주소 <code>{{ manifest.base_url }}</code><br>
-    저장 폴더: <code>{{ qr_dir }}</code>
-    {% if not manifest.korean_font %}<br>서버에 한글 글꼴이 없어 카드 안내 문구는 영문(SCAN TO CHECK IN)으로 들어갔습니다.{% endif %}
-  </p>
-  <div class="btn-row">
-    <a class="btn" href="/admin/qr/files/seats_A4.pdf?download=1">A4 한 장 PDF 내려받기</a>
-    <a class="btn secondary" href="/admin/qr/files/seats_A4.pdf" target="_blank" rel="noopener">PDF 열어서 인쇄</a>
-    <a class="btn secondary" href="/admin/qr/files/seats_A4.png?download=1">A4 이미지(PNG)</a>
-  </div>
-  <p class="muted small" style="margin:8px 0">인쇄할 때 배율은 <b>실제 크기(100%)</b>로 두세요. 점선을 따라 잘라 각 좌석에 붙입니다.</p>
-  <img class="qr-sheet" src="/admin/qr/files/seats_A4.png" alt="A4 인쇄 미리보기">
-  <div class="section-title">좌석별 이미지</div>
-  <div class="btn-row">
-    {% for r in manifest.seats %}<a class="btn small secondary" href="/admin/qr/files/{{ r.file }}?download=1">{{ r.label }}</a>{% endfor %}
-  </div>
-  {% endif %}
+<div class="notice no-print">
+  <b>좌석에 붙여 둔 QR과 똑같은 QR입니다.</b> 이 화면은 QR을 새로 만들거나 바꾸지 않고, 각 좌석에 저장된 QR을 그대로 보여 줍니다.
+  QR이 떨어지거나 훼손된 좌석이 있으면 이 화면을 <b>A4 한 장</b>으로 인쇄해 다시 붙이면 됩니다.
+  (인쇄 배율 <b>100%</b>, 점선을 따라 자르기) · 좌석마다 비밀 토큰이 들어 있으니 관리자만 보세요.
 </div>
-
-<div class="card">
-  <h2 class="no-print">화면으로 시험하기</h2>
-  <div class="notice no-print">
-    인쇄 전에 <b>이 화면(노트북·태블릿)에 띄운 QR을 이용자 폰 카메라로 찍어</b> 체크인·바로 예약을 시험할 수 있습니다.
-    좌석마다 비밀 토큰이 들어 있으니 관리자만 보세요.
-  </div>
-  <div class="qr-grid">
+<div class="a4-wrap">
+  <div class="a4" aria-label="A4 인쇄 미리보기">
     {% for c in cards %}
-    <div class="qr-card">
-      <div class="qr-label">{{ c.seat.label }}</div>
-      <div class="qr-img">{{ c.svg|safe }}</div>
-      <a class="small no-print" href="{{ c.url }}" target="_blank" rel="noopener">이 기기에서 열기 →</a>
+    <div class="a4-card">
+      <div class="a4-qr">{{ c.svg|safe }}</div>
+      <div class="a4-text">
+        <div class="a4-label">{{ c.seat.label }}</div>
+        <div class="a4-guide">좌석 QR 체크인</div>
+        <div class="a4-sub">로그인 후 찍으면<br>이 좌석에 체크인돼요</div>
+        <div class="a4-brand">SeatSync</div>
+        <a class="a4-open no-print" href="{{ c.url }}" target="_blank" rel="noopener">이 기기에서 열기 →</a>
+      </div>
     </div>
     {% empty %}
     <p class="muted">좌석이 없습니다.</p>

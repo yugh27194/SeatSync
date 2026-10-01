@@ -1,8 +1,8 @@
 {% extends "base.html" %}{% load static %}
-{% block title %}혼잡도{% endblock %}
+{% block title %}{% if admin_view %}이용 분석{% else %}혼잡도{% endif %}{% endblock %}
 {% block container_class %}mid{% endblock %}
 {% block content %}
-<div class="toolbar"><h1 style="margin:0">혼잡도</h1><span class="spacer"></span><span class="muted small" id="updated"></span></div>
+<div class="toolbar"><h1 style="margin:0">{% if admin_view %}이용 분석 <span class="muted small">(실사용률·유휴 점유·처리 필요)</span>{% else %}혼잡도{% endif %}</h1><span class="spacer"></span><span class="muted small" id="updated"></span></div>
 <div class="card live-card" id="live-card"><p class="muted">불러오는 중…</p></div>
 <div class="card">
   <h2>오늘 시간대별</h2>

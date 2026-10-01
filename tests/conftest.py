@@ -46,11 +46,10 @@ def clock():
 
 
 @pytest.fixture(autouse=True)
-def seeded(db, settings, clock, tmp_path):
+def seeded(db, settings, clock):
     settings.PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]  # 테스트 속도용
     # 테스트는 20석 배치(tests/seats20.json)로 돌린다. 실제 배치(config/seats.json)는 test_layout8.py에서 따로 확인
-    settings.SEATSYNC = {**settings.SEATSYNC, "DEVICE_KEY": DEVICE_KEY, "ADMIN_CODE": ADMIN_CODE, "SEATS_FILE": SEATS20,
-                         "QR_DIR": tmp_path / "qr", "PUBLIC_URL": ""}
+    settings.SEATSYNC = {**settings.SEATSYNC, "DEVICE_KEY": DEVICE_KEY, "ADMIN_CODE": ADMIN_CODE, "SEATS_FILE": SEATS20}
     authmod._fails.clear()
     seed(now=T0)
 
@@ -83,7 +82,7 @@ def user_b():
 
 @pytest.fixture
 def admin():
-    """관리자 계정은 없다: 일반 사용자(테스트5)로 로그인한 뒤 관리자 모드를 켠다."""
+    """관리자 계정은 없다: 일반 사용자(테스트5)로 로그인한 뒤 관리자 코드로 관리자 탭 권한을 얻는다."""
     c = login(ApiClient(), "20260005")
     r = c.jpost("/api/admin-mode/unlock", {"code": ADMIN_CODE})
     assert r.status_code == 200, r.json()

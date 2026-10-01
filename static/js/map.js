@@ -1,11 +1,10 @@
 /* /map — 실시간 좌석 지도 (3초 polling). 초록 빈자리 · 주황 사용중 · 회색 사용불가.
-   확인 필요(붉은 강조 + !)는 관리자 모드에서만 보인다. */
+   관리자 확인이 필요한 요소는 [관리자] 탭에만 있다. */
 (function () {
   "use strict";
   const { api, layoutGrid, poll, fmtRemain, fmtTime, syncClock, serverNow, parseTs, toast, modal, esc } = window.SS;
   const mapEl = document.getElementById("seatmap");
   const barEl = document.getElementById("mybar");
-  const attnBar = document.getElementById("attn-bar");
   let data = null;
   let busy = false;
 
@@ -19,16 +18,13 @@
   }
 
   function renderMap() {
-    const admin = data.me.admin;
     const html = [layoutGrid(mapEl, data, 56)];
     for (const s of data.seats) {
-      const attn = admin && s.attention;
       const sub = SUB[s.view];
       html.push(
-        `<button type="button" class="seat v-${s.view}${s.booth ? " booth" : ""}${attn ? " check" : ""}" data-no="${s.no}"
-          style="grid-column:${s.x};grid-row:${s.y}" title="${esc(s.zone || "")}${attn ? ` · 확인 필요: ${esc(s.detail_label)}` : ""}"
-          aria-label="${esc(s.label)} ${esc(sub)}${attn ? " · 확인 필요" : ""}">
-          ${attn ? '<span class="bang" aria-hidden="true">!</span>' : ""}
+        `<button type="button" class="seat v-${s.view}${s.booth ? " booth" : ""}" data-no="${s.no}"
+          style="grid-column:${s.x};grid-row:${s.y}" title="${esc(s.zone || "")}"
+          aria-label="${esc(s.label)} ${esc(sub)}">
           ${esc(s.label)}</button>`
       );
     }
@@ -84,16 +80,7 @@
     const pct = Math.round(l.occupancy * 100);
     const lvl = pct >= 85 ? "high" : pct >= 60 ? "mid" : "low";
     el.innerHTML = `<span class="live-dot ${lvl}"></span>지금 <b>${pct}%</b> 사용중 · 빈자리 <b>${l.available}</b>석 / ${l.usable}석
-      ${l.actual_rate != null ? ` · 실사용 ${Math.round(l.actual_rate * 100)}%` : ""} <a href="/congestion">혼잡도 보기 →</a>`;
-  }
-
-  function renderAttention() {
-    if (!attnBar) return;
-    const list = data.me.admin ? data.seats.filter((s) => s.attention) : [];
-    attnBar.classList.toggle("hidden", !list.length);
-    if (list.length) {
-      document.getElementById("attn-text").textContent = `확인 필요 ${list.length}석 · ${list.map((s) => s.label).join(", ")}`;
-    }
+      <a href="/congestion">혼잡도 보기 →</a>`;
   }
 
   async function load() {
@@ -101,7 +88,6 @@
     syncClock(data.server_time);
     renderMap();
     renderBar();
-    renderAttention();
     renderLive();
   }
 
@@ -152,7 +138,6 @@
     if (!btn || !data || busy) return;
     const seat = data.seats.find((s) => s.no === Number(btn.dataset.no));
     if (!seat) return;
-    if (data.me.admin && seat.view !== "mine") { location.href = "/admin?seat=" + seat.no; return; }
     if (seat.view === "mine") { location.href = "/my"; return; }
     if (seat.view === "held") { toast("빈자리 알림 대기자에게 먼저 안내 중인 좌석이에요. 잠시 후 다시 확인해 주세요."); return; }
     if (seat.view === "available" || seat.view === "offered") {

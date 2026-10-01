@@ -26,16 +26,15 @@ seats/                    핵심 앱
   analytics.py            내 이용 기록 집계, 혼잡도·실사용률 히트맵, 판정 정확도
   models.py               User, Seat, Camera, Reservation, ReservationEvent, WaitEntry, Notification,
                           JudgmentFeedback, Alert, AdminLog, StatusLog, SeatState, Setting
-  auth.py                 로그인 데코레이터, 관리자 모드(코드·잠금·만료)
-  middleware.py           요청마다 관리자 모드 판단, API 에러 변환, DB 준비 확인
+  auth.py                 로그인 데코레이터, 관리자 탭 권한(코드·잠금, 세션 동안 유지)
+  middleware.py           요청마다 관리자 권한 판단, API 에러 변환, DB 준비 확인
   views/                  pages · accounts · api_user · api_admin · api_device
   seed.py / sample.py     초기 데이터 / 샘플 이력 생성
   clock.py / timeutil.py  현재 시각(테스트에서 교체) / KST 변환(Windows 시간대 DB 없을 때 +09:00 대체)
-  management/commands/    init_db · demo · demo_history · serve
+  management/commands/    init_db(--sample: 시연용 샘플 1회) · demo · demo_history · serve
 templates/ static/        화면(Django 템플릿), CSS·JS
 config/seats.json         좌석 8석 배치·구역·카메라 대응표·시연 상황
 tools/                    pi_bridge.py(Pi→웹) · simulate.py
-seats/qr.py               좌석 QR 인쇄 파일(좌석별 PNG·A4 PDF) → qr/ (manage.py make_qr, /admin/qr)
 deploy/ docs/             배포 스크립트 · 문서
 tests/                    pytest
 ```
@@ -66,7 +65,7 @@ erDiagram
 | `WaitEntry` | 빈자리 알림 대기 (waiting → offered → fulfilled/expired/declined) |
 | `Notification` | 본인 계정 알림 (사전 경고, 처리 필요 전환, 경고·정지, 빈자리 안내). `dedup_key`로 같은 사안 1회만 |
 | `JudgmentFeedback` | 관리자 판정 피드백(맞음/틀림, 실제 상태, 판정 출처, 탐지 점수) |
-| `AdminLog` | 관리자 조치 이력(처리자 = 관리자 모드를 켠 사용자) |
+| `AdminLog` | 관리자 조치 이력(처리자 = 관리자 코드를 통과한 사용자) |
 | `Camera` | 카메라별 연결 상태(health, 감지 범위, 마지막 수신, 시계 차이) |
 | `Setting` | 판정·운영 기준값 (관리자 화면에서 수정) |
 
@@ -112,12 +111,13 @@ flowchart LR
 - 알림은 처리 필요 상태로 **전이할 때만** 생성 → 관리자가 처리 완료한 뒤 같은 상태가 이어져도 다시 뜨지 않는다.
 - 예약이 끝나면(반납·만료·강제 반납·미입실) 관리자 확인 표시(`mark`)를 지운다 → 반납 뒤 남은 짐은 무단 점유 기준 시간 뒤 무단 점유가 된다.
 
-## 6. 인증과 관리자 모드
+## 6. 인증과 관리자 탭
 
 - 로그인: Django 인증(`AbstractBaseUser`, 학번이 아이디), 세션 쿠키, 모든 POST에 CSRF 검사.
-- **관리자 계정 없음**: 로그인한 사용자가 상단 스위치를 켜고 관리자 코드(`SEATSYNC_ADMIN_CODE`)를 입력하면 세션에 `admin_until` 기록.
-  마지막 사용 후 60분 뒤·스위치 끔·로그아웃 시 꺼진다. 코드 5회 실패 시 사용자별 5분 잠금(서버 메모리, 쿠키로 우회 불가).
-- 일반 사용자 응답에는 처리 필요 여부·세부 상태를 넣지 않는다. 관리자 모드일 때만 `attention`·`detail_label`을 포함한다.
+- **관리자 계정 없음**: 로그인한 사용자가 [관리자] 탭을 처음 누르면 팝업으로 관리자 코드(`SEATSYNC_ADMIN_CODE`)를 받고,
+  맞으면 세션에 `admin_ok` 기록 → 로그아웃 전까지 다시 묻지 않는다. 코드 5회 실패 시 사용자별 5분 잠금(서버 메모리, 쿠키로 우회 불가).
+- 관리자 개입이 필요한 표시·기능은 `/admin…` 화면과 `/api/admin/…`에만 있다. 일반 화면 API(`/api/seats` 등)는
+  관리자 코드를 통과한 세션이어도 처리 필요 여부·세부 상태를 넣지 않는다.
 - 외부 공유: 터널·호스팅 주소를 `CSRF_TRUSTED_ORIGINS`에 등록, HTTPS 전용 배포는 `SEATSYNC_HTTPS=1`(보안 쿠키).
 
 ## 7. 주요 기능 구현
@@ -145,7 +145,7 @@ flowchart LR
 | `/admin` | 관리자 대시보드 — 지도(좌석명만)·상태 지정(빈자리/예약/사용중/사용불가)·조치·조치 목록·예약 대조·카메라 한 표·처리 이력·통계 | admin.js (3초) |
 | `/admin/settings` | 기준값 설정 | settings.js |
 
-공통(`common.js`): API 호출(CSRF 헤더, 관리자 권한 필요 시 코드 입력 후 재시도), polling(탭이 숨겨지면 멈춤), 모달, 알림 벨·배너, 관리자 모드 스위치, 배치도 그리드.
+공통(`common.js`): API 호출(CSRF 헤더, 관리자 권한 필요 시 코드 입력 후 재시도), polling(탭이 숨겨지면 멈춤), 모달, 알림 벨·배너, [관리자] 탭 코드 팝업, 배치도 그리드(좌석만).
 
 ## 9. 테스트
 
@@ -157,8 +157,8 @@ flowchart LR
 | test_reservations.py | 예약·체크인·연장·반납·QR·정지·CSRF |
 | test_refresh.py | 전이 기록·알림 생성/해소·장기 이석/사석화·예약 종료 시 표시 해제 |
 | test_admin.py | 세부 상태 부여·상황별 조치·경고/정지·시연 배치 |
-| test_admin_mode.py | 관리자 모드·잠금·만료·외부 출처 CSRF |
+| test_admin_mode.py | 관리자 탭 코드 팝업·세션 유지·잠금·일반 화면에 관리자 요소 없음·외부 출처 CSRF |
 | test_features.py | 내 기록·혼잡도·빈자리 대기·판정 피드백·사전 경고 |
 | test_camera.py | 감지 프로토타입 스냅샷 수신·대응표·판단 불가·시계 보정·브리지 |
-| test_qr.py | 좌석 QR 인쇄 파일(A4 PDF·좌석별 PNG) 생성·관리자 전용 내려받기·QR → 로그인 → 체크인 |
+| test_qr.py | 좌석 QR 보관함(기존 QR 그대로·토큰 불변·관리자 전용)·QR → 로그인 → 체크인 |
 | test_detections.py · test_stats.py | occupancy 형식 수신 · 시간대별 통계·시간대 대체 |

@@ -10,6 +10,6 @@ echo "[2/4] 패키지 설치"
 "$VENV/bin/pip" install -q --upgrade pip
 "$VENV/bin/pip" install -q -r requirements.txt
 echo "[3/4] DB 준비"
-"$VENV/bin/python" manage.py init_db
+"$VENV/bin/python" manage.py init_db --sample   # 시연용 샘플(4주 이용 기록 + 시연 상황)은 처음 한 번만
 echo "[4/4] 웹 앱 설정 (API 토큰 필요)"
 "$VENV/bin/python" deploy/pythonanywhere_deploy.py "$@"

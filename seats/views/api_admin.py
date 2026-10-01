@@ -10,9 +10,9 @@ from ..http import ApiError, int_field, jres, json_body, str_field
 from .. import analytics
 from ..models import AdminLog, Alert, Camera, JudgmentFeedback, Reservation, Seat, Setting, User, WaitEntry
 from ..services import (clear_marks, compute_hourly_stats, get_settings, log_admin, notify, record_event, refresh,
-                        set_seat_state, setup_demo)
-from ..status import (ACTUAL_STATES, ALERT_TYPE_LABELS, ASSIGN_GROUPS, ASSIGNABLE, DEFAULT_SETTINGS, DETAILS,
-                      SEAT_STATES, SETTINGS_META, TIME_KEYS, TIME_STEP, fmt_min)
+                        set_seat_state)
+from ..status import (ACTUAL_STATES, ALERT_TYPE_LABELS, ASSIGN_GROUPS, ASSIGNABLE, AWAY_LONG, CATEGORIES,
+                      DEFAULT_SETTINGS, DETAILS, SEAT_STATES, SETTINGS_META, TIME_KEYS, TIME_STEP, category, fmt_min)
 from ..timeutil import to_iso, tz
 from .api_user import layout_json
 
@@ -21,9 +21,9 @@ ACTION_LABELS = {
     "resolve": "처리 완료", "seat_state": "좌석 상태 지정", "assign": "대리 예약", "checkin": "대리 체크인",
     "move": "좌석 이동", "extend": "관리자 연장", "force_return": "강제 반납", "warn": "경고 부여",
     "unwarn": "경고 취소", "suspend": "이용 정지", "unsuspend": "정지 해제", "demo": "시연 상황 배치",
-    "settings": "설정 변경", "admin_on": "관리자 모드 켬", "admin_off": "관리자 모드 끔", "admin_locked": "관리자 코드 잠금",
+    "settings": "설정 변경", "admin_on": "관리자 탭 입장(코드 확인)", "admin_off": "관리자 모드 끔", "admin_locked": "관리자 코드 잠금",
     "notice": "사전 경고 발송", "feedback": "판정 피드백", "demo_history": "샘플 이력 생성", "auto_return": "자동 강제 반납",
-    "qr_build": "좌석 QR 파일 생성",
+    "qr_build": "좌석 QR 파일 생성", "sample_init": "시연용 샘플 생성(서버 초기화)",
 }
 RES_STATUS = {"reserved": "예약(입실 전)", "in_use": "이용 중"}
 
@@ -94,17 +94,24 @@ def seats(request):
     summary = {k: 0 for k in SEAT_STATES}
     summary["issues"] = 0
     summary["checks"] = 0
+    cats = {k: 0 for k in CATEGORIES}
+    cats["away_short"] = cats["away_long"] = 0
     out = []
     for it in results:
         seat, j, res = it["seat"], it["j"], it["res"]
         summary[j.seat_state] += 1
         summary["issues"] += j.needs_action
         summary["checks"] += j.check
+        cat, cat_label = category(j.detail)
+        cats[cat] += 1
+        if cat == "away":
+            cats["away_long" if j.detail in AWAY_LONG else "away_short"] += 1
         out.append({
             "no": seat.no, "label": seat.label, "x": seat.x, "y": seat.y, "zone": seat.zone, "booth": seat.no in booths,
             "seat_state": j.seat_state, "seat_state_label": SEAT_STATES[j.seat_state],
             "detail": j.detail, "detail_label": DETAILS[j.detail][1], "detail_desc": DETAILS[j.detail][3],
             "needs_action": j.needs_action, "check": j.check,
+            "category": cat, "category_label": cat_label,  # 정상 · 이석(일시/장기) · 무단 점유 · 판단 불가 · 사용불가
             "since": to_iso(j.since), "elapsed_sec": max(0, now - j.since),
             "deadline": to_iso(j.deadline), "deadline_sec": (j.deadline - now) if j.deadline else None,
             "next_label": DETAILS[j.next_detail][1] if j.next_detail else None,
@@ -124,7 +131,7 @@ def seats(request):
         })
     return jres({
         "server_time": to_iso(now), "grid": layout["grid"], "fixtures": layout["fixtures"], "zones": layout["zones"],
-        "summary": summary, "seats": out, "settings": s.as_dict(), "live": analytics.live_usage(results),
+        "summary": summary, "categories": cats, "seats": out, "settings": s.as_dict(), "live": analytics.live_usage(results),
         "waiting": WaitEntry.objects.filter(status="waiting").count(),
         "assign": {"groups": [{"state": g, "label": SEAT_STATES[g], "items": [
             {"code": c, "label": DETAILS[c][1], "needs": ASSIGNABLE[c][3], "issue": DETAILS[c][2]} for c in codes]}
@@ -466,17 +473,6 @@ def admin_log(request):
     } for r in rows]})
 
 
-# ---------------------------------------------------------------- 시연 상황 배치
-
-@require_POST
-@admin_required
-def demo(request):
-    now = clock.now()
-    msgs = setup_demo(now)
-    log_admin(request.user.id, "demo", now, memo=f"{len(msgs)}개 좌석 배치")
-    return _ok(messages=msgs)
-
-
 # ---------------------------------------------------------------- 설정
 
 def _settings_json(s):
@@ -603,20 +599,6 @@ def feedback_list(request):
 
 
 # ---------------------------------------------------------------- 샘플 이력 생성
-
-@require_POST
-@admin_required
-def demo_history(request):
-    from ..sample import generate_history
-    now = clock.now()
-    body = json_body(request)
-    weeks = int_field(body, "weeks", required=False) or 4
-    if not 1 <= weeks <= 8:
-        raise ApiError(400, "BAD_REQUEST", "weeks는 1~8이어야 합니다.")
-    n = generate_history(now, weeks=weeks)
-    log_admin(request.user.id, "demo_history", now, memo=f"{weeks}주 · 예약 {n}건")
-    return _ok(reservations=n)
-
 
 # ---------------------------------------------------------------- 카메라 연결 상태
 

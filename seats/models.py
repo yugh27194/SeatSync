@@ -148,8 +148,8 @@ class Alert(models.Model):
 
 
 class AdminLog(models.Model):
-    """관리자 처리 이력 (경고·정지·관리자 모드 켜고 끄기 포함)."""
-    admin = models.ForeignKey(User, null=True, on_delete=models.SET_NULL, related_name="+")  # 관리자 모드를 켠 사용자
+    """관리자 처리 이력 (경고·정지·관리자 탭 입장 포함)."""
+    admin = models.ForeignKey(User, null=True, on_delete=models.SET_NULL, related_name="+")  # 관리자 코드를 통과한 사용자
     action = models.CharField(max_length=20)
     seat = models.ForeignKey(Seat, null=True, on_delete=models.SET_NULL, related_name="+")
     reservation_id = models.BigIntegerField(null=True)

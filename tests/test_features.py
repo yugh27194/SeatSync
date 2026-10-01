@@ -69,11 +69,13 @@ def test_no_show_counted(user, clock):
 
 def test_congestion_user_vs_admin(user, admin, clock):
     reserve(user, 1, qr_token(1))
-    clock.advance(50 * 60)  # 관리자 모드는 60분 무사용 시 꺼지므로 그 전에 확인
+    clock.advance(50 * 60)
     d = user.jget("/api/congestion")
     assert d["days"][0] == "월" and d["hours"][0] == 6 and d["hours"][-1] == 23
     assert "actual" not in d and "idle" not in d and "actual_rate" not in d["live"]
-    a = admin.jget("/api/congestion")
+    assert "actual" not in user.jget("/api/congestion?scope=admin")  # 관리자 코드 전에는 scope=admin도 무시
+    assert "actual" not in admin.jget("/api/congestion")  # 혼잡도 탭은 관리자여도 일반 화면
+    a = admin.jget("/api/congestion?scope=admin")  # 관리자 탭 [이용 분석]
     assert {"occupancy", "actual", "idle", "issue"} <= a.keys() and "actual_rate" in a["live"]
     assert a["live"]["in_use"] == 3  # A-1 예약 + 초기 배분 A-3(무단 점유)·A-5(이용 중)
 
@@ -278,19 +280,31 @@ def test_pages_render(user, admin):
 
 
 def test_sample_history_generator(admin, clock):
-    r = admin.jpost("/api/admin/demo-history", {"weeks": 1})
-    assert r.status_code == 200 and r.json()["reservations"] > 50
+    from seats.sample import generate_history
+    assert admin.jpost("/api/admin/demo-history", {"weeks": 1}).status_code == 404  # 웹에서는 만들 수 없다
+    assert generate_history(clock(), weeks=1) > 50
     d = login(ApiClient(), "userA").jget("/api/me/history?period=day")
     assert d["summary"]["total_min"] > 0
     c = admin.jget("/api/congestion")
     assert c["peak"] is not None and c["peak"]["rate"] > 0
-    assert admin.jpost("/api/admin/demo-history", {"weeks": 20}).status_code == 400
 
 
 def test_sample_history_with_active_reservations(admin, clock):
     # 지금 예약 중인 좌석·사용자가 있어도 샘플 이력 생성이 실패하지 않아야 한다
     from seats.models import ACTIVE, Reservation
-    assert admin.jpost("/api/admin/demo", {}).status_code == 200
+    from seats.sample import generate_history
+    from seats.services import setup_demo
+    setup_demo(clock())
     assert Reservation.objects.filter(status__in=ACTIVE).exists()
-    r = admin.jpost("/api/admin/demo-history", {"weeks": 4})
-    assert r.status_code == 200 and r.json()["reservations"] > 50
+    assert generate_history(clock(), weeks=4) > 50
+
+
+def test_init_db_sample_only_once(clock):
+    """시연용 샘플은 서버를 처음 만들 때 init_db --sample로 한 번만 만든다."""
+    from django.core.management import call_command
+    from seats.models import AdminLog, Reservation
+    call_command("init_db", "--sample")
+    n = Reservation.objects.count()
+    assert n > 50 and AdminLog.objects.filter(action="sample_init").count() == 1
+    call_command("init_db", "--sample")
+    assert Reservation.objects.count() == n and AdminLog.objects.filter(action="sample_init").count() == 1

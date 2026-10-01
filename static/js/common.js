@@ -39,22 +39,21 @@
 
   let adminPrompt = null;
   /** "관리자 권한이 필요합니다." → 관리자 코드 입력 → 해금. 성공하면 true. 동시에 여러 번 불려도 창은 하나. */
-  function requireAdmin(reason, force) {
+  function requireAdmin(reason, force, stay) {
     if (!force && document.body.dataset.admin === "1") return Promise.resolve(true);
     if (adminPrompt) return adminPrompt;
     adminPrompt = (async () => {
-      let msg = reason || "관리자 코드를 입력하면 관리자 모드가 켜집니다.";
+      let msg = reason || "관리자 탭은 관리자만 들어갈 수 있습니다. 관리자 코드를 입력하세요.\n(이번 로그인 동안에는 다시 묻지 않습니다)";
       for (;;) {
-        const v = await modal({ title: "🔒 관리자 권한이 필요합니다.", body: msg, ok: "관리자 모드 켜기",
+        const v = await modal({ title: "🔒 관리자 코드 입력", body: msg, ok: "관리자 탭 열기",
           fields: [{ name: "code", label: "관리자 코드", type: "password" }] });
         if (!v) {
-          if (location.pathname.startsWith("/admin")) location.href = "/map";
+          if (!stay && location.pathname.startsWith("/admin")) location.href = "/map";
           return false;
         }
         try {
           await apiOnce("POST", "/api/admin-mode/unlock", { code: v.code }, { quiet: true });
           document.body.dataset.admin = "1";
-          toast("관리자 모드를 켰습니다.", "ok");
           return true;
         } catch (e) {
           if (e.code === "ADMIN_LOCKED") { toast(e.message, "error", 5000); return false; }
@@ -217,7 +216,7 @@
     });
   }
 
-  /** 좌석 지도 그리드: 열 크기, 행 크기(좌석 행은 크게, 창문·통로·테이블 행은 얇게), 구조물 HTML */
+  /** 좌석 지도 그리드: 좌석만 그린다. 좌석이 없는 열·행(구역 사이 간격)은 좁게. 구조물(fixtures)이 있으면 함께 그린다. */
   function layoutGrid(el, data, colMin) {
     const g = data.grid;
     const rows = [];
@@ -228,28 +227,28 @@
       else if (kinds.some((k) => k !== "aisle")) rows.push(kinds.includes("table") ? "30px" : "40px");
       else rows.push("12px");
     }
-    el.style.gridTemplateColumns = `repeat(${g.cols}, minmax(${colMin || 56}px, 1fr))`;
+    const cols = [];
+    for (let c = 1; c <= g.cols; c++) {
+      cols.push(data.seats.some((s) => s.x === c) || data.fixtures.some((f) => f.x <= c && c < f.x + (f.w || 1))
+        ? `minmax(${colMin || 56}px, 1fr)` : "24px");
+    }
+    el.style.gridTemplateColumns = cols.join(" ");
     el.style.gridTemplateRows = rows.join(" ");
     return data.fixtures.map((f) => `<div class="fixture fx-${esc(f.kind || "etc")}"
       style="grid-column:${f.x} / span ${f.w || 1};grid-row:${f.y} / span ${f.h || 1}">${esc(f.label)}</div>`).join("");
   }
 
-  /** 상단 [관리자] 스위치: 켜면 관리자 코드 입력, 끄면 즉시 일반 사용자 화면으로 */
-  function bindAdminToggle() {
-    const sw = document.getElementById("admin-toggle");
-    if (!sw) return;
-    sw.addEventListener("click", async () => {
-      const on = sw.getAttribute("aria-checked") === "true";
-      if (on) {
-        try { await apiOnce("POST", "/api/admin-mode/lock", {}, {}); } catch (e) { return; }
-        document.body.dataset.admin = "";
-        location.href = location.pathname.startsWith("/admin") ? "/map" : location.pathname + location.search;
-      } else if (await requireAdmin()) {
-        location.reload();
-      }
+  /** [관리자] 탭: 이 세션에서 처음이면 관리자 코드를 묻고, 맞으면 관리자 탭으로 들어간다. 한 번 통과하면 다시 묻지 않는다. */
+  function bindAdminTab() {
+    const tab = document.getElementById("admin-tab");
+    if (!tab) return;
+    tab.addEventListener("click", async (e) => {
+      if (document.body.dataset.admin === "1") return;  // 이미 통과한 세션 → 그대로 이동
+      e.preventDefault();
+      if (await requireAdmin(null, false, true)) location.href = "/admin";
     });
   }
-  document.addEventListener("DOMContentLoaded", bindAdminToggle);
+  document.addEventListener("DOMContentLoaded", bindAdminTab);
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

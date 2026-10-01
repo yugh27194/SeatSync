@@ -93,12 +93,15 @@
 
   // ------------------------------------------------ 렌더링
   function renderChips() {
-    const sm = data.summary;
+    const c = data.categories, sm = data.summary;
+    const chip = (cls, label, n, extra) => `<span class="chip cat-${cls}${n ? "" : " zero"}">${label} <b>${n}</b>${extra || ""}</span>`;
     $("chips").innerHTML =
-      `<span class="chip st-available">빈자리 <b>${sm.available}</b></span>` +
-      `<span class="chip st-in_use">사용중 <b>${sm.in_use}</b></span>` +
-      `<span class="chip st-unavailable">사용불가 <b>${sm.unavailable}</b></span>` +
-      `<span class="chip st-issue${sm.checks ? "" : " zero"}">! 확인 필요 <b>${sm.checks}</b></span>` +
+      chip("normal", "정상", c.normal) +
+      chip("away", "이석", c.away, c.away ? ` <span class="small">(일시 ${c.away_short} · 장기 ${c.away_long})</span>` : "") +
+      chip("unauthorized", "무단 점유", c.unauthorized) +
+      chip("unknown", "판단 불가", c.unknown) +
+      (c.unavailable ? chip("unavailable", "사용불가", c.unavailable) : "") +
+      `<span class="chip st-issue${sm.issues ? "" : " zero"}">! 관리자 확인 <b>${sm.issues}</b></span>` +
       `<span class="chip plain">점유율 <b>${Math.round(data.live.occupancy * 100)}%</b> · 실사용 <b>${Math.round(data.live.actual_rate * 100)}%</b></span>` +
       `<span class="chip plain${data.waiting ? "" : " zero"}">🔔 빈자리 대기 <b>${data.waiting}</b></span>`;
   }
@@ -107,12 +110,12 @@
     const el = $("admin-map");
     const html = [layoutGrid(el, data, 52)];
     for (const s of data.seats) {
-      const check = s.check;
-      html.push(`<button type="button" class="seat st-${s.seat_state}${s.booth ? " booth" : ""}${check ? " check" : ""}${selected === s.no ? " selected" : ""}"
-        data-no="${s.no}" style="grid-column:${s.x};grid-row:${s.y}" title="${esc(s.label)} · ${esc(s.seat_state_label)} · ${esc(s.detail_label)}" aria-label="${esc(s.label)} ${esc(s.seat_state_label)}${check ? " · 확인 필요" : ""}">
-        ${check ? '<span class="bang" aria-hidden="true">!</span>' : ""}
-        ${s.stale ? '<span class="cam-off" title="카메라 감지 확인 불가 — 마지막 상태 표시 중">📷?</span>' : ""}
-        ${esc(s.label)}</button>`);
+      const bang = s.needs_action;  // ! = 관리자 확인 필요
+      html.push(`<button type="button" class="seat cat-${s.category}${s.booth ? " booth" : ""}${bang ? " check" : ""}${selected === s.no ? " selected" : ""}"
+        data-no="${s.no}" style="grid-column:${s.x};grid-row:${s.y}" title="${esc(s.label)} · ${esc(s.category_label)} · ${esc(s.detail_label)}" aria-label="${esc(s.label)} ${esc(s.category_label)}${bang ? " · 관리자 확인 필요" : ""}">
+        ${bang ? '<span class="bang" aria-hidden="true">!</span>' : ""}
+        ${s.stale && s.category !== "unknown" ? '<span class="cam-off" title="카메라 감지 확인 불가 — 마지막 상태 표시 중">📷?</span>' : ""}
+        ${esc(s.label)}<span class="sub">${esc(s.category_label)}</span><span class="sub2">${esc(s.detail_label)}</span></button>`);
     }
     el.innerHTML = html.join("");
   }
@@ -139,11 +142,11 @@
     const r = s.reservation;
 
     let sitHtml;
-    if (s.check) {
+    if (s.check || s.category !== "normal") {
       let when = `${fmtRemain(s.elapsed_sec)}째`;
       if (s.deadline_sec != null && s.next_label) when += ` · ${fmtRemain(s.deadline_sec)} 뒤 '${s.next_label}'`;
       const guide = s.detail === "item" ? GUIDE[r ? "item_res" : "item_nores"] : GUIDE[s.detail];
-      sitHtml = `<div class="situation-box i-${s.detail}"><b>! ${esc(s.seat_state_label)} · ${esc(s.detail_label)}</b> · 확인 필요 · ${when}
+      sitHtml = `<div class="situation-box i-${s.detail}"><b>${s.needs_action ? "! " : ""}${esc(s.category_label)} · ${esc(s.detail_label)}</b>${s.needs_action ? " · 관리자 확인 필요" : ""} · ${when}
         <p class="sit-desc">${esc(s.detail_desc)}</p>
         ${guide ? `<p class="sit-guide"><b>처리 방법</b> ${esc(guide)}</p>` : ""}
         <div class="btn-row" style="margin-top:8px">${recommended(s.detail, s, s.alert_id)}
@@ -151,7 +154,7 @@
     } else {
       let msg = s.detail_desc || "";
       if (s.deadline_sec != null && s.next_label) msg = `${fmtRemain(s.deadline_sec)} 뒤 '${s.next_label}'`;
-      sitHtml = `<div class="situation-box ok"><b>${esc(s.seat_state_label)} · ${esc(s.detail_label)}</b>${msg ? " — " + esc(msg) : ""}</div>`;
+      sitHtml = `<div class="situation-box ok"><b>${esc(s.category_label)} · ${esc(s.detail_label)}</b>${msg ? " — " + esc(msg) : ""}</div>`;
     }
 
     let resHtml;
@@ -174,7 +177,7 @@
         ${s.actual !== "unavailable" ? `<div class="btn-row">${btn("assign", "대리 예약·배정", { seat: s.no, checkin: s.actual === "occupied" ? 1 : 0 })}</div>` : ""}`;
     }
 
-    el.innerHTML = `<h2>${esc(s.label)} <span class="statetag st-${s.seat_state}">${esc(s.seat_state_label)}</span>
+    el.innerHTML = `<h2>${esc(s.label)} <span class="statetag cat-${s.category}">${esc(s.category_label)}</span>
         <span class="muted small">${esc(s.zone || "")}</span></h2>
       ${sitHtml}
       ${s.camera ? `<p class="small cam-line" style="margin:6px 0 0">📷 ${esc(s.camera.camera_id)}·${esc(s.camera.camera_seat)}
@@ -229,12 +232,12 @@
   function renderRecon() {
     $("recon").innerHTML = data.seats.map((s) => {
       const r = s.reservation;
-      return `<tr class="${s.check ? "mismatch" : ""}" data-act="select" data-seat="${s.no}" style="cursor:pointer">
+      return `<tr class="${s.needs_action ? "mismatch" : ""}" data-act="select" data-seat="${s.no}" style="cursor:pointer">
         <td><b>${esc(s.label)}</b></td>
         <td>${r ? `${userLine(r.user)}<br><span class="muted small">${r.status === "reserved" ? "예약(체크인 전)" : "QR 체크인"} · ${fmtTime(r.start_at)}~${fmtTime(r.end_at)}</span>` : '<span class="muted">없음</span>'}</td>
         <td>${camCell(s)}</td>
         <td>${esc(s.actual_label)}</td>
-        <td><span class="statetag st-${s.seat_state}">${esc(s.seat_state_label)}</span>${s.check ? ` <b class="warn-text">! ${esc(s.detail_label)}</b>` : ""}</td></tr>`;
+        <td><span class="statetag cat-${s.category}">${esc(s.category_label)}</span> <span class="small">${esc(s.detail_label)}</span>${s.needs_action ? ' <b class="warn-text">!</b>' : ""}</td></tr>`;
     }).join("");
   }
 
@@ -443,25 +446,6 @@
       if (window.innerWidth < 960) $("detail").scrollIntoView({ behavior: "smooth", block: "start" });
     }
   });
-
-  $("btn-demo").onclick = async () => {
-    const ok = await modal({ title: "시연 상황 배치",
-      body: "현재 예약을 모두 취소하고 미해결 알림을 정리한 뒤,\n사용자A·B·C·테스트 계정으로 좌석에 다양한 상황을 만듭니다.\n(config/seats.json의 demo 목록: 정상 이용, 장기 이석, 무단 점유, 착석 감지, 짐만 있음, 사석화, 판단 불가, 고장 등)",
-      ok: "배치", danger: true });
-    if (!ok) return;
-    seen = null; // 배치로 생긴 알림은 배너로 띄우지 않는다
-    const res = await run(() => api("POST", "/api/admin/demo"), "시연 상황을 배치했습니다.");
-    if (res) console.info(res.messages.join("\n"));
-  };
-
-  $("btn-sample").onclick = async () => {
-    const ok = await modal({ title: "샘플 이력 생성",
-      body: "지난 4주 동안의 예약·이용·상태 기록을 샘플로 만듭니다.\n'내 기록'과 '혼잡도' 화면을 시연할 때 쓰세요. (실제 데이터와 섞이니 시연용 DB에서만 사용)",
-      ok: "생성" });
-    if (!ok) return;
-    const res = await run(() => api("POST", "/api/admin/demo-history", { weeks: 4 }));
-    if (res) toast(`샘플 이력 생성 완료 · 예약 ${res.reservations}건`, "ok");
-  };
 
   // ------------------------------------------------ 카메라 연결 상태
   async function loadCameras() {

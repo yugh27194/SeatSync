@@ -1,14 +1,10 @@
 """HTML 화면. 데이터는 각 화면의 JS가 API로 polling한다."""
-from urllib.parse import urlparse
-
-from django.http import FileResponse, Http404
 from django.shortcuts import redirect, render
 from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.http import require_GET
 
-from .. import clock, qr
 from ..auth import admin_required, login_required
 from ..models import Seat
-from ..services import log_admin
 
 
 def index(request):
@@ -48,51 +44,22 @@ def admin_settings_page(request):
     return render(request, "admin_settings.html")
 
 
+@require_GET
 @ensure_csrf_cookie
 @admin_required
 def admin_qr_page(request):
-    """좌석 QR: 인쇄용 QR 파일(좌석별 PNG·A4 한 장 PDF)을 저장 폴더에 만들고 내려받는다.
-    아래에는 인쇄 전에 화면에 띄운 QR을 폰으로 찍어 체크인·바로 예약을 시험하는 미리보기를 둔다.
-    QR 주소 = {서비스 주소}/seat/{no}?t={좌석 토큰}."""
+    """좌석 QR 보관함: 이미 출력해 좌석에 붙인 QR을 A4 한 장으로 보고 다시 인쇄한다.
+    QR은 새로 만들거나 바꾸지 않는다 — 좌석에 저장된 토큰으로 처음 출력할 때와 똑같은 주소
+    ({접속 주소}/seat/{no}?t={좌석 토큰})를 같은 방식(SVG, box_size 10, border 2)으로 그릴 뿐이다."""
     import qrcode
     import qrcode.image.svg
 
-    seats = list(Seat.objects.filter(active=True).order_by("no"))
-    error = None
-    if request.method == "POST":
-        base = request.POST.get("base_url", "")
-        try:
-            m = qr.build(seats, base, clock.now())
-        except ValueError as e:
-            error = str(e)
-        else:
-            log_admin(request.user.id, "qr_build", clock.now(), memo=f"{m['base_url']} · {len(m['seats'])}석")
-            return redirect("/admin/qr?built=1")
-
-    manifest = qr.load_manifest()
-    base_url = (manifest or {}).get("base_url") or qr.default_base_url(request)
     cards = []
-    for seat in seats:
-        url = qr.seat_url(seat, base_url)
+    for seat in Seat.objects.filter(active=True).order_by("no"):
+        url = request.build_absolute_uri(f"/seat/{seat.no}?t={seat.qr_token}")
         svg = qrcode.make(url, image_factory=qrcode.image.svg.SvgPathImage, box_size=10, border=2).to_string(encoding="unicode")
         cards.append({"seat": seat, "url": url, "svg": svg})
-    return render(request, "admin_qr.html", {
-        "cards": cards, "manifest": manifest, "outdated": qr.outdated(manifest, seats), "error": error,
-        "base_url": request.POST.get("base_url") if error else base_url, "built": request.GET.get("built") == "1",
-        "qr_dir": str(qr.qr_dir()), "generated_at": (manifest or {}).get("generated_at", "")[:16].replace("T", " "),
-        "local_host": urlparse(base_url).hostname in ("localhost", "127.0.0.1"),
-    })
-
-
-@admin_required
-def admin_qr_file(request, name):
-    """저장 폴더의 QR 파일 내려받기 (관리자만 — 좌석 토큰이 들어 있다)."""
-    path = qr.stored_file(name)
-    if path is None:
-        raise Http404("파일이 없습니다. [QR 파일 새로 만들기]를 눌러 주세요.")
-    resp = FileResponse(open(path, "rb"), as_attachment=request.GET.get("download") == "1", filename=name)
-    resp["Cache-Control"] = "no-store"
-    return resp
+    return render(request, "admin_qr.html", {"cards": cards})
 
 
 @ensure_csrf_cookie
@@ -105,3 +72,10 @@ def history_page(request):
 @login_required
 def congestion_page(request):
     return render(request, "congestion.html")
+
+
+@ensure_csrf_cookie
+@admin_required
+def admin_congestion_page(request):
+    """관리자 탭 [이용 분석]: 혼잡도 + 실사용률·유휴 점유·처리 필요 비율."""
+    return render(request, "congestion.html", {"admin_view": True})

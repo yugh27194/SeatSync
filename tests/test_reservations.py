@@ -30,7 +30,6 @@ def test_user_sees_three_states_without_marks(user, user2):
     assert views[1] == "available" and views[2] == "taken" and views[3] == "taken" and views[20] == "unavailable"
     # 일반 사용자: 색은 3가지(무단 점유도 'taken'), 붉은 강조·'!'는 없고, 좌석을 누르면 상태 이름·안내가 보인다
     assert all("attention" not in s and "detail_label" not in s for s in data["seats"])
-    assert data["me"]["admin"] is False
     seats = {s["no"]: s for s in data["seats"]}
     assert seats[3]["state_label"] == "무단 점유" and "예약 없이" in seats[3]["state_msg"]
     assert seats[1]["state_label"] == "빈자리" and seats[20]["state_label"] == "고장"
@@ -38,11 +37,12 @@ def test_user_sees_three_states_without_marks(user, user2):
         assert word not in str(data)
 
 
-def test_admin_mode_sees_marks_on_map(admin):
-    data = admin.jget("/api/seats")
-    marks = {s["no"] for s in data["seats"] if s["attention"]}
-    assert marks == {3} and data["me"]["admin"] is True
-    assert next(s for s in data["seats"] if s["no"] == 20)["detail_label"] == "고장"
+def test_admin_sees_marks_only_in_admin_tab(admin):
+    """관리자 코드를 통과해도 좌석 지도(/api/seats)는 일반 화면. 확인 필요 표시는 관리자 탭(/api/admin/seats)에만."""
+    assert all("attention" not in s for s in admin.jget("/api/seats")["seats"])
+    seats = admin.jget("/api/admin/seats")["seats"]
+    assert {s["no"] for s in seats if s["needs_action"]} == {3}
+    assert next(s for s in seats if s["no"] == 20)["detail_label"] == "고장"
 
 
 def test_check_marks_away_and_item(admin):
@@ -58,8 +58,7 @@ def test_check_marks_away_and_item(admin):
     assert seats[2]["detail"] == "item" and seats[2]["check"] and not seats[2]["needs_action"]
     assert seats[1]["detail_desc"] and seats[2]["detail_desc"]
     assert not seats[5]["check"]                       # 정상 이용 중
-    marks = {s["no"] for s in admin.jget("/api/seats")["seats"] if s["attention"]}
-    assert {1, 2, 3} <= marks
+    assert seats[1]["category_label"] == "이석(일시)" and seats[2]["category"] == "away"
 
 
 def test_layout_in_user_api(user):

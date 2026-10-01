@@ -6,7 +6,7 @@ from ...services import setup_demo
 
 
 class Command(BaseCommand):
-    help = "시연 상황 배치 (관리자 화면의 [시연 상황 배치] 버튼과 같음)"
+    help = "시연 상황 배치 (콘솔 전용 — 서버를 처음 만들 때는 init_db --sample)"
 
     def handle(self, *args, **opts):
         for line in setup_demo(clock.now()):

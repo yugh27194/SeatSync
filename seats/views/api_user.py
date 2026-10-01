@@ -1,4 +1,4 @@
-"""사용자 API. 일반 사용자에게는 좌석 3상태만 보이고, 처리 필요(!) 표시는 관리자 모드에서만 내려준다."""
+"""사용자 API. 일반 사용자에게는 좌석 3상태만 보인다. 관리자 확인(!)·실사용 수치는 관리자 탭(api_admin)에서만 내려준다."""
 import hmac
 
 from django.db import IntegrityError, transaction
@@ -110,8 +110,7 @@ def _policy(s):
 def _me(request, now):
     u = request.user
     u.refresh_from_db(fields=["warnings", "suspended_until"])
-    return {"name": u.name, "warnings": u.warnings, "suspended_until": to_iso(u.suspended(now)),
-            "admin": request.admin}
+    return {"name": u.name, "warnings": u.warnings, "suspended_until": to_iso(u.suspended(now))}
 
 
 def _find(results, seat_no):
@@ -145,21 +144,18 @@ def seats(request):
                "booth": seat.no in booths, "view": _seat_view(it, my, request.user.id),
                # 좌석을 누르면 보이는 상태 이름·안내 (관리자 화면과 같은 이름). 색은 3가지로만 칠한다.
                "state_label": DETAILS[j.detail][1], "state_msg": USER_MESSAGES.get(j.detail, "")}
-        if request.admin:  # 관리자 모드에서만 붉은 강조·'!'(확인 필요)
-            row["attention"] = j.check
-            row["detail_label"] = DETAILS[j.detail][1]
         out.append(row)
     return jres({
         "server_time": to_iso(now), "grid": layout["grid"], "fixtures": layout["fixtures"], "zones": layout["zones"],
         "seats": out, "my_reservation": reservation_json(my, now, s), "my_status": own_status(results, my, now),
         "waitlist": waitlist_json(request.user.id, now), "policy": _policy(s), "me": _me(request, now),
-        "live": _live(request, results),
+        "live": _live(results),
     })
 
 
-def _live(request, results):
+def _live(results, admin=False):
     live = analytics.live_usage(results)
-    if not request.admin:  # 실사용 수치는 관리자 모드에서만
+    if not admin:  # 실사용 수치는 관리자 탭(이용 분석)에서만
         live.pop("actual")
         live.pop("actual_rate")
     return live
@@ -432,12 +428,14 @@ def congestion(request):
     results = refresh(now)
     s = get_settings()
     data = analytics.congestion(now, s, weeks=4)
-    if not request.admin:  # 실사용률·유휴 점유·처리 필요 비율은 관리자 모드에서만
+    # 실사용률·유휴 점유·처리 필요 비율은 관리자 탭의 [이용 분석](?scope=admin)에서만
+    admin = request.GET.get("scope") == "admin" and request.admin
+    if not admin:
         for k in ("actual", "idle", "issue"):
             data.pop(k)
         for row in data["today"]:
             row.pop("actual")
-    data["live"] = _live(request, results)
-    data["admin"] = request.admin
+    data["live"] = _live(results, admin)
+    data["admin"] = admin
     data["server_time"] = to_iso(now)
     return jres(data)

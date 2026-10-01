@@ -1,8 +1,8 @@
-"""로그인 데코레이터와 관리자 모드.
+"""로그인 데코레이터와 관리자 탭 권한.
 
-관리자 계정은 따로 두지 않는다. 로그인한 사용자가 상단의 [관리자 모드] 스위치를 켜거나 관리자 기능에 접근하면
-"관리자 권한이 필요합니다."를 안내하고, 관리자 코드를 입력하면 그 세션에서 관리자 모드가 켜진다.
-스위치를 끄면(또는 일정 시간 쓰지 않거나 로그아웃하면) 다시 일반 사용자 화면으로 돌아간다.
+관리자 계정은 따로 두지 않는다. 관리자 개입이 필요한 기능은 모두 [관리자] 탭(/admin…)에만 있다.
+로그인한 사용자가 [관리자] 탭을 처음 누르면 관리자 코드를 묻고, 맞으면 그 세션 동안(로그아웃 전까지)
+다시 묻지 않는다. 다른 탭에 갔다가 돌아와도 그대로 들어간다.
 """
 import hmac
 import threading
@@ -19,7 +19,7 @@ from .services import log_admin
 ADMIN_REQUIRED_MSG = "관리자 권한이 필요합니다."
 MAX_FAILS = 5         # 연속 실패 허용 횟수
 LOCK_SEC = 5 * 60     # 초과 시 잠금 시간
-SESSION_KEY = "admin_until"
+SESSION_KEY = "admin_ok"  # 관리자 코드를 통과한 세션
 
 # 사용자별 관리자 코드 실패 기록 {user_id: [실패 횟수, 잠금 해제 시각]}.
 # 세션 쿠키를 지워도 우회되지 않게 서버 메모리에 둔다(단일 프로세스 가정).
@@ -32,7 +32,7 @@ def _is_api(request):
 
 
 def is_admin(request):
-    return request.user.is_authenticated and request.session.get(SESSION_KEY, 0) > clock.now()
+    return request.user.is_authenticated and request.session.get(SESSION_KEY) is True
 
 
 def safe_next(target):
@@ -57,7 +57,7 @@ def login_required(view):
 
 
 def admin_required(view):
-    """관리자 모드가 아니면 API는 403 ADMIN_REQUIRED, 화면은 관리자 코드 입력 화면."""
+    """관리자 코드를 통과한 세션이 아니면 API는 403 ADMIN_REQUIRED, 화면은 관리자 코드 입력 화면."""
     @wraps(view)
     @login_required
     def wrapped(request, *args, **kwargs):
@@ -66,8 +66,6 @@ def admin_required(view):
                 return error_response(403, "ADMIN_REQUIRED", ADMIN_REQUIRED_MSG)
             ctx = {"next_url": request.get_full_path(), "error": None, **lock_info(request)}
             return render(request, "admin_unlock.html", ctx, status=403)
-        # 사용할 때마다 유지 시간을 연장한다(마지막 사용 기준 만료)
-        request.session[SESSION_KEY] = clock.now() + settings.SEATSYNC["ADMIN_MODE_MIN"] * 60
         return view(request, *args, **kwargs)
     return wrapped
 
@@ -80,7 +78,7 @@ def lock_info(request):
 
 
 def try_unlock(request, code):
-    """관리자 모드 켜기. (성공 여부, 에러 코드, 메시지)"""
+    """관리자 코드 확인 → 이 세션에서 관리자 탭 허용. (성공 여부, 에러 코드, 메시지)"""
     uid, now = request.user.id, clock.now()
     with _fails_lock:
         cnt, until = _fails.get(uid, [0, 0])
@@ -97,7 +95,7 @@ def try_unlock(request, code):
             cnt += 1
             _fails[uid] = [cnt, now + LOCK_SEC if cnt >= MAX_FAILS else 0]
     if ok:
-        request.session[SESSION_KEY] = now + settings.SEATSYNC["ADMIN_MODE_MIN"] * 60
+        request.session[SESSION_KEY] = True  # 로그아웃(세션 종료) 전까지 유지
         request.admin = True
         log_admin(uid, "admin_on", now)
         return True, None, None
@@ -105,10 +103,3 @@ def try_unlock(request, code):
         log_admin(uid, "admin_locked", now, memo=f"관리자 코드 {MAX_FAILS}회 실패")
         return False, "ADMIN_LOCKED", f"관리자 코드가 {MAX_FAILS}회 틀렸습니다. {LOCK_SEC // 60}분 후 다시 시도하세요."
     return False, "BAD_ADMIN_CODE", f"관리자 코드가 올바르지 않습니다. (남은 시도 {MAX_FAILS - cnt}회)"
-
-
-def lock_admin(request):
-    """관리자 모드 끄기."""
-    if request.session.pop(SESSION_KEY, None) and request.user.is_authenticated:
-        log_admin(request.user.id, "admin_off", clock.now())
-    request.admin = False

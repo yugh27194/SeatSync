@@ -153,6 +153,26 @@ ISSUES = [k for k, v in DETAILS.items() if v[2]]
 CHECK = frozenset(ISSUES) | {"away_short", "item"}
 UNAVAILABLE_REASONS = ("broken", "maintenance", "blocked")
 
+# 관리자 화면의 상태 분류 4가지(+사용불가): 정상(초록) · 이석(주황, 일시/장기) · 무단 점유(빨강) · 판단 불가(짙은 회색)
+CATEGORIES = {"normal": "정상", "away": "이석", "unauthorized": "무단 점유", "unknown": "판단 불가", "unavailable": "사용불가"}
+_CATEGORY_OF = {
+    "empty": "normal", "using": "normal", "waiting": "normal", "detected": "normal", "seated_unchecked": "normal",
+    "away_short": "away", "item": "away", "away": "away", "hoarding": "away", "no_show": "away",
+    "unauthorized": "unauthorized", "no_checkin": "unauthorized",
+    "unknown": "unknown",
+    "broken": "unavailable", "maintenance": "unavailable", "blocked": "unavailable", "seat_unavailable": "unavailable",
+}
+AWAY_LONG = frozenset({"away", "hoarding", "no_show"})  # 장기 이석 (나머지 이석은 일시 이석)
+
+
+def category(detail):
+    """세부 상태 → (분류 코드, 표시 이름). 이석은 '이석(일시)' / '이석(장기)'로 나눈다."""
+    cat = _CATEGORY_OF[detail]
+    if cat == "away":
+        return cat, "이석(장기)" if detail in AWAY_LONG else "이석(일시)"
+    return cat, CATEGORIES[cat]
+
+
 ALERT_TYPE_LABELS = {**{k: DETAILS[k][1] for k in ISSUES}, "no_show": "미입실", "call": "이용자 호출"}
 
 # 관리자가 좌석에 직접 부여할 수 있는 세부 상태 → (현장 상태, 표시, 사용불가 사유, 조건)
@@ -301,7 +321,7 @@ def _judge(res, actual, now, s):
 
 
 # 사용자 화면에서 좌석을 눌렀을 때 보이는 안내 (관리자 화면과 같은 상태 이름을 쓰되, 이용자에게 맞는 문장).
-# 좌석 지도 색은 사용중(주황)으로 통일하고, 붉은 강조·!는 관리자 모드에서만 보인다.
+# 좌석 지도 색은 사용중(주황)으로 통일하고, 관리자 확인 표시는 관리자 탭에만 있다.
 USER_MESSAGES = {
     "empty":            "비어 있는 좌석이에요. 눌러서 예약할 수 있어요.",
     "using":            "다른 이용자가 이용 중인 좌석이에요.",

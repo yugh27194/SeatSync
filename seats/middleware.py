@@ -1,5 +1,4 @@
-"""요청마다 관리자 모드 여부 계산, API 에러 변환, DB 준비 여부 확인."""
-from django.conf import settings
+"""요청마다 관리자 권한 여부 계산, API 에러 변환, DB 준비 여부 확인."""
 from django.db import connection
 from django.http import HttpResponse
 
@@ -36,5 +35,4 @@ def context(request):
     return {
         "current_user": user if user is not None and user.is_authenticated else None,
         "admin_mode": getattr(request, "admin", False),
-        "admin_mode_min": settings.SEATSYNC["ADMIN_MODE_MIN"],
     }

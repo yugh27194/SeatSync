@@ -15,7 +15,6 @@ def _actions(admin):
 def test_permissions(user):
     r = user.get("/api/admin/seats")
     assert r.status_code == 403 and r.json()["error"]["message"] == "관리자 권한이 필요합니다."
-    assert user.jpost("/api/admin/demo").status_code == 403
     assert user.jpost("/api/admin/seats/1/state", {"detail": "empty"}).status_code == 403
 
 
@@ -171,9 +170,11 @@ def test_admin_extend(admin, user_a):
     assert after.end_at == before.end_at + 3600 and after.extend_count == before.extend_count
 
 
-def test_demo_scenario(admin):
-    r = admin.jpost("/api/admin/demo")
-    assert r.status_code == 200 and len(r.json()["messages"]) == 13
+def test_demo_scenario(admin, clock):
+    """시연 상황 배치는 콘솔(init_db --sample / demo)에서만 — 웹 API는 없다."""
+    from seats.services import setup_demo
+    assert admin.jpost("/api/admin/demo").status_code == 404
+    assert len(setup_demo(clock())) == 13
     seats = {s["label"]: s for s in admin.jget("/api/admin/seats")["seats"]}
     expect = {
         "A-1": "using", "A-2": "away", "A-3": "unauthorized", "A-4": "no_checkin", "A-5": "using",
@@ -185,7 +186,7 @@ def test_demo_scenario(admin):
     assert seats["A-5"]["reservation"] is None and not seats["A-5"]["needs_action"]
     types = sorted(a["type"] for a in admin.jget("/api/admin/alerts?open=1")["alerts"])
     assert types == ["away", "hoarding", "no_checkin", "no_show", "seat_unavailable", "unauthorized", "unauthorized"]
-    admin.jpost("/api/admin/demo")  # 다시 배치해도 같은 결과
+    setup_demo(clock())  # 다시 배치해도 같은 결과
     assert len(admin.jget("/api/admin/alerts?open=1")["alerts"]) == 7
     assert User.objects.count() == 8
 

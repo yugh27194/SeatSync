@@ -1,4 +1,4 @@
-"""로그인·회원가입·로그아웃, 관리자 모드 켜기/끄기."""
+"""로그인·회원가입·로그아웃, 관리자 탭 권한(관리자 코드 확인)."""
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.hashers import make_password
 from django.db import IntegrityError
@@ -6,7 +6,7 @@ from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_POST
 
 from .. import clock
-from ..auth import login_required, lock_admin, lock_info, safe_next, try_unlock
+from ..auth import login_required, lock_info, safe_next, try_unlock
 from ..http import error_response, jres, json_body
 from ..models import User
 
@@ -53,11 +53,11 @@ def signup_view(request):
 
 
 def logout_view(request):
-    logout(request)  # 세션을 비우므로 관리자 모드도 함께 꺼진다
+    logout(request)  # 세션을 비우므로 관리자 탭 권한도 함께 사라진다
     return redirect("/login")
 
 
-# ---------------------------------------------------------------- 관리자 모드
+# ---------------------------------------------------------------- 관리자 탭 권한 (관리자 코드)
 
 @require_POST
 @login_required
@@ -67,13 +67,6 @@ def admin_unlock_page(request):
     if ok:
         return redirect(next_url)
     return render(request, "admin_unlock.html", {"next_url": next_url, "error": msg, **lock_info(request)}, status=403)
-
-
-@require_POST
-@login_required
-def admin_lock_page(request):
-    lock_admin(request)
-    return redirect("/map")
 
 
 @require_GET
@@ -89,10 +82,3 @@ def admin_mode_unlock(request):
     if ok:
         return jres({"ok": True, "admin": True})
     return error_response(429 if code == "ADMIN_LOCKED" else 403, code, msg)
-
-
-@require_POST
-@login_required
-def admin_mode_lock(request):
-    lock_admin(request)
-    return jres({"ok": True, "admin": False})

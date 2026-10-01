@@ -16,14 +16,12 @@ urlpatterns = [
     path("admin", pages.admin_page),
     path("admin/settings", pages.admin_settings_page),
     path("admin/qr", pages.admin_qr_page),
-    path("admin/qr/files/<str:name>", pages.admin_qr_file),
+    path("admin/congestion", pages.admin_congestion_page),
     path("admin/unlock", accounts.admin_unlock_page),
-    path("admin/lock", accounts.admin_lock_page),
 
-    # 관리자 모드 켜기/끄기
+    # 관리자 탭 권한 (관리자 코드 확인 — 세션 동안 유지)
     path("api/admin-mode", accounts.admin_mode_status),
     path("api/admin-mode/unlock", accounts.admin_mode_unlock),
-    path("api/admin-mode/lock", accounts.admin_mode_lock),
 
     # 사용자 API
     path("api/seats", api_user.seats),
@@ -62,8 +60,6 @@ urlpatterns = [
     path("api/admin/users/<int:user_id>/unsuspend", api_admin.unsuspend),
     path("api/admin/users/<int:user_id>/notice", api_admin.notice),
     path("api/admin/log", api_admin.admin_log),
-    path("api/admin/demo", api_admin.demo),
-    path("api/admin/demo-history", api_admin.demo_history),
     path("api/admin/settings", api_admin.settings_api),
     path("api/admin/stats", api_admin.stats),
 

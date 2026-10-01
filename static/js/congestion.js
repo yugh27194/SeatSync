@@ -1,4 +1,5 @@
-/* /congestion — 혼잡도: 지금 상태, 오늘 시간대별, 요일×시간 히트맵. 관리자 모드에서는 실사용률·유휴 점유·처리 필요 비율 추가 */
+/* /congestion — 혼잡도: 지금 상태, 오늘 시간대별, 요일×시간 히트맵.
+   관리자 탭의 /admin/congestion(이용 분석)에서는 실사용률·유휴 점유·처리 필요 비율 추가 */
 (function () {
   "use strict";
   const { api, poll, esc } = window.SS;
@@ -79,7 +80,9 @@
   });
 
   async function load() {
-    data = await api("GET", "/api/congestion", null, { quiet: true });
+    // 관리자 탭의 [이용 분석](/admin/congestion)에서만 실사용률·유휴 점유·처리 필요 비율을 받는다
+    const scope = location.pathname.startsWith("/admin") ? "?scope=admin" : "";
+    data = await api("GET", "/api/congestion" + scope, null, { quiet: true });
     $("updated").textContent = "갱신 " + data.server_time.slice(11, 16);
     renderLive(); renderToday(); renderMetricTabs(); renderHeatmap();
   }

@@ -10,9 +10,6 @@
   <h1 style="margin:0">관리자 대시보드</h1>
   <span class="spacer"></span>
   <span class="muted small" id="updated"></span>
-  <button type="button" class="btn small warn" id="btn-demo">시연 상황 배치</button>
-  <button type="button" class="btn small secondary" id="btn-sample">샘플 이력 생성</button>
-  <a class="btn small secondary" href="/admin/qr">좌석 QR</a>
 </div>
 
 <div class="chips" id="chips"></div>
@@ -23,10 +20,11 @@
       <h2>좌석 지도</h2>
       <div class="seatmap admin-map" id="admin-map"></div>
       <div class="legend">
-        <span><i style="background:var(--v-available)"></i>빈자리</span>
-        <span><i style="background:var(--v-taken)"></i>사용중</span>
-        <span><i style="background:var(--v-unavailable)"></i>사용불가</span>
-        <span><i style="background:var(--v-check)"></i><i class="legend-bang">!</i>확인 필요</span>
+        <span><i style="background:var(--c-normal)"></i>정상</span>
+        <span><i style="background:var(--c-away)"></i>이석(일시·장기)</span>
+        <span><i style="background:var(--c-unauthorized)"></i>무단 점유</span>
+        <span><i style="background:var(--c-unknown)"></i>판단 불가</span>
+        <span><i class="legend-bang">!</i>관리자 확인 필요</span>
       </div>
       <p class="muted small" style="margin:8px 0 0">좌석을 누르면 지금 어떤 상태인지, 어떻게 처리하면 되는지와 조치 버튼이 표시됩니다.</p>
     </div>

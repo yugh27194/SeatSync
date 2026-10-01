@@ -9,15 +9,11 @@
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
 </head>
 <body{% if admin_mode %} data-admin="1"{% endif %}>
-  <header class="topbar{% if admin_mode %} is-admin{% endif %}">
+  <header class="topbar">
     <a class="logo" href="/">Seat<span>Sync</span></a>
     <nav>
       {% if current_user %}
         <button type="button" id="bell" class="bell" aria-label="알림" title="알림">🔔<span class="bell-count hidden" id="bell-count">0</span></button>
-        <button type="button" id="admin-toggle" class="mode-switch" role="switch"
-                aria-checked="{% if admin_mode %}true{% else %}false{% endif %}" title="관리자 모드 켜기/끄기">
-          <span class="mode-label">관리자</span><span class="knob" aria-hidden="true"></span>
-        </button>
         <a href="/logout" class="logout">로그아웃</a>
       {% else %}
         <a href="/login">로그인</a>
@@ -31,12 +27,18 @@
     <a href="/my" class="{% if p == '/my' %}on{% endif %}"><span class="ti">💺</span>내 자리</a>
     <a href="/congestion" class="{% if p == '/congestion' %}on{% endif %}"><span class="ti">📊</span>혼잡도</a>
     <a href="/history" class="{% if p == '/history' %}on{% endif %}"><span class="ti">🗓️</span>내 기록</a>
-    {% if admin_mode %}<a href="/admin" class="admin-tab {% if p == '/admin' %}on{% endif %}"><span class="ti">🛠️</span>관리</a>
-    <a href="/admin/settings" class="admin-tab {% if p == '/admin/settings' %}on{% endif %}"><span class="ti">⚙️</span>설정</a>{% endif %}
+    <a href="/admin" id="admin-tab" class="admin-tab {% if p|slice:':6' == '/admin' %}on{% endif %}"{% if not admin_mode %} data-locked="1"{% endif %}><span class="ti">{% if admin_mode %}🛠️{% else %}🔒{% endif %}</span>관리자</a>
   </nav>
+  {% if admin_mode and p|slice:':6' == '/admin' %}
+  <nav class="subtabs" aria-label="관리자 메뉴">
+    <a href="/admin" class="{% if p == '/admin' %}on{% endif %}">대시보드</a>
+    <a href="/admin/qr" class="{% if p == '/admin/qr' %}on{% endif %}">좌석 QR</a>
+    <a href="/admin/congestion" class="{% if p == '/admin/congestion' %}on{% endif %}">이용 분석</a>
+    <a href="/admin/settings" class="{% if p == '/admin/settings' %}on{% endif %}">판정 기준</a>
+  </nav>
+  {% endif %}
   {% endwith %}
   {% endif %}
-  {% if admin_mode %}<div class="admin-strip">관리자 모드 · {{ current_user.name }} 님 · 스위치를 끄면 일반 사용자 화면으로 돌아갑니다</div>{% endif %}
   {% if current_user %}<div id="notice-stack" class="notice-stack" aria-live="polite"></div>{% endif %}
   <main class="container {% block container_class %}{% endblock %}">
     {% block content %}{% endblock %}
