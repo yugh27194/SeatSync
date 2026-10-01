@@ -77,8 +77,8 @@ def test_four_categories_on_admin_map(layout8, admin):
     seats = {s["label"]: s for s in d["seats"]}
     cats = {k: (s["category"], s["category_label"]) for k, s in seats.items()}
     assert cats == {
-        "A-1": ("normal", "정상"), "A-2": ("away", "이석(장기)"), "A-3": ("unauthorized", "무단 점유"),
-        "A-4": ("normal", "정상"), "B-1": ("away", "이석(일시)"), "B-2": ("away", "이석(장기)"),
+        "A-1": ("normal", "정상"), "A-2": ("away", "이석"), "A-3": ("unauthorized", "무단 점유"),
+        "A-4": ("normal", "정상"), "B-1": ("away", "이석"), "B-2": ("away", "이석"),
         "B-3": ("unknown", "판단 불가"), "B-4": ("unavailable", "사용불가"),
     }
     c = d["categories"]
@@ -97,5 +97,5 @@ def test_empty_seats_are_separate_from_normal(layout8, admin, user):
     d = admin.jget("/api/admin/seats")
     cats = {s["label"]: (s["category"], s["category_label"]) for s in d["seats"]}
     assert cats["A-1"] == ("normal", "정상")
-    assert cats["A-2"] == ("empty", "입실 대기") and cats["A-3"] == ("empty", "빈자리")
+    assert cats["A-2"] == ("empty", "빈자리") and cats["A-3"] == ("empty", "빈자리")
     assert (d["categories"]["normal"], d["categories"]["empty"]) == (1, 7)

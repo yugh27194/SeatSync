@@ -90,13 +90,13 @@ def test_2a_checked_in_but_not_seated(clock, manager, uc):
     setup_scenario("2a", clock())
     b2 = seat_no("B-2")
     s = admin_seat(manager, b2)
-    assert (s["detail"], s["category_label"]) == ("away_short", "이석(일시)") and s["next_label"] == "이석(장기) · 자리 비움"
+    assert (s["detail"], s["category_label"]) == ("away_short", "이석") and s["next_label"] == "관리자 확인"
     clock.advance(45)  # 기준 15초 전 → 본인 사전 경고
     uc.get("/api/seats")
     assert Notification.objects.filter(user__student_no="userC", kind="prewarn").exists()
     clock.advance(15)
     s = admin_seat(manager, b2)
-    assert (s["detail"], s["category_label"]) == ("away", "이석(장기)") and s["needs_action"]
+    assert (s["detail"], s["category_label"]) == ("away", "이석") and s["needs_action"]
     assert Alert.objects.filter(seat_id=b2, type="away", resolved_at__isnull=True).exists()
     clock.advance(120)
     admin_seat(manager, b2)
@@ -108,7 +108,7 @@ def test_2b_seated_without_qr_checkin(clock, manager, uc):
     setup_scenario("2b", clock())
     b2 = seat_no("B-2")
     s = admin_seat(manager, b2)
-    assert s["detail"] == "seated_unchecked" and s["category"] == "normal" and s["next_label"] == "체크인 누락"
+    assert s["detail"] == "seated_unchecked" and s["category"] == "normal" and s["next_label"] == "무단 점유"
     assert "QR로 체크인" in uc.jget("/api/seats")["my_status"]["message"]
     clock.advance(60)
     s = admin_seat(manager, b2)

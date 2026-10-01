@@ -12,8 +12,6 @@
     no_checkin: "예약자 본인이면 대리 체크인, 다른 사람이면 퇴실을 안내하세요.",
     away: "돌아오지 않으면 강제 반납하고, 반복되면 경고하세요.",
     hoarding: "짐을 보관하고 강제 반납하거나 경고하세요.",
-    unowned_item: "예약 없는 좌석에 방치된 짐이에요. 수거하거나 짐 주인에게 좌석을 배정하세요.",
-    item_left: "예약 없는 좌석이라 이용자에게는 빈자리로 보여요. 오래 방치되면 확인 목록에 올라와요.",
     seat_unavailable: "예약자를 다른 좌석으로 옮기거나 예약을 취소하세요.",
     no_show: "오지 않으면 예약을 취소하고, 늦게 왔다면 대리 체크인하세요.",
     away_short: "곧 돌아오는지 지켜보세요. 필요하면 [사전 경고]를 보내세요.",
@@ -22,6 +20,13 @@
     item_nores: "짐 주인에게 좌석을 배정하거나 짐을 수거하세요.",
   };
   const RES_STATUS = { reserved: "예약(입실 전)", in_use: "이용 중" };
+  // 조치 영역 아래 붙는 사유 문장: 세부 상태 설명 + 짐 여부(짐 감지 ON일 때)
+  const ITEM_DETAILS = ["item", "hoarding"];
+  function reason(desc, s) {
+    let t = desc || "";
+    if (s && s.has_item && !ITEM_DETAILS.includes(s.detail)) t += (t ? " " : "") + "좌석에 짐이 있어요.";
+    return t;
+  }
 
   let data = null, alerts = [], users = [];
   let selected = Number(new URLSearchParams(location.search).get("seat")) || null; // 좌석 지도에서 누른 좌석
@@ -84,10 +89,6 @@
           btn("warn", "예약자 경고", { user: r.user.id, name: r.user.name, alert: alertId || "" }) : "";
       case "away_short":
         return r ? btn("notice", "사전 경고", { user: r.user.id, name: r.user.name, seat: s.no, detail: s.detail }, "") : "";
-      case "unowned_item":
-      case "item_left":
-        return btn("leave", "짐 수거 완료", { seat: s.no, label: lbl, item: 1 }, detail === "unowned_item" ? "" : "secondary") +
-          btn("assign", "짐 주인에게 배정", { seat: s.no, checkin: 1 });
       case "item":
         if (r) return btn("notice", "사전 경고", { user: r.user.id, name: r.user.name, seat: s.no, detail: s.detail }, "");
         return btn("assign", "짐 주인에게 배정", { seat: s.no, checkin: 1 }, "") + btn("leave", "짐 수거 완료", { seat: s.no, label: lbl, item: 1 });
@@ -111,7 +112,7 @@
       <div class="st-num">${n}</div><div class="st-label">${label}</div><div class="st-sub">${sub || "&nbsp;"}</div></div>`;
     $("chips").innerHTML =
       tile("normal", "정상", c.normal, "사람이 이용 중") +
-      tile("away", "이석", c.away, `일시 ${c.away_short} · 장기 ${c.away_long}`) +
+      tile("away", "이석", c.away, c.away_long ? `확인 필요 ${c.away_long}` : "자리 비움") +
       tile("unauthorized", "무단 점유", c.unauthorized, "체크인 없이 감지") +
       tile("unknown", "판단 불가", c.unknown, "카메라 인식 오류") +
       tile("issue", "! 관리자 확인", sm.issues, "조치 목록");
@@ -162,15 +163,15 @@
       let when = `${fmtRemain(s.elapsed_sec)}째`;
       if (s.deadline_sec != null && s.next_label) when += ` · ${fmtRemain(s.deadline_sec)} 뒤 '${s.next_label}'`;
       const guide = s.detail === "item" ? GUIDE[r ? "item_res" : "item_nores"] : GUIDE[s.detail];
-      sitHtml = `<div class="situation-box i-${s.detail}"><b>${s.needs_action ? "! " : ""}${esc(s.category_label)} · ${esc(s.detail_label)}</b>${s.needs_action ? " · 관리자 확인 필요" : ""} · ${when}
-        <p class="sit-desc">${esc(s.detail_desc)}</p>
+      sitHtml = `<div class="situation-box i-${s.detail}"><b>${s.needs_action ? "! " : ""}${esc(s.category_label)}</b>${s.needs_action ? " · 관리자 확인 필요" : ""} · ${when}
+        <p class="sit-desc">${esc(reason(s.detail_desc, s))}</p>
         ${guide ? `<p class="sit-guide"><b>처리 방법</b> ${esc(guide)}</p>` : ""}
         <div class="btn-row" style="margin-top:8px">${recommended(s.detail, s, s.alert_id)}
         ${s.alert_id ? btn("resolve", "처리 완료", { alert: s.alert_id }) : ""}</div></div>`;
     } else {
-      let msg = s.detail_desc || "";
-      if (s.deadline_sec != null && s.next_label) msg = `${fmtRemain(s.deadline_sec)} 뒤 '${s.next_label}'`;
-      sitHtml = `<div class="situation-box ok"><b>${esc(s.category_label)} · ${esc(s.detail_label)}</b>${msg ? " — " + esc(msg) : ""}</div>`;
+      let msg = reason(s.detail_desc, s);
+      if (s.deadline_sec != null && s.next_label) msg += ` ${fmtRemain(s.deadline_sec)} 뒤 '${s.next_label}'.`;
+      sitHtml = `<div class="situation-box ok"><b>${esc(s.category_label)}</b>${msg ? " — " + esc(msg) : ""}</div>`;
     }
 
     let resHtml;
@@ -233,7 +234,7 @@
         <div class="head"><span class="seatlbl">${esc(a.seat_label)}</span>
           <span class="badge t-${a.type}">${esc(a.type_label)}</span>
           <span class="muted small">${fmtRemain(a.elapsed_sec)} 전 · ${fmtTime(a.created_at)}</span></div>
-        <div class="meta">${a.desc ? esc(a.desc) + "<br>" : ""}
+        <div class="meta">${a.desc ? esc(a.type === "call" ? a.desc : reason(a.desc, s.detail === a.type ? s : null)) + "<br>" : ""}
           ${ru ? `예약자 ${userLine(ru)} ${warnBadge(ru)}` : "예약 없음"}
           ${a.caller ? ` · 호출자 ${esc(a.caller.name)}` : ""}</div>
         ${a.call_label && a.call_kind ? `<div class="memo"><b>${esc(a.call_label)}</b></div>` : ""}
@@ -264,7 +265,7 @@
         <td class="hide-sm">${camCell(s)}</td>
         <td class="hide-sm">${esc(s.actual_label)}</td>
         <td><span class="statetag cat-${s.category}">${esc(s.category_label)}</span>${s.needs_action ? ' <b class="warn-text">!</b>' : ""}
-          <div class="small muted">${esc(s.full_label)}</div></td></tr>`;
+          <div class="small muted">${esc(reason(s.detail_desc, s))}</div></td></tr>`;
     }).join("");
   }
 
@@ -463,10 +464,10 @@
 
     async notice(d) {
       const PRESET = {
-        away_short: "자리를 오래 비우고 계세요. 곧 장기 이석으로 처리될 수 있으니 돌아오시거나 반납해 주세요.",
-        item: "짐만 두고 자리를 비우셨어요. 곧 사석화로 처리될 수 있으니 돌아오시거나 반납해 주세요.",
-        away: "장기 이석 상태입니다. 바로 돌아오시지 않으면 반납 처리됩니다.",
-        hoarding: "사석화 상태입니다. 바로 돌아오시지 않으면 반납 처리됩니다.",
+        away_short: "자리를 오래 비우고 계세요. 돌아오시거나 반납해 주세요. 계속 비우면 반납될 수 있어요.",
+        item: "짐만 두고 자리를 비우셨어요. 돌아오시거나 반납해 주세요. 계속 비우면 반납될 수 있어요.",
+        away: "자리를 오래 비우셨어요. 바로 돌아오시지 않으면 반납 처리됩니다.",
+        hoarding: "짐만 두고 오래 자리를 비우셨어요. 바로 돌아오시지 않으면 반납 처리됩니다.",
         no_checkin: "좌석에 계시다면 좌석 QR로 체크인해 주세요.",
         waiting: "체크인 마감 전에 좌석 QR로 체크인해 주세요.",
       };

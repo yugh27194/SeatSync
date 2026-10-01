@@ -52,7 +52,7 @@
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| GET | `/api/admin/seats` | 좌석별 상태 분류(`category`: normal·away·unauthorized·unknown·unavailable, `category_label`: 정상·이석(일시)·이석(장기)·무단 점유·판단 불가)·좌석 상태·세부 상태·처리 필요·경과/마감(`deadline`·`next_label`: 마감 때 바뀔 상태)·현장 상태·카메라 정보·예약자·빈자리 안내, 요약, 부여 가능한 세부 상태 목록 |
+| GET | `/api/admin/seats` | 좌석별 상태 분류(`category`: normal·away·unauthorized·unknown·unavailable, `category_label`: 빈자리·정상·이석·무단 점유·판단 불가, 세부 사유는 `detail_desc` 문장)·좌석 상태·세부 상태·처리 필요·경과/마감(`deadline`·`next_label`: 마감 때 바뀔 상태 — 같은 분류면 "관리자 확인")·현장 상태·카메라 정보·예약자·빈자리 안내, 요약, 부여 가능한 세부 상태 목록 |
 | POST | `/api/admin/seats/{no}/state` | `{detail, note?}` 세부 상태 부여: empty·using·item·unauthorized·away·hoarding·broken·maintenance·blocked |
 | POST | `/api/admin/seats/{no}/feedback` | `{verdict: correct\|wrong, correct_detail?, apply?, memo?}` 판정 피드백 |
 | GET | `/api/admin/feedback` | 판정 정확도(전체·출처별·상태별), 자주 틀리는 판정, 최근 피드백, 카메라 탐지 점수 평균 |

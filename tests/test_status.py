@@ -22,8 +22,8 @@ def res(status, start_ago=0, checked_in_ago=None):
     (None, "occupied", None, IN_USE, "detected"),            # QR 체크인 없이 착석 → 기준 시간 전엔 착석 감지
     (None, "occupied", "ok", IN_USE, "using"),               # 관리자가 확인한 이용 → 처리 필요 아님
     (None, "occupied", "issue", IN_USE, "unauthorized"),     # 관리자가 무단 점유로 지정 → 즉시
-    (None, "item", None, AVAILABLE, "item_left"),            # 예약 없는 좌석의 짐: 이용자에게는 빈자리
-    (None, "item", "ok", AVAILABLE, "item_left"),
+    (None, "item", None, AVAILABLE, "empty"),                # 예약 없는 좌석의 짐: 빈자리 (짐은 관리자 지도 노란 점)
+    (None, "item", "ok", AVAILABLE, "empty"),
     (None, "unavailable", None, UNAVAILABLE, "blocked"),
     ("reserved", "empty", None, IN_USE, "waiting"),
     ("reserved", "occupied", None, IN_USE, "seated_unchecked"),  # 앉고 QR을 찍기까지 기다림
@@ -112,27 +112,25 @@ def test_unauthorized_boundary():
 
 
 
-def test_unowned_item_boundary():
-    """예약 없는 좌석의 짐만: 이용자에게는 빈자리, 장기 이석 기준이 지나면 관리자에게 '이석(장기) · 주인 없는 짐'."""
-    from seats.status import category, full_label
+def test_bag_only_without_reservation_is_empty():
+    """예약 없는 좌석에 짐만 있으면 빈자리 — 따로 확인 상태를 만들지 않는다."""
     limit = S.away_limit_min * 60
-    j = judge(None, act("item", limit - 1), NOW, S)
-    assert (j.seat_state, j.detail, j.needs_action) == (AVAILABLE, "item_left", False)
-    assert category("item_left") == ("empty", "빈자리")
-    j = judge(None, act("item", limit), NOW, S)
-    assert (j.seat_state, j.detail, j.needs_action) == (AVAILABLE, "unowned_item", True)
-    assert full_label("unowned_item") == "이석(장기) · 주인 없는 짐"
-    assert judge(None, act("item", 10, mark="issue"), NOW, S).detail == "unowned_item"
+    for since in (10, limit * 3):
+        j = judge(None, act("item", since), NOW, S)
+        assert (j.seat_state, j.detail, j.needs_action) == (AVAILABLE, "empty", False)
 
 
-def test_long_away_labels_merged():
-    """사석화·미입실·주인 없는 짐·장기 이석은 관리자 화면에서 모두 이석(장기) + 사유."""
-    from seats.status import category, full_label
-    for d in ("away", "hoarding", "no_show", "unowned_item"):
-        assert category(d) == ("away", "이석(장기)")
-    assert full_label("no_show") == "이석(장기) · 예약 후 미입실"
-    assert full_label("hoarding") == "이석(장기) · 짐만 두고 자리 비움"
-    assert full_label("item") == "이석(일시) · 짐만 두고 자리 비움"
+def test_five_categories():
+    """관리자 화면 상태는 빈자리 · 정상 · 이석 · 무단 점유 · 판단 불가. 세부 사유는 설명 문장으로."""
+    from seats.status import ALERT_TYPE_LABELS, category, full_label, next_label
+    assert {category(d)[1] for d in ("empty", "waiting")} == {"빈자리"}
+    assert {category(d)[1] for d in ("using", "detected", "seated_unchecked")} == {"정상"}
+    assert {category(d)[1] for d in ("away_short", "item", "away", "hoarding", "no_show")} == {"이석"}
+    assert {category(d)[1] for d in ("unauthorized", "no_checkin")} == {"무단 점유"}
+    assert category("unknown")[1] == "판단 불가"
+    assert ALERT_TYPE_LABELS["hoarding"] == ALERT_TYPE_LABELS["no_show"] == "이석"
+    assert full_label("hoarding") == "이석 · 짐만 두고 자리 비움" and full_label("using") == "정상 이용"
+    assert next_label("away_short", "away") == "관리자 확인" and next_label("detected", "unauthorized") == "무단 점유"
 
 
 def test_no_checkin_boundary():

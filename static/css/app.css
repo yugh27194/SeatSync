@@ -614,5 +614,5 @@ table.recon td:first-child { white-space: nowrap; }
 .modal.modal-alert { max-width: 440px; border-top: 6px solid var(--bang); animation: pop .25s ease-out; }
 .modal.modal-alert h3 { color: #a4262c; }
 @keyframes pop { from { transform: scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
-/* 이석(장기) 사유(자리 비움·짐만 두고 비움·예약 후 미입실·주인 없는 짐)는 조치 목록에서 같은 주황 배지 */
-.badge.t-away, .badge.t-hoarding, .badge.t-no_show, .badge.t-unowned_item { background: var(--c-away); color: #fff; }
+/* 조치 목록 배지는 상태 분류 색: 이석(자리 비움·짐만 두고 비움·미입실)은 모두 주황 */
+.badge.t-away, .badge.t-hoarding, .badge.t-no_show { background: var(--c-away); color: #fff; }

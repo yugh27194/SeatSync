@@ -54,7 +54,7 @@
     {"seat": "B-3", "user": "20260003", "reservation": "reserved", "state": "empty", "state_ago_min": 30, "memo": "미입실 (확인 필요)"},
     {"seat": "B-4", "user": "20260004", "reservation": "in_use", "start_ago_min": 40, "state": "item", "state_ago_min": 5, "memo": "짐만 있음(잠시 자리 비움)"},
     {"seat": "C-1", "user": "20260005", "reservation": "reserved", "start_ago_min": 3, "state": "empty", "state_ago_min": 30, "memo": "입실 대기"},
-    {"seat": "C-2", "state": "item", "state_ago_min": 40, "memo": "주인 없는 짐(예약 없이 짐으로 자리 맡기)"},
+    {"seat": "C-2", "state": "item", "state_ago_min": 40, "memo": "예약 없이 짐만 있음(빈자리로 봄)"},
     {"seat": "D-1", "state": "unavailable", "reason": "maintenance", "state_ago_min": 30, "note": "청소 중", "memo": "점검·청소"},
     {"seat": "E-3", "state": "unavailable", "reason": "broken", "state_ago_min": 90, "note": "콘센트 고장", "memo": "고장(콘센트)"}
   ]

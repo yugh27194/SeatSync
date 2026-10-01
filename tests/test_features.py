@@ -194,7 +194,7 @@ def test_feedback_correct_and_wrong(admin, device, clock):
     st = admin.jget("/api/admin/feedback")
     assert st["overall"] == {"total": 2, "correct": 1, "accuracy": 0.5}
     assert st["by_source"]["camera"]["accuracy"] == 0.0
-    assert st["confusion"][0] == {"shown": "짐만 있음", "correct": "정상 이용", "count": 1}
+    assert st["confusion"][0] == {"shown": "빈자리", "correct": "정상 이용", "count": 1}
     assert st["recent"][0]["applied"] is True
 
 

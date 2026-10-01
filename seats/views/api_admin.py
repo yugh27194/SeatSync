@@ -13,7 +13,7 @@ from ..services import (clear_marks, compute_hourly_stats, get_settings, item_de
                         record_event, refresh, seat_has_item, set_item_detection, set_seat_state)
 from ..status import (ACTUAL_STATES, ALERT_TYPE_LABELS, ASSIGN_GROUPS, ASSIGNABLE, AWAY_LONG, CATEGORIES,
                       DEFAULT_SETTINGS, DETAILS, SEAT_STATES, SETTINGS_META, TIME_KEYS, TIME_STEP, category, fmt_min,
-                      full_label)
+                      full_label, next_label)
 from ..timeutil import to_iso, tz
 from .api_user import CALL_KINDS, layout_json
 
@@ -113,12 +113,12 @@ def seats(request):
             "no": seat.no, "label": seat.label, "x": seat.x, "y": seat.y, "zone": seat.zone, "booth": seat.no in booths,
             "seat_state": j.seat_state, "seat_state_label": SEAT_STATES[j.seat_state],
             "detail": j.detail, "detail_label": DETAILS[j.detail][1], "detail_desc": DETAILS[j.detail][3],
-            "full_label": full_label(j.detail),  # 이석(장기) · 예약 후 미입실
+            "full_label": full_label(j.detail),  # 이석 · 짐만 두고 자리 비움 (처리 이력·상태 지정용)
             "needs_action": j.needs_action, "check": j.check,
             "category": cat, "category_label": cat_label,  # 정상 · 이석(일시/장기) · 무단 점유 · 판단 불가 · 사용불가
             "since": to_iso(j.since), "elapsed_sec": max(0, now - j.since),
             "deadline": to_iso(j.deadline), "deadline_sec": (j.deadline - now) if j.deadline else None,
-            "next_label": full_label(j.next_detail) if j.next_detail else None,
+            "next_label": next_label(j.detail, j.next_detail),
             "actual": seat.state, "actual_label": ACTUAL_STATES[seat.state], "mark": seat.mark, "reason": seat.reason,
             "actual_since": to_iso(seat.state_since), "actual_elapsed_sec": max(0, now - seat.state_since),
             "actual_source": seat.state_source, "note": seat.note,

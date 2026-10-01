@@ -22,7 +22,7 @@ def test_assign_options_grouped(admin):
     groups = admin.jget("/api/admin/seats")["assign"]["groups"]
     assert [g["label"] for g in groups] == ["빈자리", "사용중", "사용불가"]
     in_use = [i["label"] for i in groups[1]["items"]]
-    assert in_use == ["정상 이용", "짐만 있음", "무단 점유", "이석(장기) · 자리 비움", "이석(장기) · 짐만 두고 자리 비움"]
+    assert in_use == ["정상 이용", "짐만 있음", "무단 점유", "이석 · 자리 비움", "이석 · 짐만 두고 자리 비움"]
     assert [i["label"] for i in groups[2]["items"]] == ["고장", "점검·청소", "사용 중지"]
 
 
@@ -74,7 +74,7 @@ def test_no_checkin_proxy_checkin(admin, user_a, device, clock):
     t0 = clock()
     send(device, clock, {1: ("person", t0)})  # 카메라: 누군가 앉았지만 체크인 안 함
     s = admin_seat(admin, 1)
-    assert s["detail"] == "seated_unchecked" and not s["needs_action"] and s["next_label"] == "체크인 누락"
+    assert s["detail"] == "seated_unchecked" and not s["needs_action"] and s["next_label"] == "무단 점유"
     clock.advance(10 * 60)  # 무단 점유 기준(10분)이 지나도 체크인 없음
     send(device, clock, {1: ("person", t0)})
     assert admin_seat(admin, 1)["detail"] == "no_checkin"
@@ -125,12 +125,11 @@ def test_hoarding_force_return_then_collect(admin, user_b, clock):
     assert admin.jpost(f"/api/admin/reservations/{rid}/force-return", {"memo": "사석화"}).status_code == 200
     assert Reservation.objects.get(id=rid).status == "force_returned"
     assert Alert.objects.get(id=a["id"]).resolution == "force_returned"
-    # 남은 짐: 반납 직후엔 '짐만 있음'(이용자에게는 빈자리), 장기 이석 기준이 지나면 이석(장기) · 주인 없는 짐 → 짐 수거 후 빈자리
+    # 남은 짐: 예약이 없으니 빈자리(예약 가능). 짐은 관리자 지도의 노란 점으로만(짐 감지 ON) → 짐 수거 후 비어 있음
     s = admin_seat(admin, 2)
-    assert s["detail"] == "item_left" and s["seat_state"] == "available" and not s["needs_action"]
+    assert s["detail"] == "empty" and s["seat_state"] == "available" and not s["needs_action"]
     clock.advance(30 * 60)
-    s = admin_seat(admin, 2)
-    assert s["detail"] == "unowned_item" and s["full_label"] == "이석(장기) · 주인 없는 짐" and s["needs_action"]
+    assert not admin_seat(admin, 2)["needs_action"]
     set_state(admin, 2, "empty")
     assert admin_seat(admin, 2)["seat_state"] == "available"
     assert _actions(admin)[:3] == ["seat_state", "force_return", "warn"]
@@ -183,15 +182,15 @@ def test_demo_scenario(admin, clock):
     expect = {
         "A-1": "using", "A-2": "away", "A-3": "unauthorized", "A-4": "no_checkin", "A-5": "using",
         "B-1": "seat_unavailable", "B-2": "hoarding", "B-3": "no_show", "B-4": "item", "C-1": "waiting",
-        "C-2": "unowned_item", "D-1": "maintenance", "E-3": "broken", "D-4": "empty",
+        "C-2": "empty", "D-1": "maintenance", "E-3": "broken", "D-4": "empty",
     }
     assert {k: seats[k]["detail"] for k in expect} == expect
     assert seats["A-1"]["reservation"]["user"]["name"] == "사용자A"
     assert seats["A-5"]["reservation"] is None and not seats["A-5"]["needs_action"]
     types = sorted(a["type"] for a in admin.jget("/api/admin/alerts?open=1")["alerts"])
-    assert types == ["away", "hoarding", "no_checkin", "no_show", "seat_unavailable", "unauthorized", "unowned_item"]
+    assert types == ["away", "hoarding", "no_checkin", "no_show", "seat_unavailable", "unauthorized"]
     setup_demo(clock())  # 다시 배치해도 같은 결과
-    assert len(admin.jget("/api/admin/alerts?open=1")["alerts"]) == 7
+    assert len(admin.jget("/api/admin/alerts?open=1")["alerts"]) == 6
     assert User.objects.count() == 9  # userA·B·C + manager + 테스트 5명
 
 

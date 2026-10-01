@@ -65,7 +65,7 @@ def test_04_no_show(clock, manager, ua):
     assert any("체크인 마감" in t for t in notes("userA", "prewarn"))
     clock.advance(15)
     s = admin_seat(manager, no("A-1"))
-    assert (s["detail"], s["category_label"]) == ("no_show", "이석(장기)") and s["needs_action"]
+    assert (s["detail"], s["category_label"]) == ("no_show", "이석") and s["needs_action"]
     clock.advance(120)
     admin_seat(manager, no("A-1"))
     assert Reservation.objects.get(id=rid).status == "no_show"
@@ -105,10 +105,10 @@ def test_07_bag_left_for_lunch(clock, manager, ub, device):
     assert admin_seat(manager, no("B-2"))["detail"] == "away_short"
     assert manager.jpost(f"/api/admin/seats/{no('B-2')}/state", {"detail": "item"}).status_code == 200
     s = admin_seat(manager, no("B-2"))
-    assert (s["detail"], s["category_label"]) == ("item", "이석(일시)")
+    assert (s["detail"], s["category_label"]) == ("item", "이석")
     clock.advance(60)
     s = admin_seat(manager, no("B-2"))
-    assert (s["detail"], s["category_label"]) == ("hoarding", "이석(장기)") and s["needs_action"]
+    assert (s["detail"], s["category_label"]) == ("hoarding", "이석") and s["needs_action"]
     clock.advance(120)
     admin_seat(manager, no("B-2"))
     assert Reservation.objects.get(id=rid).status == "force_returned"
@@ -148,7 +148,7 @@ def test_10_qr_photo_remote_checkin(clock, manager, ua, device):
     rid = reserve(ua, "A-3", qr=True)  # QR 사진으로 체크인 성공(막을 수 없음)
     clock.advance(5)
     post(device, snapshot(clock, {"A03": ("EMPTY", 0, 5)}))
-    assert admin_seat(manager, no("A-3"))["category_label"] == "이석(일시)"
+    assert admin_seat(manager, no("A-3"))["category_label"] == "이석"
     clock.advance(60)
     post(device, snapshot(clock, {"A03": ("EMPTY", 0, 65)}))
     s = admin_seat(manager, no("A-3"))

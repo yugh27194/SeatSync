@@ -48,7 +48,7 @@ def test_on_items_only_and_person_with_items(admin, user, device, clock):
     assert seat(1).state == "item" and seat(1).state_since == clock()  # 짐을 놓은 때부터 센다
     assert seat(2).state == "occupied" and seat(3).state == "empty"
     a1, a2, a3 = (admin_seat(admin, n) for n in (1, 2, 3))
-    assert a1["detail"] == "item_left" and a1["has_item"]  # 예약 없는 좌석의 짐: 이용자에게는 빈자리 and a1["camera"]["item"] is True
+    assert a1["detail"] == "empty" and a1["has_item"]  # 예약 없는 좌석의 짐: 빈자리 + 노란 점 and a1["camera"]["item"] is True
     assert a2["detail"] == "detected" and a2["has_item"]  # 사람 + 짐: 정상 분류 그대로, 노란 점만
     assert not a3["has_item"]
     # 짐 유무는 관리자 지도에서만 — 이용자 좌석 지도 API에는 싣지 않는다
@@ -110,7 +110,7 @@ def test_dot_depends_only_on_item_not_person(admin, device, clock):
 
 
 def test_reserved_bag_only_is_waiting_then_no_show(admin, user, device, clock):
-    """예약하고 가방만 두고 체크인 안 함 → 사람이 없으니 입실 대기(회색) → 체크인 제한 후 이석(장기) · 예약 후 미입실."""
+    """예약하고 가방만 두고 체크인 안 함 → 사람이 없으니 입실 대기(회색) → 체크인 제한 후 이석(미입실)."""
     toggle(admin, True)
     assert user.jpost("/api/reservations", {"seat_no": 1}).status_code == 201
     post(device, items_snapshot(clock, {"A01": ("EMPTY", True)}))
@@ -119,7 +119,7 @@ def test_reserved_bag_only_is_waiting_then_no_show(admin, user, device, clock):
     clock.advance(15 * 60)
     post(device, items_snapshot(clock, {"A01": ("EMPTY", True)}))
     s = admin_seat(admin, 1)
-    assert s["detail"] == "no_show" and s["full_label"] == "이석(장기) · 예약 후 미입실" and s["needs_action"]
+    assert s["detail"] == "no_show" and s["category_label"] == "이석" and s["needs_action"]
 
 
 def test_bag_only_seat_without_reservation_is_reservable(admin, user, device, clock):

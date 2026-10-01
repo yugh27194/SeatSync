@@ -6,7 +6,8 @@
   - 정상 이용   : QR 체크인 + 사람 감지
   - 일시 이석   : QR 체크인했는데 사람 미감지 (장기 이석 기준 전)
   - 장기 이석   : 사람 미감지가 기준 시간 이상 → ! 관리자 확인
-                  관리자 화면에서는 사석화·미입실·주인 없는 짐도 모두 '이석(장기)'로 묶고 사유만 붙인다
+관리자 화면의 상태는 빈자리 / 정상 / 이석 / 무단 점유 / 판단 불가 다섯 가지로만 보이고,
+짐 여부·미입실 같은 세부 사유는 조치 영역에 짧은 문장(세부 상태 설명)으로 붙인다.
   - 무단 점유   : QR 체크인 없이 사람(또는 짐)이 기준 시간 이상 감지 → ! 관리자 확인
   - 판단 불가   : 가림·인식 실패·카메라 오류(UNKNOWN)가 기준 시간 이상 → ! 관리자 확인
 명확한 경우는 자동으로 좌석 상태에 반영하고, 애매하거나 QR과 카메라가 어긋나는 경우만 '처리 필요'(관리자 확인)로 넘긴다.
@@ -37,7 +38,7 @@ DEFAULT_SETTINGS = {
 SETTINGS_META = {
     "checkin_limit_min": ("체크인 제한", "분", "예약 후 이 시간 안에 체크인하지 않으면 미입실", 0.25, 120),
     "away_limit_min": ("장기 이석 기준", "분",
-                       "이 시간 넘게 자리를 비우면 이석(장기) — 짐만 두고 비움·주인 없는 짐 포함", 0.25, 240),
+                       "이 시간 넘게 자리를 비우면(짐만 두고 비워도) 관리자 확인", 0.25, 240),
     "unauthorized_min": ("무단 점유 기준", "분",
                          "체크인 없이 이 시간 넘게 앉아 있으면 무단 점유(예약석은 체크인 누락)", 0.25, 120),
     "unknown_min": ("판단 불가 기준", "분",
@@ -121,29 +122,21 @@ OK = "ok"
 
 # 세부 상태: (상위 상태, 라벨, 처리 필요 여부, 설명)
 DETAILS = {
-    "empty":            (AVAILABLE,   "빈자리",           False, "예약할 수 있는 빈 좌석이에요."),
+    "empty":            (AVAILABLE,   "빈자리",           False, "아무도 이용하지 않는 좌석이에요."),
     "using":            (IN_USE,      "정상 이용",        False, "QR 체크인 후 이용 중이에요."),
     "waiting":          (IN_USE,      "입실 대기",        False, "예약 후 체크인을 기다리는 중이에요."),
-    "detected":         (IN_USE,      "착석 감지(체크인 전)", False,
-                         "예약 없이 사람이 앉았어요. 체크인하지 않으면 '무단 점유'가 돼요."),
-    "seated_unchecked": (IN_USE,      "착석(체크인 전)",  False,
-                         "예약 좌석에 앉았지만 체크인 전이에요. 시간이 지나면 '체크인 누락'이 돼요."),
-    "away_short":       (IN_USE,      "자리 비움",        False,
-                         "체크인한 사람이 자리를 비웠어요. 시간이 지나면 이석(장기)가 돼요."),
-    "item":             (IN_USE,      "짐만 두고 자리 비움", False,
-                         "사람은 없고 짐만 있어요. 시간이 지나면 이석(장기)가 돼요."),
-    "item_left":        (AVAILABLE,   "짐만 있음",        False,
-                         "예약 없는 좌석에 짐만 있어요. 이용자에게는 빈자리로 보여요."),
+    "detected":         (IN_USE,      "착석 감지(체크인 전)", False, "예약 없이 사람이 앉아 있어요."),
+    "seated_unchecked": (IN_USE,      "착석(체크인 전)",  False, "예약자가 앉았지만 아직 체크인 전이에요."),
+    "away_short":       (IN_USE,      "자리 비움",        False, "체크인 후 잠시 자리를 비웠어요."),
+    "item":             (IN_USE,      "짐만 두고 자리 비움", False, "짐을 두고 잠시 자리를 비웠어요."),
     "unauthorized":     (IN_USE,      "무단 점유",        True,  "체크인 없이 자리를 오래 쓰고 있어요."),
-    "no_checkin":       (IN_USE,      "체크인 누락",      True,  "예약 좌석에 앉았지만 오래 체크인하지 않았어요."),
-    "no_show":          (IN_USE,      "예약 후 미입실",   True,  "예약자가 체크인 시간 안에 오지 않았어요."),
-    "away":             (IN_USE,      "자리 비움",        True,  "체크인한 사람이 오래 자리를 비웠어요."),
-    "hoarding":         (IN_USE,      "짐만 두고 자리 비움", True, "짐만 두고 오래 자리를 비웠어요."),
-    "unowned_item":     (AVAILABLE,   "주인 없는 짐",     True,
-                         "예약 없는 좌석에 짐이 오래 방치됐어요. 이용자에게는 빈자리로 보여요. 수거해 주세요."),
+    "no_checkin":       (IN_USE,      "체크인 누락",      True,  "예약자가 앉았지만 오래 체크인하지 않았어요."),
+    "no_show":          (IN_USE,      "미입실",           True,  "예약 후 체크인 시간 안에 오지 않았어요."),
+    "away":             (IN_USE,      "자리 비움",        True,  "체크인 후 오래 자리를 비웠어요."),
+    "hoarding":         (IN_USE,      "짐만 두고 자리 비움", True, "짐을 두고 오래 자리를 비웠어요."),
     # 판단 불가의 상위 상태는 마지막으로 확인된 판정을 따른다(빈자리였으면 빈자리 그대로). 여기 값은 기본값일 뿐.
     "unknown":          (IN_USE,      "판단 불가",        True,
-                         "카메라가 좌석을 확인하지 못해요(가림·인식 오류). 현장 확인이 필요해요."),
+                         "카메라가 좌석을 확인하지 못해요(가림·인식 오류)."),
     "broken":           (UNAVAILABLE, "고장",             False, "고장으로 쓸 수 없는 좌석이에요."),
     "maintenance":      (UNAVAILABLE, "점검·청소",        False, "점검·청소 중인 좌석이에요."),
     "blocked":          (UNAVAILABLE, "사용 중지",        False, "사용을 막아 둔 좌석이에요."),
@@ -155,39 +148,45 @@ ISSUES = [k for k, v in DETAILS.items() if v[2]]
 CHECK = frozenset(ISSUES) | {"away_short", "item"}
 UNAVAILABLE_REASONS = ("broken", "maintenance", "blocked")
 
-# 관리자 화면의 상태 분류 4가지: 정상(초록, 사람이 있음) · 이석(주황, 일시/장기) · 무단 점유(빨강) · 판단 불가(짙은 회색)
-# + 빈자리(옅은 회색, 아무도 없음 — 예약 후 입실 전 포함) · 사용불가(회색 빗금)
+# 관리자 화면의 상태 5가지: 빈자리(옅은 회색, 사람 없음 — 예약 후 입실 전 포함) · 정상(초록, 사람이 있음)
+# · 이석(주황) · 무단 점유(빨강) · 판단 불가(짙은 회색). (+ 사용불가: 현재 운영에서는 쓰지 않음)
 CATEGORIES = {"normal": "정상", "away": "이석", "unauthorized": "무단 점유", "unknown": "판단 불가",
               "empty": "빈자리", "unavailable": "사용불가"}
 _CATEGORY_OF = {
-    "empty": "empty", "waiting": "empty", "item_left": "empty",
+    "empty": "empty", "waiting": "empty",
     "using": "normal", "detected": "normal", "seated_unchecked": "normal",
-    "away_short": "away", "item": "away", "away": "away", "hoarding": "away", "no_show": "away", "unowned_item": "away",
+    "away_short": "away", "item": "away", "away": "away", "hoarding": "away", "no_show": "away",
     "unauthorized": "unauthorized", "no_checkin": "unauthorized",
     "unknown": "unknown",
     "broken": "unavailable", "maintenance": "unavailable", "blocked": "unavailable", "seat_unavailable": "unavailable",
 }
-# 이석(장기): 장기 이석·사석화·미입실·주인 없는 짐을 관리자 화면에서 하나로 묶는다(사유는 세부 상태 라벨). 나머지 이석은 이석(일시)
-AWAY_LONG = frozenset({"away", "hoarding", "no_show", "unowned_item"})
+# 기준 시간을 넘겨 관리자 확인이 필요한 이석(집계용). 화면에는 모두 '이석'으로만 보인다.
+AWAY_LONG = frozenset({"away", "hoarding", "no_show"})
 
 
 def category(detail):
-    """세부 상태 → (분류 코드, 표시 이름). 이석은 '이석(일시)' / '이석(장기)'로 나눈다."""
+    """세부 상태 → (분류 코드, 표시 이름): 빈자리 · 정상 · 이석 · 무단 점유 · 판단 불가 (· 사용불가)."""
     cat = _CATEGORY_OF[detail]
-    if cat == "away":
-        return cat, "이석(장기)" if detail in AWAY_LONG else "이석(일시)"
-    if detail == "waiting":
-        return cat, "입실 대기"
     return cat, CATEGORIES[cat]
 
 
 def full_label(detail):
-    """관리자 목록용 이름: 이석은 '이석(장기) · 예약 후 미입실'처럼 분류 + 사유, 나머지는 세부 상태 이름."""
+    """처리 이력 메모·상태 지정 버튼용 이름: 이석은 '이석 · 짐만 두고 자리 비움'처럼 사유를 붙이고, 나머지는 세부 상태 이름."""
     cat, cat_label = category(detail)
     return f"{cat_label} · {DETAILS[detail][1]}" if cat == "away" else DETAILS[detail][1]
 
 
-ALERT_TYPE_LABELS = {**{k: full_label(k) for k in ISSUES}, "call": "이용자 호출"}
+def next_label(detail, next_detail):
+    """기준 시간이 지나면 바뀌는 상태 이름. 같은 분류 안에서 확인 필요로 넘어가면 '관리자 확인'."""
+    if not next_detail:
+        return None
+    if category(detail)[0] == category(next_detail)[0]:
+        return "관리자 확인"
+    return category(next_detail)[1]
+
+
+# 조치 목록 배지: 상태 분류 이름만(세부 사유는 설명 문장으로)
+ALERT_TYPE_LABELS = {**{k: category(k)[1] for k in ISSUES}, "call": "이용자 호출"}
 
 # 관리자가 좌석에 직접 부여할 수 있는 세부 상태 → (현장 상태, 표시, 사용불가 사유, 조건)
 #   mark 'ok'    : 관리자가 확인한 정상 이용 — 예약이 없어도 '처리 필요'로 빠지지 않는다
@@ -304,14 +303,7 @@ def _judge(res, actual, now, s):
                 return _j("unauthorized", since)
             # QR 체크인 없이 사람이 감지됨 → 기준 시간이 지나면 무단 점유
             return _timed("detected", "unauthorized", since, s.sec("unauthorized_min"), now, actual)
-        if a == "item":
-            # 예약 없는 좌석에 짐만: 이용자에게는 빈자리(예약 가능) — 짐 오탐이어도 다른 이용자가 피해 보지 않게.
-            # 장기 이석 기준이 지나면 관리자에게 '이석(장기) · 주인 없는 짐'
-            if mark == "ok":
-                return _j("item_left", since)
-            if mark == "issue":
-                return _j("unowned_item", since)
-            return _timed("item_left", "unowned_item", since, s.sec("away_limit_min"), now, actual)
+        # 예약 없는 좌석에 짐만 있으면 빈자리로 본다(예약 가능). 짐은 관리자 지도의 노란 점으로만 보인다.
         return _j("empty", since)
 
     if res.status == "reserved":
