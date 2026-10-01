@@ -10,8 +10,8 @@ from ..http import ApiError, int_field, jres, json_body, str_field
 from .. import analytics
 from ..models import Alert, Notification, Reservation, Seat, WaitEntry
 from ..seed import load_layout
-from ..services import (clear_marks, extend_check, get_settings, item_detection_on, record_event, refresh,
-                        reservation_json, seat_has_item, set_seat_state, user_active_reservation, wait_position)
+from ..services import (clear_marks, extend_check, get_settings, record_event, refresh, reservation_json,
+                        set_seat_state, user_active_reservation, wait_position)
 from ..status import DETAILS, fmt_sec, user_view
 from ..timeutil import to_iso
 
@@ -138,22 +138,18 @@ def seats(request):
     s = get_settings()
     my = user_active_reservation(request.user.id)
     layout, booths = layout_json()
-    items_on = item_detection_on()
     out = []
     for it in results:
         seat = it["seat"]
         row = {"no": seat.no, "label": seat.label, "x": seat.x, "y": seat.y, "zone": seat.zone,
                "booth": seat.no in booths, "view": _seat_view(it, my, request.user.id)}
-        # 일반 이용자에게는 빈자리·사용중·사용불가만 알린다(왜 사용중·사용불가인지는 관리자 탭에서만).
-        # 짐 감지를 켜면 짐이 있는 좌석에 노란 점만 찍는다(짐 종류·주인은 알리지 않음).
-        if seat_has_item(seat, items_on, now):
-            row["item"] = True
+        # 일반 이용자에게는 빈자리·사용중·사용불가만 알린다(왜 사용중·사용불가인지, 짐 유무는 관리자 탭에서만).
         out.append(row)
     return jres({
         "server_time": to_iso(now), "grid": layout["grid"], "fixtures": layout["fixtures"], "zones": layout["zones"],
         "seats": out, "my_reservation": reservation_json(my, now, s), "my_status": own_status(results, my, now),
         "waitlist": waitlist_json(request.user.id, now), "policy": _policy(s), "me": _me(request, now),
-        "live": _live(results), "item_detection": items_on,
+        "live": _live(results),
     })
 
 

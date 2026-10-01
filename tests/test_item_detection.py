@@ -40,7 +40,6 @@ def test_off_ignores_items(admin, user, device, clock):
     post(device, items_snapshot(clock, {"A01": ("EMPTY", True), "A02": ("OCCUPIED", True)}))
     assert seat(1).state == "empty" and seat(1).cam_item is True  # 받기는 하지만 판정에 쓰지 않음
     assert admin_seat(admin, 1)["has_item"] is False and "item" not in user_row(user, 1)
-    assert user.jget("/api/seats")["item_detection"] is False
 
 
 def test_on_items_only_and_person_with_items(admin, user, device, clock):
@@ -52,7 +51,9 @@ def test_on_items_only_and_person_with_items(admin, user, device, clock):
     assert a1["detail"] == "item" and a1["has_item"] and a1["camera"]["item"] is True
     assert a2["detail"] == "detected" and a2["has_item"]  # 사람 + 짐: 정상 분류 그대로, 노란 점만
     assert not a3["has_item"]
-    assert user_row(user, 1)["item"] and user_row(user, 2)["item"] and "item" not in user_row(user, 3)
+    # 짐 유무는 관리자 지도에서만 — 이용자 좌석 지도 API에는 싣지 않는다
+    assert all("item" not in user_row(user, n) for n in (1, 2, 3))
+    assert "item_detection" not in user.jget("/api/seats")
 
 
 def test_checked_in_person_leaves_bag_then_hoarding(admin, user, device, clock):
