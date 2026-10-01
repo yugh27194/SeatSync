@@ -147,6 +147,10 @@ input:focus, textarea:focus { outline: 2px solid #b8d0ff; border-color: var(--pr
 .seat.checking { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.18) 0 6px, transparent 6px 12px); }
 .fixture { display: flex; align-items: center; justify-content: center; border: 2px dashed var(--line); border-radius: 10px; color: var(--muted); font-size: 13px; min-height: 56px; }
 
+.map-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.map-foot .legend { margin-top: 0; }
+.map-foot #wl-join { margin-left: auto; }
+.mybar[hidden], .map-foot [hidden] { display: none; }
 .legend { display: flex; gap: 12px; flex-wrap: wrap; margin: 10px 2px 0; font-size: 13px; color: var(--muted); }
 .legend i { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 4px; }
 

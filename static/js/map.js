@@ -5,6 +5,7 @@
   const { api, layoutGrid, poll, fmtRemain, fmtTime, syncClock, serverNow, parseTs, toast, modal, esc } = window.SS;
   const mapEl = document.getElementById("seatmap");
   const barEl = document.getElementById("mybar");
+  const joinBtn = document.getElementById("wl-join");
   let data = null;
   let busy = false;
 
@@ -41,6 +42,8 @@
     const me = data.me || {};
     const w = data.waitlist;
     const now = serverNow();
+    barEl.hidden = false;
+    joinBtn.hidden = true;
     if (!r && me.suspended_until) {
       barEl.innerHTML = `<div class="txt"><span class="deadline">이용 정지 중</span> · ${me.suspended_until.slice(5, 10)} ${fmtTime(me.suspended_until)}까지 예약할 수 없어요</div>`;
       return;
@@ -68,9 +71,9 @@
         <button class="btn small secondary" data-wl="cancel">대기 취소</button>`;
       return;
     }
-    const free = data.seats.filter((x) => x.view === "available").length;
-    barEl.innerHTML = `<div class="txt">${free ? "회색 빈자리를 눌러 예약하세요" : "지금은 빈자리가 없어요"}</div>
-      <button class="btn small ${free ? "secondary" : ""}" data-wl="join">🔔 빈자리 알림</button>`;
+    // 예약·대기가 없으면 상단 바는 숨기고, 빈자리 알림 버튼은 지도 아래 오른쪽에 둔다.
+    barEl.hidden = true;
+    joinBtn.hidden = false;
   }
 
   function renderLive() {
@@ -113,6 +116,7 @@
     }
     await ticker.refresh();
   }
+  joinBtn.addEventListener("click", () => waitlistAction("join"));
   barEl.addEventListener("click", (e) => {
     const b = e.target.closest("[data-wl]");
     if (b) waitlistAction(b.dataset.wl);

@@ -26,4 +26,4 @@
   <ul class="res-list" id="notice-list"><li class="muted small">불러오는 중…</li></ul>
 </div>
 {% endblock %}
-{% block scripts %}<script src="{% static 'js/history.js' %}"></script>{% endblock %}
+{% block scripts %}<script src="{% static 'js/history.js' %}?v={{ static_ver }}"></script>{% endblock %}

@@ -17,4 +17,4 @@
 </div>
 {% endif %}
 {% endblock %}
-{% block scripts %}{% if seat %}<script src="{% static 'js/seat.js' %}"></script>{% endif %}{% endblock %}
+{% block scripts %}{% if seat %}<script src="{% static 'js/seat.js' %}?v={{ static_ver }}"></script>{% endif %}{% endblock %}

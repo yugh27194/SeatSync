@@ -5,11 +5,14 @@
 <div class="mybar" id="mybar"><div class="txt muted">불러오는 중…</div></div>
 <div class="live-line" id="live"></div>
 <div class="seatmap" id="seatmap" aria-label="열람실 좌석 지도"></div>
+<div class="map-foot">
 <div class="legend">
   <span><i style="background:var(--v-available);outline:1px solid #a4a4a4;outline-offset:-1px"></i>빈자리</span>
   <span><i style="background:var(--v-taken)"></i>사용중</span>
   <span><i style="background:var(--v-unavailable)"></i>사용불가</span>
 </div>
+<button class="btn small secondary" id="wl-join" data-wl="join" hidden>🔔 빈자리 알림</button>
+</div>
 <p class="muted small" style="margin-top:12px">빈자리를 눌러 예약하세요. 좌석 QR을 찍으면 예약과 체크인이 한 번에 돼요.</p>
 {% endblock %}
-{% block scripts %}<script src="{% static 'js/map.js' %}"></script>{% endblock %}
+{% block scripts %}<script src="{% static 'js/map.js' %}?v={{ static_ver }}"></script>{% endblock %}
