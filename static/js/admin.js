@@ -36,7 +36,7 @@
   function checkNewAlerts() {
     const ids = new Set(alerts.map((a) => a.id));
     if (seen === null) { seen = ids; return; }
-    const fresh = alerts.filter((a) => !seen.has(a.id));
+    const fresh = alerts.filter((a) => !seen.has(a.id) && a.type !== "call");  // 호출은 공통 팝업(common.js)으로 알린다
     fresh.forEach((a) => seen.add(a.id));
     if (fresh.length) { showBanner("확인 필요 · " + fresh.map((a) => `${a.seat_label} ${a.type_label}`).join(", ")); }
   }
@@ -55,12 +55,18 @@
     return `<button type="button" class="btn small ${cls || "secondary"}" data-act="${act}" ${a}>${label}</button>`;
   }
 
+  // 이 좌석이 아닌 다른 좌석의 예약(잘못 앉은 예약자 후보)
+  const otherReservations = (s) => data.seats.filter((x) => x.no !== s.no && x.reservation);
+
   // 상황별 권장 조치
   function recommended(detail, s, alertId) {
     const r = s.reservation, lbl = s.label;
     switch (detail) {
       case "unauthorized":
         if (r) return btn("move", "예약자 다른 좌석으로", { res: r.id, label: lbl }, "") + btn("leave", "퇴실 안내 완료", { seat: s.no, label: lbl });
+        if (s.actual === "occupied" && otherReservations(s).length)  // 다른 좌석 예약자가 여기 잘못 앉았을 수 있다
+          return btn("pull", "다른 좌석 예약자가 앉음 → 이 좌석으로", { seat: s.no }, "") +
+            btn("assign", "현장 배정", { seat: s.no, checkin: 1 }) + btn("leave", "퇴실 안내 완료", { seat: s.no, label: lbl });
         return s.actual === "item"
           ? btn("leave", "짐 수거 완료", { seat: s.no, label: lbl, item: 1 }, "") + btn("assign", "짐 주인에게 배정", { seat: s.no, checkin: 1 })
           : btn("assign", "현장 배정", { seat: s.no, checkin: 1 }, "") + btn("leave", "퇴실 안내 완료", { seat: s.no, label: lbl });
@@ -175,7 +181,8 @@
         </div>`;
     } else {
       resHtml = `<p class="muted" style="margin:0 0 8px">예약 없음</p>
-        ${s.actual !== "unavailable" ? `<div class="btn-row">${btn("assign", "대리 예약·배정", { seat: s.no, checkin: s.actual === "occupied" ? 1 : 0 })}</div>` : ""}`;
+        ${s.actual !== "unavailable" ? `<div class="btn-row">${btn("assign", "대리 예약·배정", { seat: s.no, checkin: s.actual === "occupied" ? 1 : 0 })}
+          ${s.actual === "occupied" && otherReservations(s).length ? btn("pull", "다른 좌석 예약자가 앉음", { seat: s.no }) : ""}</div>` : ""}`;
     }
 
     el.innerHTML = `<h2>${esc(s.label)} <span class="statetag cat-${s.category}">${esc(s.category_label)}</span>
@@ -202,7 +209,13 @@
       const s = seatByNo(a.seat_no) || { no: a.seat_no, label: a.seat_label, reservation: null };
       const ru = a.reservation && a.reservation.user;
       let actions = "";
-      if (a.type === "call") {
+      if (a.type === "call" && a.call_kind === "seat_taken" && s.reservation) {
+        // 예약자 신고: 예약 좌석에 다른 사람이 앉아 있음
+        const r = s.reservation;
+        actions = btn("leave", "착석자 퇴실 안내 완료", { seat: s.no, label: s.label, keep: 1, alert: a.id }, "") +
+          btn("move", "예약자 다른 좌석으로", { res: r.id, label: s.label }) +
+          btn("select", "좌석 보기", { seat: a.seat_no });
+      } else if (a.type === "call") {
         actions = btn("select", "좌석 보기", { seat: a.seat_no }, "");
       } else if (s.detail === a.type) {
         actions = recommended(a.type, s, a.id);
@@ -214,6 +227,7 @@
         <div class="meta">${a.desc ? esc(a.desc) + "<br>" : ""}
           ${ru ? `예약자 ${userLine(ru)} ${warnBadge(ru)}` : "예약 없음"}
           ${a.caller ? ` · 호출자 ${esc(a.caller.name)}` : ""}</div>
+        ${a.call_label && a.call_kind ? `<div class="memo"><b>${esc(a.call_label)}</b></div>` : ""}
         ${a.memo ? `<div class="memo">${esc(a.memo)}</div>` : ""}
         <div class="btn-row">${actions}${btn("resolve", "처리 완료", { alert: a.id })}</div>
       </li>`;
@@ -303,6 +317,14 @@
     },
 
     async leave(d) {
+      if (d.keep) {  // 예약자 신고(내 자리에 다른 사람) 처리: 착석자를 내보내고 예약자가 앉을 수 있게 비움
+        const ok = await modal({ title: "착석자 퇴실 안내 완료", body: `${d.label} 좌석에 앉아 있던 분에게 퇴실(또는 빈자리 예약)을 안내했나요?\n현장을 '비어 있음'으로 바꾸고 신고를 처리 완료합니다.\n예약자에게 좌석 QR로 체크인하도록 안내하세요.`, ok: "처리" });
+        if (ok) run(async () => {
+          await api("POST", `/api/admin/seats/${d.seat}/state`, { detail: "empty" });
+          if (d.alert) await api("POST", `/api/admin/alerts/${d.alert}/resolve`, { memo: "착석자 퇴실 안내 → 예약자 좌석 확보" });
+        }, "착석자를 내보내고 신고를 처리했습니다.");
+        return;
+      }
       const ok = d.item
         ? await modal({ title: "짐 수거 완료", body: `${d.label} 좌석에 방치된 짐을 수거(보관)했나요?\n현장을 '비어 있음'으로 바꿉니다.`, ok: "비어 있음으로 변경" })
         : await modal({ title: "퇴실 안내 완료", body: `${d.label} 좌석의 무단 점유자에게 퇴실(또는 예약)을 안내했나요?\n현장을 '비어 있음'으로 바꿉니다.`, ok: "비어 있음으로 변경" });
@@ -345,6 +367,20 @@
       if (!v) return;
       run(() => api("POST", "/api/admin/reservations", { user_id: Number(v.user_id), seat_no: s.no, checkin: false, memo: v.memo }),
         `${s.label} 좌석을 예약했습니다.`);
+    },
+
+    // 예약자가 다른 좌석에 잘못 앉음 → 그 예약을 지금 앉은 좌석으로 옮기고 바로 체크인
+    async pull(d) {
+      const s = seatByNo(d.seat);
+      const opts = otherReservations(s).map((x) => ({ value: x.reservation.id,
+        label: `${x.reservation.user.name} — ${x.label} ${x.reservation.status === "reserved" ? "예약(체크인 전)" : "이용 중"}` }));
+      const v = await modal({ title: `${s.label}에 앉은 사람이 다른 좌석 예약자인가요?`,
+        body: `본인 확인 후 그 예약을 ${s.label}(으)로 옮기고 바로 체크인합니다. 원래 좌석은 빈자리가 됩니다.`,
+        fields: [{ name: "res", label: "예약", type: "select", options: opts, value: opts[0].value },
+          { name: "memo", label: "메모 (선택)", type: "textarea", placeholder: "예: 좌석 착각" }], ok: "옮기고 체크인" });
+      if (!v) return;
+      run(() => api("POST", `/api/admin/reservations/${v.res}/move`, { seat_no: s.no, seated: true, memo: v.memo || "좌석 착각" }),
+        `예약을 ${s.label}(으)로 옮기고 체크인했습니다.`);
     },
 
     async checkin(d) {

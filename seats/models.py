@@ -138,6 +138,8 @@ class Alert(models.Model):
     resolved_at = models.BigIntegerField(null=True, blank=True)
     resolved_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     resolution = models.CharField(max_length=20, null=True, blank=True)  # handled | force_returned | auto | warned | reset
+    # 이용자 호출(type=call)의 종류: "" 일반 | seat_taken 내 예약 좌석에 다른 사람이 앉아 있음
+    call_kind = models.CharField(max_length=20, blank=True, default="")
 
     class Meta:
         constraints = [

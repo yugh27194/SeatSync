@@ -41,8 +41,9 @@
         </div>
         ${r.can_extend ? "" : `<p class="muted small" style="margin:8px 0 0">${esc(r.extend_reason || "")}</p>`}
         <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
-        <button class="btn secondary block" id="btn-call">관리자 호출</button>
-        <p class="muted small" style="margin:6px 0 0">예약한 좌석에 다른 분이 앉아 있는 등 문제가 있으면 알려 주세요.</p>
+        <button class="btn danger block" id="btn-taken">내 자리에 다른 사람이 앉아 있어요</button>
+        <button class="btn secondary block" id="btn-call" style="margin-top:8px">관리자 호출 (그 밖의 문제)</button>
+        <p class="muted small" style="margin:6px 0 0">예약한 좌석에 다른 분이 앉아 있으면 위 버튼을 눌러 주세요. 관리자 화면에 바로 알림이 뜹니다.</p>
         <p class="small" style="margin:10px 0 0"><a href="/history">내 이용 기록 보기 →</a></p>
       </div>`;
     bind();
@@ -72,6 +73,7 @@
       try { await api("POST", `/api/reservations/${r.id}/return`); toast(reserved ? "예약을 취소했어요." : "반납했어요.", "ok"); } catch (e) { /* 토스트 */ }
       sync();
     };
+    document.getElementById("btn-taken").onclick = () => SS.reportSeatTaken(r.seat_no, r.seat_label);
     document.getElementById("btn-call").onclick = async () => {
       const memo = await modal({ title: "관리자 호출", body: "상황을 간단히 적어 주세요.", ok: "호출",
         input: { placeholder: "예: 제 예약석에 다른 분이 앉아 계세요" } });

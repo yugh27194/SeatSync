@@ -14,7 +14,7 @@ from ..services import (clear_marks, compute_hourly_stats, get_settings, log_adm
 from ..status import (ACTUAL_STATES, ALERT_TYPE_LABELS, ASSIGN_GROUPS, ASSIGNABLE, AWAY_LONG, CATEGORIES,
                       DEFAULT_SETTINGS, DETAILS, SEAT_STATES, SETTINGS_META, TIME_KEYS, TIME_STEP, category, fmt_min)
 from ..timeutil import to_iso, tz
-from .api_user import layout_json
+from .api_user import CALL_KINDS, layout_json
 
 MAX_SUSPEND_DAYS = 90
 ACTION_LABELS = {
@@ -157,6 +157,7 @@ def alerts(request):
         out.append({
             "id": a.id, "seat_no": a.seat_id, "seat_label": a.seat.label, "seat_actual": a.seat.state,
             "type": a.type, "type_label": ALERT_TYPE_LABELS[a.type],
+            "call_kind": a.call_kind, "call_label": CALL_KINDS.get(a.call_kind, "") if a.type == "call" else "",
             "desc": DETAILS[a.type][3] if a.type in DETAILS else "",
             "created_at": to_iso(a.created_at), "elapsed_sec": max(0, now - a.created_at), "memo": a.memo,
             "caller": {"name": a.created_by.name, "student_no": a.created_by.student_no} if a.created_by else None,
@@ -277,8 +278,11 @@ def admin_checkin(request, res_id):
 @require_POST
 @admin_required
 def move(request, res_id):
+    """좌석 이동. seated=true: 예약자가 다른 좌석에 잘못 앉은 경우 — 그 좌석(사람이 앉아 있어도 됨)으로 예약을 옮기고
+    관리자가 본인을 확인했으므로 바로 체크인한다."""
     body = json_body(request)
     to_no = int_field(body, "seat_no")
+    seated = bool(body.get("seated"))
     now = clock.now()
     with transaction.atomic():
         refresh(now)
@@ -288,13 +292,23 @@ def move(request, res_id):
         target = _get_seat(to_no)
         if _active_on(to_no):
             raise ApiError(409, "SEAT_TAKEN", "옮길 좌석에 이미 예약이 있습니다.")
-        if target.state != "empty":
+        if target.state == "unavailable" or (target.state != "empty" and not seated):
             raise ApiError(409, "SEAT_OCCUPIED" if target.state in ("occupied", "item") else "SEAT_UNAVAILABLE",
                            "빈자리로만 옮길 수 있습니다.")
         old = r.seat
         r.seat = target
         r.save(update_fields=["seat"])
-        if r.status == "in_use":
+        if seated:
+            # 앉아 있는 사람이 예약자 본인임을 관리자가 확인 → 새 좌석은 이용 중, 원래 좌석은 비워 둔다
+            if r.status == "reserved":
+                r.status, r.checked_in_at = "in_use", now
+                r.save(update_fields=["status", "checked_in_at"])
+                record_event(r, "checkin", now, memo="관리자 확인(착석한 좌석으로 이동)")
+            set_seat_state(target, "occupied", "manual", now)
+            if old.state in ("occupied", "item"):
+                set_seat_state(old, "empty", "manual", now)
+            clear_marks([old.no])
+        elif r.status == "in_use":
             # 이용 중인 이용자가 자리를 옮기므로 새 좌석은 사람 있음, 기존 좌석은(사용불가가 아니면) 비움
             set_seat_state(target, "occupied", "manual", now)
             if old.state == "occupied":

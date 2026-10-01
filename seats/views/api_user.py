@@ -37,6 +37,7 @@ OWN_STATUS_PAUSED = {
 }
 
 CALL_DEDUP_SEC = 60  # 같은 사용자 60초 내 중복 호출은 기존 알림 반환
+CALL_KINDS = {"": "관리자 호출", "seat_taken": "내 예약 좌석에 다른 사람이 앉아 있음"}
 
 
 def token_ok(given, seat):
@@ -314,23 +315,29 @@ def create_call(request):
     body = json_body(request)
     seat_no = int_field(body, "seat_no")
     memo = str_field(body, "memo")
+    kind = body.get("kind") or ""
+    if kind not in CALL_KINDS:
+        raise ApiError(400, "BAD_REQUEST", "알 수 없는 호출 종류입니다.")
     now = clock.now()
     with transaction.atomic():
         seat = Seat.objects.filter(no=seat_no, active=True).first()
         if seat is None:
             raise ApiError(404, "NOT_FOUND", "좌석을 찾을 수 없습니다.")
+        if kind == "seat_taken" and not Reservation.objects.filter(
+                seat=seat, user=request.user, status__in=("reserved", "in_use")).exists():
+            raise ApiError(409, "NOT_YOUR_SEAT", "내가 예약한 좌석에서만 보낼 수 있어요.")
         dup = Alert.objects.filter(type="call", created_by=request.user,
                                    created_at__gt=now - CALL_DEDUP_SEC).order_by("-id").first()
         if dup:
             return jres({"ok": True, "duplicate": True, "alert": _call_json(dup)})
         res = Reservation.objects.filter(seat=seat, status__in=("reserved", "in_use")).first()
         a = Alert.objects.create(seat=seat, type="call", reservation=res, memo=memo, created_at=now,
-                                 created_by=request.user)
+                                 created_by=request.user, call_kind=kind)
     return jres({"ok": True, "duplicate": False, "alert": _call_json(a)}, 201)
 
 
 def _call_json(a):
-    return {"id": a.id, "seat_no": a.seat_id, "memo": a.memo, "created_at": to_iso(a.created_at)}
+    return {"id": a.id, "seat_no": a.seat_id, "memo": a.memo, "kind": a.call_kind, "created_at": to_iso(a.created_at)}
 
 
 # ---------------------------------------------------------------- 빈자리 알림 대기

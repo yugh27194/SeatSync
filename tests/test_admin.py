@@ -188,7 +188,7 @@ def test_demo_scenario(admin, clock):
     assert types == ["away", "hoarding", "no_checkin", "no_show", "seat_unavailable", "unauthorized", "unauthorized"]
     setup_demo(clock())  # 다시 배치해도 같은 결과
     assert len(admin.jget("/api/admin/alerts?open=1")["alerts"]) == 7
-    assert User.objects.count() == 8
+    assert User.objects.count() == 9  # userA·B·C + manager + 테스트 5명
 
 
 def test_settings(admin, user):

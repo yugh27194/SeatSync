@@ -10,9 +10,11 @@ from . import clock
 from .models import ACTIVE, Alert, Reservation, Seat, Setting, User, WaitEntry
 from .status import ASSIGNABLE, DEFAULT_SETTINGS
 
-# (학번/아이디, 이름, 비밀번호). 관리자 계정은 두지 않는다 — 관리자 권한은 관리자 코드로 켠다.
+# (학번/아이디, 이름, 비밀번호). 시나리오용 이용자 userA·B·C와 관리자용 계정 manager.
+# manager도 관리자 탭에 들어갈 때 관리자 코드를 한 번 입력한다(계정만으로 관리자 권한이 생기지 않는다).
 SEED_ACCOUNTS = (
     [(f"user{c}", f"사용자{c}", "1234") for c in "ABC"]
+    + [("manager", "관리자", "1234")]
     + [(f"2026000{i}", f"테스트{i}", "1234") for i in range(1, 6)]
 )
 

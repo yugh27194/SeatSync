@@ -32,7 +32,7 @@
 | POST | `/api/reservations/{id}/checkin` | `{qr_token}` 좌석 QR 체크인 |
 | POST | `/api/reservations/{id}/extend` | 연장 (종료 30분 전부터, 최대 2회 — 설정값) |
 | POST | `/api/reservations/{id}/return` | 반납(입실 전이면 취소) |
-| POST | `/api/calls` | `{seat_no, memo?}` 관리자 호출 (60초 내 중복은 기존 호출 반환) |
+| POST | `/api/calls` | `{seat_no, memo?, kind?}` 관리자 호출 (60초 내 중복은 기존 호출 반환). `kind: "seat_taken"` = 내 예약 좌석에 다른 사람이 앉아 있음(본인 예약 좌석만, 아니면 `NOT_YOUR_SEAT`) → 관리자 화면 팝업 |
 | POST | `/api/waitlist` | `{zone?}` 빈자리 알림 대기 등록 (구역 생략 = 아무 자리) |
 | POST | `/api/waitlist/cancel` · `/api/waitlist/decline` | 대기 취소 · 안내받은 좌석 양보 |
 | GET | `/api/me/history?period=day\|week\|month` | 일(14)·주(8)·월(6)별 이용 시간과 요약 |
@@ -60,7 +60,7 @@
 | GET | `/api/admin/alerts?open=1` | 처리 필요 알림 목록 |
 | POST | `/api/admin/alerts/{id}/resolve` | `{memo?}` 처리 완료 |
 | POST | `/api/admin/reservations` | `{user_id, seat_no, checkin?, memo?}` 대리 예약·현장 배정 |
-| POST | `/api/admin/reservations/{id}/checkin` · `/move` · `/extend` · `/force-return` | 대리 체크인 · `{seat_no}` 좌석 이동 · 관리자 연장 · 강제 반납 |
+| POST | `/api/admin/reservations/{id}/checkin` · `/move` · `/extend` · `/force-return` | 대리 체크인 · `{seat_no, seated?}` 좌석 이동(`seated`: 예약자가 잘못 앉은 좌석으로 옮기고 바로 체크인) · 관리자 연장 · 강제 반납 |
 | GET | `/api/admin/users` | 이용자 목록(경고·정지·현재 예약) |
 | POST | `/api/admin/users/{id}/notice` | `{message, seat_no?}` 사전 경고(누적 안 됨) |
 | POST | `/api/admin/users/{id}/warn` · `/unwarn` · `/suspend` · `/unsuspend` | 경고(누적)·취소·`{days}` 이용 정지·해제 |

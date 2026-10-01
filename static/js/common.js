@@ -159,8 +159,8 @@
       const back = document.createElement("div");
       back.className = "modal-back";
       const m = document.createElement("div");
-      m.className = "modal";
-      m.setAttribute("role", "dialog");
+      m.className = "modal" + (opts.alert ? " modal-alert" : "");
+      m.setAttribute("role", opts.alert ? "alertdialog" : "dialog");
       const h = document.createElement("h3"); h.textContent = opts.title || "확인";
       m.append(h);
       if (opts.body) { const b = document.createElement("div"); b.className = "body"; b.textContent = opts.body; m.append(b); }
@@ -323,6 +323,61 @@
     return m && s ? `${m}분 ${s}초` : m ? `${m}분` : `${s}초`;
   }
 
-  window.SS = { fmtMin, api, requireAdmin, layoutGrid, poll, refreshNotices: pollNotices, fmtRemain, fmtClock, fmtTime, parseTs, syncClock, serverNow, toast, modal, esc, ApiError };
+  /** 예약자 → 관리자: "내 예약 좌석에 다른 사람이 앉아 있어요" (관리자 화면에 팝업으로 뜬다) */
+  async function reportSeatTaken(seatNo, seatLabel) {
+    const memo = await modal({ title: "내 자리에 다른 사람이 앉아 있어요",
+      body: `${seatLabel} 좌석에 다른 분이 앉아 있다고 관리자에게 바로 알립니다.\n직접 말하기 어렵다면 자리 근처에서 잠시 기다려 주세요.`,
+      ok: "관리자에게 알리기", input: { placeholder: "덧붙일 말 (선택) 예: 짐도 올려 두었어요" } });
+    if (memo === false) return;
+    try {
+      const res = await api("POST", "/api/calls", { seat_no: seatNo, memo, kind: "seat_taken" });
+      toast(res.duplicate ? "방금 알렸어요. 관리자가 확인 중입니다." : "관리자에게 알렸어요. 곧 확인해 드릴게요.", "ok", 5000);
+    } catch (e) { /* 토스트 표시됨 */ }
+  }
+
+  // ------------------------------------------------ 관리자: 이용자 호출 팝업
+  // 관리자 코드를 통과한 세션이면 어느 화면에 있든 새 호출(특히 "내 예약 좌석에 다른 사람이 앉아 있음")을 팝업으로 띄운다.
+  const ACK_KEY = "ss_ack_calls";
+  function ackedCalls() {
+    try { return new Set(JSON.parse(sessionStorage.getItem(ACK_KEY) || "[]")); } catch (e) { return new Set(); }
+  }
+  function ackCalls(ids) {
+    const s = ackedCalls(); ids.forEach((i) => s.add(i));
+    try { sessionStorage.setItem(ACK_KEY, JSON.stringify([...s].slice(-200))); } catch (e) { /* 무시 */ }
+  }
+  function beep() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.value = 880; g.gain.value = 0.08; o.connect(g); g.connect(ctx.destination);
+      o.start(); o.stop(ctx.currentTime + 0.25);
+    } catch (e) { /* 소리 없이 팝업만 */ }
+  }
+  let callPopupOpen = false;
+  async function pollCalls() {
+    if (document.body.dataset.admin !== "1" || callPopupOpen) return;
+    let d;
+    try { d = await apiOnce("GET", "/api/admin/alerts?open=1", null, { quiet: true }); } catch (e) { return; }
+    const acked = ackedCalls();
+    const fresh = d.alerts.filter((a) => a.type === "call" && !acked.has(a.id));
+    if (!fresh.length) return;
+    callPopupOpen = true;
+    beep();
+    const lines = fresh.map((a) => {
+      const who = a.caller ? `${a.caller.name}(${a.caller.student_no})` : "이용자";
+      const res = a.reservation ? ` · 예약자 ${a.reservation.user.name}` : "";
+      return `[${a.seat_label}] ${a.call_label || "관리자 호출"}\n  보낸 사람 ${who}${res} · ${fmtTime(a.created_at)}` +
+        (a.memo ? `\n  "${a.memo}"` : "");
+    });
+    const first = fresh[0];
+    const go = await modal({ alert: true, title: `📣 이용자 호출 ${fresh.length}건`, body: lines.join("\n\n"),
+      ok: `${first.seat_label} 좌석 처리하기`, cancel: "확인(나중에)" });
+    ackCalls(fresh.map((a) => a.id));
+    callPopupOpen = false;
+    if (go) location.href = `/admin?seat=${first.seat_no}`;
+  }
+  document.addEventListener("DOMContentLoaded", () => { if (document.body.dataset.admin === "1") poll(pollCalls, 5000); });
+
+  window.SS = { fmtMin, api, requireAdmin, reportSeatTaken, layoutGrid, poll, refreshNotices: pollNotices, fmtRemain, fmtClock, fmtTime, parseTs, syncClock, serverNow, toast, modal, esc, ApiError };
   window.api = api; window.poll = poll; window.fmtRemain = fmtRemain;
 })();

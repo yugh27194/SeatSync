@@ -584,3 +584,7 @@ table.recon td:first-child { white-space: nowrap; }
   .hide-sm { display: none; }
   table.recon { min-width: 0; }
 }
+/* 관리자: 이용자 호출 팝업 */
+.modal.modal-alert { max-width: 440px; border-top: 6px solid var(--bang); animation: pop .25s ease-out; }
+.modal.modal-alert h3 { color: #a4262c; }
+@keyframes pop { from { transform: scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }

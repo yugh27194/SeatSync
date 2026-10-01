@@ -38,7 +38,8 @@
       h = `<h2>예약하신 좌석입니다</h2>
         <p>체크인 마감까지 <strong class="deadline" data-cd="checkin"></strong></p>
         ${tokenOk() ? "" : notice("좌석에 붙은 QR을 스캔해야 체크인할 수 있어요.", "warn")}
-        <button class="btn big" id="btn-checkin" ${tokenOk() ? "" : "disabled"}>체크인</button>`;
+        <button class="btn big" id="btn-checkin" ${tokenOk() ? "" : "disabled"}>체크인</button>
+        <button class="btn secondary block" id="btn-taken" style="margin-top:10px">내 자리에 다른 사람이 앉아 있어요</button>`;
     } else if (mode === "mine_in_use") {
       h = `<h2><span class="pill blue">이용 중</span></h2>
         <div class="countdown" data-cd="end"></div>
@@ -48,13 +49,16 @@
           <button class="btn secondary" id="btn-return">반납</button>
         </div>
         ${r.can_extend ? "" : `<p class="muted small">${esc(r.extend_reason || "")}</p>`}
+        <button class="btn secondary block" id="btn-taken" style="margin-top:10px">내 자리에 다른 사람이 앉아 있어요</button>
         <p class="small"><a href="/my">내 자리 관리</a></p>`;
     } else if (mode === "reserve_now") {
       const p = data.policy;
       if (r) {
-        h = `<h2>이 좌석을 배정받아 주세요</h2>
-          <p>현재 <strong>${esc(r.seat_label)}</strong> 좌석을 ${r.status === "reserved" ? "예약" : "이용"} 중입니다.</p>
-          <button class="btn big" id="btn-switch">반납하고 이 좌석 예약</button>`;
+        // 다른 좌석을 예약한 사람이 이 좌석 QR을 찍음 → 잘못 앉았을 수 있다
+        h = `<h2>예약한 좌석은 <strong>${esc(r.seat_label)}</strong>이에요</h2>
+          ${notice(`지금 찍은 QR은 <b>${esc(data.label)}</b> 좌석이에요. 자리를 착각했다면 <b>${esc(r.seat_label)}</b> 좌석으로 가서 그 좌석 QR을 찍어 주세요.`, "warn")}
+          <p class="muted small">이 좌석을 계속 쓰고 싶다면 아래 버튼으로 바꿀 수 있어요. (${esc(r.seat_label)} ${r.status === "reserved" ? "예약은 취소" : "이용은 반납"}됩니다)</p>
+          <button class="btn big" id="btn-switch">${esc(r.seat_label)} → ${esc(data.label)}(으)로 바꾸기</button>`;
       } else {
         const how = tokenOk()
           ? "예약과 동시에 체크인됩니다."
@@ -100,6 +104,7 @@
   function bind() {
     const r = data.my_reservation;
     const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
+    on("btn-taken", () => SS.reportSeatTaken(seatNo, r.seat_label));
     on("btn-checkin", () => act(() => api("POST", `/api/reservations/${r.id}/checkin`, { qr_token: token }), "체크인했어요. 좋은 시간 되세요!"));
     on("btn-extend", () => act(() => api("POST", `/api/reservations/${r.id}/extend`), "이용 시간을 연장했어요."));
     on("btn-return", async () => {
